@@ -20,11 +20,8 @@ from math import *
 import numpy as np
 import pyfits
 from scipy import interpolate
-from scipy.linalg import lstsq
 import scipy.stats
 import pyfits
-import pdb
-import numdisplay
 
 # TODO - refactor
 def unzip (l):
