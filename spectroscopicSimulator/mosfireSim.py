@@ -4,6 +4,7 @@
 from simulator import *
 import sys
 import getopt
+import os
 
 mosfire = Instrument()
 # dimensions of detector, in pixels
@@ -39,13 +40,19 @@ mosfire.intensityConv = mosfire.mirrorArea * mosfire.mirrorReflectivity
 # TODO - check how good an approximation these are ...
 mosfire.anamorphicFactors = {"H" : 1.357, "K" : 1.357, "Y" : 1.335, "J" : 1.335}
 
-skyBgFile = "data/nearIR_skybg_16_15_stripped.dat"
-transferFiles = {'K' : "data/K_tp_tot.dat",
-		'H' : "data/H_tp_tot.dat",
-		'J' : "data/J_tp_tot.dat",
-		'Y' : "data/Y_tp_tot.dat"}
-raytraceFile = "data/raytrace-1.0.txt"
-detectorQEFile = "data/MOSFIRE-5_2000nm_GLS4.fits"
+
+if os.environ.has_key('MOSFIRE_DATA'):
+	path = os.environ['MOSFIRE_DATA']
+else:
+	path = 'data'
+
+skyBgFile = os.path.join(path, 'nearIR_skybg_16_15_stripped.dat')
+transferFiles = {'K' : os.path.join(path,"K_tp_tot.dat"),
+		'H' : os.path.join(path, "H_tp_tot.dat"),
+		'J' : os.path.join(path, "J_tp_tot.dat"),
+		'Y' : os.path.join(path, "/Y_tp_tot.dat")}
+raytraceFile = os.path.join(path,"raytrace-1.0.txt")
+detectorQEFile = os.path.join(path, "MOSFIRE-5_2000nm_GLS4.fits")
 
 def cleanOpticalData (optData):
 	# hack to clean up the bad values from the raytrace
