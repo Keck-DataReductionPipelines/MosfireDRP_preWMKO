@@ -7,6 +7,8 @@
 # -> We do not infer dy / dpy from the data (though this should vary very little)
 # -> We do not infer the width of the convolution needed from the data -
 # should investigate to determine the severity of this problem
+# -> We do not take into account the pixel width when doing the convolution,
+# which will cause problems for thin slits
 
 # Should also document ways in which we've hard-coded mosfire behaviour ...
 
@@ -20,7 +22,6 @@ from math import *
 import numpy as np
 import pyfits
 from scipy import interpolate
-import scipy.stats
 import pyfits
 
 # TODO - refactor
@@ -356,9 +357,7 @@ def applyTransferFunction (band, transfer, skyBg):
 	iA3 = np.where (cond, iA2, 0.0)
 	band.spectralIntensity = (lA1, iA3)
 
-# scipy.stats.poisson.rvs doesn't like zero stuff
-# - need to add some very small offset
-def genPoissonVals (im): return scipy.stats.poisson.rvs (im + 1e-16)
+def genPoissonVals (im): return np.random.poisson (im)
 
 def saveAsFits (arr, fname):
 	hdu = pyfits.PrimaryHDU (arr)

@@ -38,6 +38,7 @@ mosfire.mirrorReflectivity = 0.97 * 0.97
 mosfire.intensityConv = mosfire.mirrorArea * mosfire.mirrorReflectivity
 
 # TODO - check how good an approximation these are ...
+# values from communication by ccs
 mosfire.anamorphicFactors = {"H" : 1.357, "K" : 1.357, "Y" : 1.335, "J" : 1.335}
 
 
