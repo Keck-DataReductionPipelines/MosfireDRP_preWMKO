@@ -362,3 +362,63 @@ def genPoissonVals (im): return np.random.poisson (im)
 def saveAsFits (arr, fname):
 	hdu = pyfits.PrimaryHDU (arr)
 	hdu.writeto (fname)
+
+def raFromRad (rad):
+	rH = rad * 12.0 / pi
+	h = int (floor (rH))
+	rMin = (rH - h)*60.0
+	m = int (floor (rMin))
+	s = (rMin - m)*60.0
+	return (h % 24, m, s)
+
+def dmsFromRad (rad):
+	rDeg = rad * 180.0 / pi
+	d = int (floor (rDeg))
+	rMin = (rDeg - d)*60.0
+	m = int (floor (rMin))
+	s = (rMin - m)*60.0
+	return (d % 180, m, s)
+
+# Note - mechanically contiguous slits are given a single entry in
+# the table, according to MSDN18
+# Also - how do we indicate that there is no target in a given slit?
+# Will that ever arise? Seems silly not to allow it.
+def saveAsFitsWithExtensions (inst, im, fname):
+	imHDU = pyfits.PrimaryHDU (im)
+	####
+	# Assume that long slits are laid out sensibly
+	slitWidths = np.array ([inst.slitWidth[g[0]]*inst.fieldAngle 
+		for g in inst.slitGroups])
+	slitLengths = np.array ([inst.barPitch*len(g) - 2*inst.barGap 
+		for g in inst.slitGroups])
+	# need to calculate RA and DEC stuff ...
+	# For the moment, just pretend that x is dec, y is ra
+	ra0 = 0.0
+	dec0 = 0.0
+	arcsec = 2 * pi / (360 * 60 * 60)
+	# want ra, dec of slit centre
+	slitPos = [(dmsFromRad((dec0 + np.mean(np.array(inst.slitX)[g])*inst.fieldAngle)*arcsec), 
+		raFromRad((ra0 + np.mean([slitYPos(inst, s)[2] for s in g])*inst.fieldAngle)*arcsec)) 
+		for g in inst.slitGroups]
+	slitDec, slitRa = unzip (slitPos)
+	slitRaH, slitRaM, slitRaS = unzip (slitRa)
+	slitDecD, slitDecM, slitDecS = unzip (slitDec)
+	# should slit # be zero-based?
+	nGroups = len(inst.slitGroups)
+	c1 = pyfits.Column (name='slit number', format='J', array=np.arange(nGroups))
+	c2 = pyfits.Column (name='slit RA hours', format='J', array=slitRaH)
+	c3 = pyfits.Column (name='slit RA minutes', format='J', array=slitRaM)
+	c4 = pyfits.Column (name='slit RA seconds', format='D', array=slitRaS)
+	c5 = pyfits.Column (name='slit DEC degrees', format='J', array=slitDecD)
+	c6 = pyfits.Column (name='slit DEC minutes', format='J', array=slitDecM)
+	c7 = pyfits.Column (name='slit DEC seconds', format='D', array=slitDecS)
+	c8 = pyfits.Column (name='slit width', format='D', array=slitWidths)
+	c9 = pyfits.Column (name='slit length', format='D', array=slitLengths)
+	# Don't deal with targets for the moment
+	tId = ["No target"]*nGroups
+	c10 = pyfits.Column (name='target id', format='10A', array=tId )
+	c11 = pyfits.Column (name='target priority', format='J', array=[0]*nGroups)
+	c12 = pyfits.Column (name='target location', format='D', array=[0.0]*nGroups)
+	slitHDU = pyfits.new_table([c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12])
+	hdulist = pyfits.HDUList ([imHDU, slitHDU])
+	hdulist.writeto (fname)

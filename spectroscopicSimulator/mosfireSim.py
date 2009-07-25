@@ -112,7 +112,8 @@ def main ():
 		im *= qe
 	if poissonNoise:
 		im = genPoissonVals (im)
-	saveAsFits (im, outName)
+	#saveAsFits (im, outName)
+	saveAsFitsWithExtensions (mosfire, im, outName)
 
 if __name__ == "__main__":
 	main()
