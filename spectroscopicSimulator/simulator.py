@@ -22,7 +22,7 @@ from math import *
 import numpy as np
 import pyfits
 from scipy import interpolate
-import pyfits
+from scipy import constants
 
 # TODO - refactor
 def unzip (l):
@@ -147,6 +147,18 @@ def loadRaytraceData (fname):
 	da = np.rec.array (d, dtype = dt)
 	f.close()
 	return da
+
+bbConst1 = 2.0 * constants.h * constants.c * constants.c
+bbConst2 = constants.h * constants.c / constants.k
+
+# returns power per unit area (of emitting surface) per unit solid
+# angle per unit wavelength
+def blackBodySpectrum (T, l):
+	bbC = bbConst2 / T
+	return bbConst1 / (np.power (l, 5) * (np.exp (bbC / l) - 1.0))
+
+# wavelength for peak of blackbody curve
+def blackBodyPeakL (T): return 0.00289776858/T
 
 ###########
 # Overview of process:
