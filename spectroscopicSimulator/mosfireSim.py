@@ -19,7 +19,7 @@ mosfire.barPitch = 8.0 # arcsec : spatial y distance between centres of bars
 mosfire.barGap = 0.5 / mosfire.focalSurfaceScale # arcsec : width of blocked-out gap between bars
 mosfire.barAperture = mosfire.barPitch - mosfire.barGap
 mosfire.fieldAngle = 60 * 3.072 # arcsec per unit field angle
-#mosfire.yFWHM = 0.5 # arcsec : FWHM of point spread function in spatial direction,
+mosfire.yFWHM = 0.5 # arcsec : FWHM of point spread function in spatial direction,
 				  # spread due to seeing, basically
 # FIXME - total hack atm - not based on any physical reasoning or data at all
 mosfire.slitFalloffScale = 0.5 * mosfire.pixScale # scale (in arcseconds) of slit edge falloff
@@ -62,13 +62,10 @@ def cleanOpticalData (optData):
 	return np.extract (cond, optData)
 
 # example of black body spectrum generation
-def blackBodySpectrumExample (band):
+def blackBodySpectrumExample (band, T):
 	# spacing same as for the Gemini sky background file,
 	# just for consistency
 	ffL = np.arange (band.minL, band.maxL, 0.00002)
-	# temperature of 1500K (arbitrary value
-	# - ask about correct number)
-	T = 1500
 	ffI = blackBodySpectrum (T, ffL)
 	# normalise so that max value is 1
 	maxI = np.max (ffI)

@@ -25,6 +25,9 @@ from scipy import interpolate
 from scipy import constants
 
 # TODO - refactor
+fwhmInSigma = 2.35482
+
+# TODO - refactor
 def unzip (l):
 	"""Transposes the first two levels of a list of list (resp tuples etc.)"""
 	c = zip(*l)
@@ -90,6 +93,7 @@ def computeSlitGroups (inst):
 			currentGroup += [i+1]
 	inst.slitGroups = groups
 
+# TODO - get information on slit edge falloff (and physical basis of this)
 def slitYSamp (inst, slit, ySpacing):
 	y0 = inst.barPitch * slit
 	y0d = y0 + inst.barGap
@@ -109,8 +113,32 @@ def slitYSamp (inst, slit, ySpacing):
 			[transLower + (0.5 - transLower)*eA1, 
 			transUpper + (0.5 - transUpper)*eA2, 1.0])
 	eAx = np.select (lowerUpperMiddle, [rtransLower, rtransUpper, 1.0])
-	# need to convert yA to field angle
-	return (yA / inst.fieldAngle - 1.0), eA, eAx
+	# x array stuff
+	yA /= inst.fieldAngle
+	yA -= 1.0
+	ySlitC = (y0 + 0.5 * (inst.barPitch + inst.barGap)) / inst.fieldAngle - 1.0
+	slitOffset = inst.slitX[slit]
+	xA = slitOffset + (yA - ySlitC) * inst.sinSlitTilt
+	return yA, eA, xA, eAx
+
+# Simulates a basically-unresolved (just a peak) object
+# At the moment, just use a Gaussian for the spatial profile
+# yC in arcsecs
+def pointObjYSamp (inst, slit, yC, yFWHM, nYsamp):
+	# go out to 2*yFWHM \approx 5 \sigma
+	yW = 2 * yFWHM
+	yA = np.linspace (yC - yW, yC + yW, nYsamp)
+	# hard-coded Gaussian spatial profile for the moment
+	sigma = yFWHM / fwhmInSigma
+	eA = np.exp (- (yA - yC)**2 / (2.0 * sigma * sigma))
+	eAx = np.ones_like (yA)
+	# x array stuff
+	yA /= inst.fieldAngle
+	yA -= 1.0
+	_, _, ySlitC = slitYPos (inst, slit)
+	slitOffset = inst.slitX[slit]
+	xA = slitOffset + (yA - ySlitC) * inst.sinSlitTilt
+	return yA, eA, xA, eAx
 
 class Band:
 	pass
@@ -187,7 +215,8 @@ def drawSlits (inst, band):
 		nSlits = len(group)
 		if nSlits == 1:
 			slit = group[0]
-			xA, yA, iAA = slitImage (inst, band, slit, ySpacing)
+			yA, eA, xA, eAx = slitYSamp (inst, slit, ySpacing)
+			iAA = pxYImage (inst, band, slit, xA, yA)*eA[:,np.newaxis]
 			pyA, iAAd = distortY (inst, band, xA, yA, iAA)
 			im[pyA] += iAAd
 		else:
@@ -200,10 +229,10 @@ def drawSlits (inst, band):
 			for slit in group:
 				print slit
 				y0s, _, _ = slitYPos (inst, slit)
-				# xA, iAA already modified for falloff / mixing
-				xA, yA, iAA = slitImage (inst, band, slit, ySpacing)
+				yA, eA, xA, eAx = slitYSamp (inst, slit, ySpacing)
+				iAA = pxYImage (inst, band, slit, xA, yA)*eA[:,np.newaxis]
 				offset = int (round ((y0s - y0) / ySpacing))
-				xAg[offset:offset+nYslit] += xA
+				xAg[offset:offset+nYslit] += xA*eAx
 				iAAg[offset:offset+nYslit] += iAA
 			pyA, iAAd = distortY (inst, band, xAg, yAg, iAAg)
 			im[pyA] += iAAd
@@ -242,16 +271,18 @@ def distortY (inst, band, xA, yA, iAA):
 # Of course, our convolution strategy isn't really accurate anyway ...
 # the anamorphic factor stuff we're using is just an approximation,
 # and we could get the "correct" answer from the raytracing data ...
-def slitImage (inst, band, slit, ySpacing):
+def pxYImage (inst, band, slit, xA, yA):
 	# transfer function has already been applied
 	lA, iA = band.spectralIntensity
 	iF = interpolate.InterpolatedUnivariateSpline (lA, iA)
-	y0, y1, yC = slitYPos (inst, slit)
-	yA, eA, eAx = slitYSamp (inst, slit, ySpacing)
-	# Need to think about proper sampling here as well
 	perPix = int ( ceil (len (lA) / float(inst.nPx) ) )
+	# Need to think about proper sampling here as well
 	pxA, pixSpacing = np.linspace (0, inst.nPx, perPix * inst.nPx, retstep = True)
 	slitWidth = inst.slitWidth[slit] * inst.fieldAngle
+	# TODO - need to use object width rather than slit width here ...
+	# think about how best to do this ... keep the slit width ftm here?
+	# Probaby want to allow specification of a target width parameter
+	# - anyway, do that later
 	convolveS = 0.5 * (slitWidth / (band.anamorphicFactor * inst.pixScale))
 	kSigma = convolveS / pixSpacing
 	kern1 = np.array([exp(-n*n / (2*kSigma*kSigma)) 
@@ -271,10 +302,8 @@ def slitImage (inst, band, slit, ySpacing):
 		# now downsample to the real pixel grid
 		iAp = iAconv[perPix//2 :: perPix]
 		return iAp
-	offset = inst.slitX[slit]
-	iAA = np.array ([processRow (offset + (y-yC) * inst.sinSlitTilt, y) for y in yA])
-	xA = offset + (yA - yC) * inst.sinSlitTilt
-	return xA*eAx, yA, iAA*eA[:,np.newaxis]
+	iAA = np.array ([processRow (x, y) for (x, y) in zip (xA, yA)])
+	return iAA
 
 # does linear interpolation between 2d fns
 class FInterp3D ():
