@@ -1,0 +1,66 @@
+MASCGEN: MOSFIRE Automatic Slit Configuration GENerator
+
+Usage: java mascgen_beta [object list] [x range] [x center] [slit width] 
+	[dither space] [center RaHour] [center RaMin] [center RaSec] 
+	[center DecDeg] [center DecMin] [center DecSec]
+	[num x steps] [x step size] [num y steps] [y step size]
+	[center position angle] [num pa steps] [pa step size] 
+	[slit list] [slit region file] [bar position list]
+		Or, omit the center Ra and Dec coordinates and Mascgen 
+		will compute and use the weighted-priority center position. 
+
+object list: input text file of target objects. The columns (separated by
+	whitespace) are 1) object name, 2) object priority, 3) object magnitude 
+	4) object RaHour, 5) object RaMin, 6) object RaSec, 7) object DecDeg, 
+	8) object DecMin, 9) object DecSec, 10) epoch, 11) equinox, 12) junk1, 
+	and 13) junk2. Do not use priority values < or = 0.
+x range: set the width of the legal x coordinate range in arc minutes (double).
+x center: set the center of the legal x coordinate range in arc minutes 
+	(double). 
+slit width: set the global slit width in arc minutes (this is applied to all
+	generated slits) (double). 
+dither space: set the minimum distance in arc seconds from the top/bottom of the
+	slit an object may legally be placed (this will be the "buffer zone" 
+	that permits dithering or nodding without the object moving behind a 
+	bar) (double). 
+center RaHour: desired center position Right Ascension hours (integer).
+center RaMin: desired center position Right Ascension minutes (integer).
+center RaSec: desired center position Right Ascension seconds (double).
+center DecDeg: desired center position Declination degrees (integer).
+center DecMin: desired center position Declination arc minutes (integer).
+center DecSec: desired center position Declination arc seconds (double).
+num x steps: number of x iterations to perform above and below the center 
+	position (integer). The actual number of calculated iterations is 
+	2 * (num x steps) + 1.
+x step size: size of each x step in arc minutes (double).
+num y steps: number of y iterations to perform above and below the center 
+	position (integer). The actual number of calculated iterations is 
+	2 * (num y steps) + 1.
+y step size: size of each y step in arc minutes (double).
+center position angle: desired center position angle in degrees (double).
+number pa steps: number of position angle iterations to perform above and below 
+	the center position (integer). The actual number of calculated 
+	iterations is 2 * (num pa steps) + 1.
+pa step size: size of each pa step in degrees (double).
+slit list: name of file to write the ouput slit list to.
+slit region file: name of file to write the ouput SAOImage Ds9 region file to.
+bar position list: output list of CSU coordinates (in mm) for all 92 bars. 
+	Odd-numbered bars extend from the left, even from the right.
+
+Please note that the CSU total width is 6.132 arc minutes (restricts x 
+	range and slit width parameters) and that maximum slit size is 7.033
+	arc seconds between adjacent slits (dither space can be at most half 
+	this). Also, x center cannot be < -3.066 or > 3.066 arc minutes.
+	Entries that do not conform to these restrictions will cause the program
+	to exit with an error message.
+
+The output of the program is the slit list and slit region file. The columns of 
+	the slit list (separated by whitespace) are 1) slit number, 2) slit 
+	center RaHour, 3) slit center RaMin, 4) slit center RaSec, 5) slit 
+	center DecDeg, 6) slit center DecMin, 7) slit center DecSec, 8) slit 
+	width, 9) slit length, 10) object name, 11) object priority, 12) object 
+	target location (vertical offset from slit center in arc seconds), 
+	13) object RaHour, 14) object RaMin, 15) object RaSec, 16) object 
+	DecDeg, 17) object DecMin, and 18) object DecSec. The slit region file 
+	can be loaded into SAOImage Ds9 on top of an image of the field the 
+	input object list was created from.
