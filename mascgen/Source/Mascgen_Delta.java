@@ -1234,7 +1234,17 @@ public class Mascgen_Delta {
 	    					                           getObjDecMin()) + "\t" + 
 	    					secondPlace.format(slitArray3[slitArray3.
 	    					                              length - 1 - i].
-	    					                              getObjDecSec()));
+	    					                              getObjDecSec())
+			/************ RNL added ************/
+			// slitX (offset from centre of field in arcseconds)
+			+ "\t" + Double.toString((slitArray3[slitArray3.length - 1 - i].getSlitX()))
+			// slitY (offset from centre of field in arcseconds)
+			+ "\t" + Double.toString((slitArray3[slitArray3.length - 1 - i].getSlitY()))
+			// objX (offset from centre of field in arcseconds)
+			+ "\t" + Double.toString((slitArray3[slitArray3.length - 1 - i].getSlitObjX()))
+			// objY (offset from centre of field in arcseconds)
+			+ "\t" + Double.toString((slitArray3[slitArray3.length - 1 - i].getSlitObjY())));
+					
 	    			p.print("\n");
 	    	}
 			p.close();
