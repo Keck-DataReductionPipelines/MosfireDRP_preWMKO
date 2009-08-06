@@ -50,7 +50,7 @@ def slitXInterval (inst, slit, up):
 	if slit < 0 or slit >= inst.nBars: return None
 	xW = inst.slitWidth[slit]
 	xC = inst.slitX[slit]
-	#offset = 0.5 * inst.barPitch * inst.sinSlitTilt * up / inst.fieldAngle
+	#offset = 0.5 * inst.barPitch * inst.tanSlitTilt * up / inst.fieldAngle
 	x0 = xC - 0.5*xW + inst.barOffset * up
 	x1 = x0 + xW
 	return (x0, x1)
@@ -118,7 +118,7 @@ def slitYSamp (inst, slit, ySpacing):
 	yA -= 1.0
 	ySlitC = (y0 + 0.5 * (inst.barPitch + inst.barGap)) / inst.fieldAngle - 1.0
 	slitOffset = inst.slitX[slit]
-	xA = slitOffset + (yA - ySlitC) * inst.sinSlitTilt
+	xA = slitOffset + (yA - ySlitC) * inst.tanSlitTilt
 	return yA, eA, xA, eAx
 
 # Simulates a basically-unresolved (just a peak) object
@@ -137,7 +137,7 @@ def pointObjYSamp (inst, slit, yC, yFWHM, nYsamp):
 	yA -= 1.0
 	_, _, ySlitC = slitYPos (inst, slit)
 	slitOffset = inst.slitX[slit]
-	xA = slitOffset + (yA - ySlitC) * inst.sinSlitTilt
+	xA = slitOffset + (yA - ySlitC) * inst.tanSlitTilt
 	return yA, eA, xA, eAx
 
 class Band:
@@ -208,7 +208,7 @@ def drawSlits (inst, band):
 	im = np.zeros ((inst.nPy, inst.nPx))
 	# Aim for ~1 sample per pixel
 	ySpacing = inst.barPitch / (ceil (inst.barPitch / inst.pixScale))
-	nYslit = int (floor ((inst.barPitch + inst.barGap) / inst.pixScale)) + 1
+	nYslit = int (floor ((inst.barPitch + inst.barGap) / ySpacing)) + 1
 	ySpacing /= inst.fieldAngle
 	for group in inst.slitGroups:
 		print group
@@ -420,46 +420,3 @@ def dmsFromRad (rad):
 	s = (rMin - m)*60.0
 	return (d % 180, m, s)
 
-# Note - mechanically contiguous slits are given a single entry in
-# the table, according to MSDN18
-# Also - how do we indicate that there is no target in a given slit?
-# Will that ever arise? Seems silly not to allow it.
-def saveAsFitsWithExtensions (inst, im, fname):
-	imHDU = pyfits.PrimaryHDU (im)
-	####
-	# Assume that long slits are laid out sensibly
-	slitWidths = np.array ([inst.slitWidth[g[0]]*inst.fieldAngle 
-		for g in inst.slitGroups])
-	slitLengths = np.array ([inst.barPitch*len(g) - 2*inst.barGap 
-		for g in inst.slitGroups])
-	# need to calculate RA and DEC stuff ...
-	# For the moment, just pretend that x is dec, y is ra
-	ra0 = 0.0
-	dec0 = 0.0
-	arcsec = 2 * pi / (360 * 60 * 60)
-	# want ra, dec of slit centre
-	slitPos = [(dmsFromRad((dec0 + np.mean(np.array(inst.slitX)[g])*inst.fieldAngle)*arcsec), 
-		raFromRad((ra0 + np.mean([slitYPos(inst, s)[2] for s in g])*inst.fieldAngle)*arcsec)) 
-		for g in inst.slitGroups]
-	slitDec, slitRa = unzip (slitPos)
-	slitRaH, slitRaM, slitRaS = unzip (slitRa)
-	slitDecD, slitDecM, slitDecS = unzip (slitDec)
-	# should slit # be zero-based?
-	nGroups = len(inst.slitGroups)
-	c1 = pyfits.Column (name='slit number', format='J', array=np.arange(nGroups))
-	c2 = pyfits.Column (name='slit RA hours', format='J', array=slitRaH)
-	c3 = pyfits.Column (name='slit RA minutes', format='J', array=slitRaM)
-	c4 = pyfits.Column (name='slit RA seconds', format='D', array=slitRaS)
-	c5 = pyfits.Column (name='slit DEC degrees', format='J', array=slitDecD)
-	c6 = pyfits.Column (name='slit DEC minutes', format='J', array=slitDecM)
-	c7 = pyfits.Column (name='slit DEC seconds', format='D', array=slitDecS)
-	c8 = pyfits.Column (name='slit width', format='D', array=slitWidths)
-	c9 = pyfits.Column (name='slit length', format='D', array=slitLengths)
-	# Don't deal with targets for the moment
-	tId = ["No target"]*nGroups
-	c10 = pyfits.Column (name='target id', format='10A', array=tId )
-	c11 = pyfits.Column (name='target priority', format='J', array=[0]*nGroups)
-	c12 = pyfits.Column (name='target location', format='D', array=[0.0]*nGroups)
-	slitHDU = pyfits.new_table([c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12])
-	hdulist = pyfits.HDUList ([imHDU, slitHDU])
-	hdulist.writeto (fname)

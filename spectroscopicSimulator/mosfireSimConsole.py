@@ -7,7 +7,7 @@ import getopt
 
 def main ():
 	global detectorQEFile
-	opts, args = getopt.getopt (sys.argv[1:],"b:o:rt:pq")
+	opts, args = getopt.getopt (sys.argv[1:],"b:o:rt:pqm:")
 	outName = "output.fits"
 	bandName = "K"
 	exposureTime = 1
@@ -28,6 +28,9 @@ def main ():
 			useDetectorQE = True
 			if a != '':
 				detectorQEFile = a
+		elif o == "-m":
+			da = readMascgenOutput (a)
+			updateInstFromMascgen (mosfire, da)
 	im = exposureTime * calcCountImage(bandName)
 	if useDetectorQE:
 		qe0 = pyfits.getdata (detectorQEFile)
