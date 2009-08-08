@@ -123,21 +123,21 @@ def slitYSamp (inst, slit, ySpacing):
 
 # Simulates a basically-unresolved (just a peak) object
 # At the moment, just use a Gaussian for the spatial profile
-# yC in arcsecs
-def pointObjYSamp (inst, slit, yC, yFWHM, nYsamp):
+def pointObjYSamp (inst, xC, yC, yFWHM, nYsamp):
 	# go out to 2*yFWHM \approx 5 \sigma
+	yCa = yC * inst.fieldAngle
 	yW = 2 * yFWHM
-	yA = np.linspace (yC - yW, yC + yW, nYsamp)
+	yA = np.linspace (yCa - yW, yCa + yW, nYsamp)
 	# hard-coded Gaussian spatial profile for the moment
 	sigma = yFWHM / fwhmInSigma
-	eA = np.exp (- (yA - yC)**2 / (2.0 * sigma * sigma))
+	eA = np.exp (- (yA - yCa)**2 / (2.0 * sigma * sigma))
 	eAx = np.ones_like (yA)
 	# x array stuff
 	yA /= inst.fieldAngle
-	yA -= 1.0
-	_, _, ySlitC = slitYPos (inst, slit)
-	slitOffset = inst.slitX[slit]
-	xA = slitOffset + (yA - ySlitC) * inst.tanSlitTilt
+	#_, _, ySlitC = slitYPos (inst, slit)
+	#slitOffset = inst.slitX[slit]
+	#xA = slitOffset + (yA - ySlitC) * inst.tanSlitTilt
+	xA = xC + (yA - yC) * inst.tanSlitTilt
 	return yA, eA, xA, eAx
 
 class Band:

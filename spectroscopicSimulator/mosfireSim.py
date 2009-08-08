@@ -91,9 +91,7 @@ def slitParamsFromMascgen (inst, da):
 	for d in da:
 		n = int (round ((d['length'] + 2.0*inst.barGap) / inst.barPitch))
 		slitWidth += [d['width']/inst.fieldAngle]*n
-		# TODO - get this from RaDec stuff
-		# Where's the telescope pointing? And how is it aligned wrt Ra 
-		# and Dec? Ask about all this ...
+		# TODO - figure out the coordinate relations here ...
 		x0 = d['slitY']
 		slitX += [(x0 + inst.tanSlitTilt * (i - (n-1)/2.0) * inst.barPitch) / inst.fieldAngle
 				for i in xrange(n)]
@@ -101,11 +99,24 @@ def slitParamsFromMascgen (inst, da):
 	inst.slitWidth = slitWidth
 	inst.slitX = slitX
 
-def updateInstFromMascgen (inst, da):
+# TODO - figure out the coordinate relations here
+def updateInstFromMascgen (inst, da1):
+	# okay - want to sort this in increasing y order ...
+	idx = np.argsort (da1['slitX'])
+	da = da1[idx]
+	# seems to have x reversed, or something similar ...
+	# check what the actual status of this is ...
+	da['slitY'] *= -1.0
+	da['objY'] *= -1.0
+	#
 	slitParamsFromMascgen (inst, da)
 	inst.targetId = da['name']
 	inst.targetPriority = da['priority']
 	inst.targetYOffset = da['objY'] - da['slitY']
+	# reversal here, as above ... investigate ...
+	# TODO - check whether there's also some kind of sign flip here?
+	inst.targetY = da['objX']
+	inst.targetX = da['objY']
 
 def cleanOpticalData (optData):
 	# hack to clean up the bad values from the raytrace
@@ -142,8 +153,9 @@ def calcCountImage (bandName):
 # the table, according to MSDN18
 # Also - how do we indicate that there is no target in a given slit?
 # Will that ever arise? Seems silly not to allow it.
-def saveAsFitsWithExtensions (inst, im, fname):
+def saveAsFitsWithExtensions (inst, im, fname, secondaryImages = []):
 	imHDU = pyfits.PrimaryHDU (im)
+	otherImHDUs = [pyfits.ImageHDU (image) for image in secondaryImages]
 	####
 	# Assume that long slits are laid out sensibly
 	slitWidths = np.array ([inst.slitWidth[g[0]]*inst.fieldAngle 
@@ -179,5 +191,5 @@ def saveAsFitsWithExtensions (inst, im, fname):
 	c11 = pyfits.Column (name='target priority', format='J', array=inst.targetPriority)
 	c12 = pyfits.Column (name='target location', format='D', array=inst.targetYOffset)
 	slitHDU = pyfits.new_table([c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12])
-	hdulist = pyfits.HDUList ([imHDU, slitHDU])
+	hdulist = pyfits.HDUList ([imHDU] + otherImHDUs + [slitHDU])
 	hdulist.writeto (fname)
