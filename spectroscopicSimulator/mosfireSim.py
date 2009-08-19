@@ -50,7 +50,7 @@ mosfire.anamorphicFactors = {"H" : 1.357, "K" : 1.357, "Y" : 1.335, "J" : 1.335}
 if os.environ.has_key('MOSFIRE_DATA'):
 	path = os.environ['MOSFIRE_DATA']
 else:
-	path = 'data'
+	path = '../data'
 
 skyBgFile = os.path.join(path, 'nearIR_skybg_16_15_stripped.dat')
 transferFiles = {'K' : os.path.join(path,"K_tp_tot.dat"),
