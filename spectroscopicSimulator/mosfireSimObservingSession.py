@@ -19,9 +19,9 @@ import pdb
 def iChange (t, l):
 	return 1 + 0.01 * sin(t/60.0) * (l - 1.0)
 
+# TODO - refactor this stuff
 def getCounts (imPhotIntegratedFlux, qe, eGain, readNoise):
 	# TODO - check whether we want to use distribution approximations
-	# apply Poisson counting statistics
 	imPhotCount = np.random.poisson (imPhotIntegratedFlux)
 	# for pixel with QE = p, the number of electrons has a
 	# a binomial distribution Bin(n_phot, p)
@@ -48,9 +48,14 @@ def getCountsFowler (imPhotIntegratedFlux, qe, eGain, readNoise, fowlerN):
 	qe1 = np.where (imPhotCount == 0, 0.0, qe)
 	photCount1 = np.maximum (imPhotCount, 1)
 	imECount = np.random.binomial (photCount1, qe1)
-	imCount = np.rint( np.random.normal (imECount*eGain, readNoise/sqrt(fowlerN)))
+	# Should really add together fowlerN things (for rounding properties),
+	# but this'll do ftm
+	imCount = np.rint( np.random.normal (fowlerN*imECount*eGain, sqrt(fowlerN)*readNoise)) / float(fowlerN)
 	# inferred inverse-variance image
-	imWeight = (fowlerN-1)/(readNoise * readNoise * np.random.chisquare (fowlerN-1, size=imCount.shape))
+	# gives no-prior value
+	#imWeight = (fowlerN-1)/(readNoise * readNoise * np.random.chisquare (fowlerN-1, size=imCount.shape))
+	# totally prior:
+	imWeight = np.tile (1.0 / (readNoise * readNoise), imCount.shape)
 	return imCount, imWeight
 
 class Exposure ():
@@ -114,7 +119,10 @@ def main ():
 		saveAsFits (skyBgIm, "skyBg1.fits")
 		saveAsFits (flatFieldIm, "ff1.fits")
 	#flatFieldCounts = getCounts (flatFieldIm*1000.0, qe, 1.0/mosfire.ePerCount, 1.0)
-	flatFieldCounts, flatFieldWeights = getCountsFowler (flatFieldIm*1000.0, qe, 1.0/mosfire.ePerCount, 1.0, 8)
+	# NB - readNoise parameter is the standard deviation
+	# What's a sensible value for this? Should probably put
+	# into mosfireSim.py as part of the instrument params
+	flatFieldCounts, flatFieldWeights = getCountsFowler (flatFieldIm*1000.0, qe, 1.0/mosfire.ePerCount, 10.0, 8)
 	# need to see what plan is wrt flat field extensions / headers etc.
 	saveAsFitsWithExtensions (mosfire, flatFieldCounts,
 			os.path.join(outputdir, "flatField.fits"), [flatFieldWeights])

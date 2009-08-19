@@ -4,7 +4,7 @@
 from simulator import *
 import os
 
-mosfire = Instrument()
+mosfire = SimInstrument()
 # dimensions of detector, in pixels
 mosfire.nPx = 2048
 mosfire.nPy = 2048
@@ -160,7 +160,7 @@ def saveAsFitsWithExtensions (inst, im, fname, secondaryImages = []):
 	# Assume that long slits are laid out sensibly
 	slitWidths = np.array ([inst.slitWidth[g[0]]*inst.fieldAngle 
 		for g in inst.slitGroups])
-	slitLengths = np.array ([inst.barPitch*len(g) - 2*inst.barGap 
+	slitLengths = np.array ([inst.barPitch*len(g) - inst.barGap 
 		for g in inst.slitGroups])
 	# need to calculate RA and DEC stuff ...
 	# For the moment, just pretend that x is dec, y is ra
@@ -190,6 +190,15 @@ def saveAsFitsWithExtensions (inst, im, fname, secondaryImages = []):
 	c10 = pyfits.Column (name='target id', format='10A', array=inst.targetId )
 	c11 = pyfits.Column (name='target priority', format='J', array=inst.targetPriority)
 	c12 = pyfits.Column (name='target location', format='D', array=inst.targetYOffset)
-	slitHDU = pyfits.new_table([c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12])
+	# HACK - these go in to make the DRP easier to deal with
+	# Think more carefully about how this information should be propagated ...
+	# TODO - use the actual figures, rather than these hacks?
+	slitX = [np.mean(np.array(inst.slitX)[g]) for g in inst.slitGroups]
+	c13 = pyfits.Column (name='slitX', format='D', array=slitX) # field angle
+	slitY = [np.mean([slitYPos(inst, s)[2] for s in g]) for g in inst.slitGroups]
+	c14 = pyfits.Column (name='slitY', format='D', array=slitY) # field angle
+	#
+	#slitHDU = pyfits.new_table([c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12])
+	slitHDU = pyfits.new_table([c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13,c14])
 	hdulist = pyfits.HDUList ([imHDU] + otherImHDUs + [slitHDU])
 	hdulist.writeto (fname)

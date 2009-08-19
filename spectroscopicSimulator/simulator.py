@@ -33,7 +33,7 @@ def unzip (l):
 	c = zip(*l)
 	return [list(a) for a in c]
 
-class Instrument():
+class SimInstrument():
 	"""Stores the data pertaining to the properties of the instrument"""
 	pass
 
@@ -350,8 +350,8 @@ def getBand (inst, bandName):
 		x = np.extract (cond, inst.optData['xin'])
 		px = np.extract (cond, inst.optData['px'])
 		py = np.extract (cond, inst.optData['py'])
-		# note - for my version of scipy, this seems to be
-		# a "integer argument expected, got float" warning
+		# note - for my version of scipy (0.7, Ubuntu ppa), we
+		# get a "integer argument expected, got float" warning
 		# This seems to be a feature of running 
 		# scipy.interpolate.bisplrep with arrays of length >= 72
 		# i.e.
