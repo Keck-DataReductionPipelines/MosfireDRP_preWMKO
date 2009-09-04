@@ -5,9 +5,22 @@ from mosfireSim import *
 import sys
 import getopt
 
+helpstring = """Simple spectroscopic simulation.
+Options:
+-b [name] : set band to [name]
+-o [file] : set output file to [file]
+-r        : randomise slit placement
+-t [val]  : set exposure time to [val] seconds
+-p        : apply counting noise
+-q [file] : apply detector qe from fits file [file]
+-m [file] : read in mask parameters from mascgen output file [file]
+"""
+
 def main ():
-	global detectorQEFile
-	opts, args = getopt.getopt (sys.argv[1:],"b:o:rt:pqm:")
+	opts, args = getopt.getopt (sys.argv[1:],"hb:o:rt:pqm:")
+	if opts == [] or opts[0][0] == "-h":
+		print helpstring
+		return
 	outName = "output.fits"
 	bandName = "K"
 	exposureTime = 1

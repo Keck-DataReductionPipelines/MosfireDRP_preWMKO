@@ -8,6 +8,16 @@ import getopt
 
 import pdb
 
+helpstring = """Simple spectroscopic simulation.
+Options:
+-b [name] : set band to [name]
+-m [file] : read in mask parameters from mascgen output file [file]
+-d [dir]  : set output directory to [dir]
+-n        : output noise-free sky and flat-field images
+-s [file] : use noise-free sky image from [file]
+-f [file] : use noise-free flat-field image from [file]
+"""
+
 # Right - to start with, let's just simulate the spectrum
 # change with time ... something fairly simple ...
 
@@ -19,45 +29,6 @@ import pdb
 def iChange (t, l):
 	return 1 + 0.01 * sin(t/60.0) * (l - 1.0)
 
-# TODO - refactor this stuff
-def getCounts (imPhotIntegratedFlux, qe, eGain, readNoise):
-	# TODO - check whether we want to use distribution approximations
-	imPhotCount = np.random.poisson (imPhotIntegratedFlux)
-	# for pixel with QE = p, the number of electrons has a
-	# a binomial distribution Bin(n_phot, p)
-	# Since np.random.binomial doesn't like n=0,
-	# we need to be a little tricky here ...
-	#imECount = np.random.binomial (imPhotCount, qe)
-	qe1 = np.where (imPhotCount == 0, 0.0, qe)
-	photCount1 = np.maximum (imPhotCount, 1)
-	imECount = np.random.binomial (photCount1, qe1)
-	# We need to make some assumption about the read noise here ...
-	# Inverse gain appears to operate basically like a truncation,
-	# but then we have the noise stuff ... don't have wonderful
-	# data on this, but I spose we go with something like ...
-	# Can things go negative? I spose they might be able to ... not that great
-	# if they do, of course, but anyway ... just go with a normal
-	# distribution, then ...
-	# Go with same noise for every pixel atm ...
-	imCount = np.rint( np.random.normal (imECount*eGain, readNoise))
-	return imCount
-
-# use Fowler-N sampling, producing an inferred variance image
-def getCountsFowler (imPhotIntegratedFlux, qe, eGain, readNoise, fowlerN):
-	imPhotCount = np.random.poisson (imPhotIntegratedFlux)
-	qe1 = np.where (imPhotCount == 0, 0.0, qe)
-	photCount1 = np.maximum (imPhotCount, 1)
-	imECount = np.random.binomial (photCount1, qe1)
-	# Should really add together fowlerN things (for rounding properties),
-	# but this'll do ftm
-	imCount = np.rint( np.random.normal (fowlerN*imECount*eGain, sqrt(fowlerN)*readNoise)) / float(fowlerN)
-	# inferred inverse-variance image
-	# gives no-prior value
-	#imWeight = (fowlerN-1)/(readNoise * readNoise * np.random.chisquare (fowlerN-1, size=imCount.shape))
-	# totally prior:
-	imWeight = np.tile (1.0 / (readNoise * readNoise), imCount.shape)
-	return imCount, imWeight
-
 class Exposure ():
 	def __init__ (self, name, time, startTime=0.0, nodX=0.0, nodY=0.0):
 		self.name = name
@@ -68,12 +39,18 @@ class Exposure ():
 def main ():
 	# so - how to deal with the options here?
 	# need to specify the sky spectrum, etc. etc.
-	opts, args = getopt.getopt (sys.argv[1:], "d:m:bf:s:")
+	opts, args = getopt.getopt (sys.argv[1:], "hd:m:bf:s:")
+	if opts == [] or opts[0][0] == "-h":
+		print helpstring
+		return
 	outputdir = "session1"
 	skyBgIm = None
 	flatFieldIm = None
 	outputBaseImages = False
+	bandName = "K"
 	for o, a in opts:
+		if o == "-b": 
+			bandName = a
 		if o == "-m":
 			# get input from mask configuration file
 			da = readMascgenOutput (a)
@@ -81,7 +58,7 @@ def main ():
 		if o == "-d":
 			# set output directory
 			outputdir = a
-		if o == "-b":
+		if o == "-n":
 			outputBaseImages = True
 		if o == "-s":
 			skyBgIm = pyfits.getdata (a)

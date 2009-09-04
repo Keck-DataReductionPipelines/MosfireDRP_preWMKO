@@ -2,6 +2,7 @@
 # Robert Lasenby 2009
 
 from simulator import *
+from detectorSimulator import *
 import os
 
 mosfire = SimInstrument()

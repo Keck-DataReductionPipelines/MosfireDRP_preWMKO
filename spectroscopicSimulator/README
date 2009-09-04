@@ -1,0 +1,18 @@
+-----------------------------------------------------
+Simulation of MOSFIRE spectroscopic-mode observations
+-----------------------------------------------------
+
+Required Libraries
+------------------
+
+Library (tested version):
+- scipy (v 0.7) : http://www.scipy.org/
+- pyfits (v 2.1.1) : http://www.stsci.edu/resources/software_hardware/pyfits
+	- for installation from source, need python development headers (Python.h etc.)
+
+Console programs
+----------------
+
+For help, run programs with -h option, e.g.
+
+python mosfireSimConsole.py -h
