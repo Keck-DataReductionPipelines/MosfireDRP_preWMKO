@@ -13,6 +13,8 @@ mosfire.pixSize = 18 # width (and height) of a pixel in microns
 mosfire.fieldAngle = 60 * 3.072 # arcsec per unit field angle
 mosfire.slitTilt = 4*pi/180.0 # angle of slits relative to detector y axis
 mosfire.tanSlitTilt = tan(mosfire.slitTilt) # angle of slits relative to detector y axis
+# This approximation doesn't seem to be working as well as it should - TODO : investigate
+mosfire.edgeOffset = 0.70910000000000006
 
 if os.environ.has_key('MOSFIRE_DATA'):
 	path = os.environ['MOSFIRE_DATA']
