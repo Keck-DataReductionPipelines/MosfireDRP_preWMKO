@@ -2,6 +2,7 @@
 # Robert Lasenby 2009
 
 from flatFieldEdgeTracing import *
+from absoluteWavelengthCalibration import *
 from mosfireRaytraceModel import *
 import pyfits
 
@@ -11,6 +12,7 @@ optData0 = loadRaytraceData (raytraceFile)
 optData1 = cleanOpticalData (optData0)
 processOpticalData (inst, optData1)
 band = bandFromRaytrace (inst, bandName, optData1)
+getTransferFn (band)
 
 ffFile = '/home/robert/Projects/mosfire/drp/mosfire/spectroscopicSimulator/session5/flatField.fits'
 sciFile = '/home/robert/Projects/mosfire/drp/mosfire/spectroscopicSimulator/session5/0.fits'
@@ -20,7 +22,7 @@ sciHduList = pyfits.open (sciFile)
 slitConfig = slitConfigFromFits (ffHduList)
 qe0 = pyfits.getdata (detectorQEFile)
 
-pyFA = calibFlat (inst, band, ffHduList, qe0, shape1)
+#pyFA = calibFlat (inst, band, ffHduList, qe0, shape1)
 
 # utility function to write ds9 reg file
 def writeRegLines (f, xA, yA, colour):
@@ -41,9 +43,33 @@ def drawSlitEdges (f, slit, pyF):
 	writeRegLines (f, pbX, pbY, "green")
 	writeRegLines (f, pbX, ptY, "red")
 
-freg = open ("all_slits_calib_test.reg", "w")
+# Diagnostic output of edge tracing ...
+if False:
+	freg = open ("all_slits_calib_test.reg", "w")
+	for slit, pyF in zip (slitConfig, pyFA):
+		drawSlitEdges (freg, slit, pyF)
+	freg.close()
 
-for slit, pyF in zip (slitConfig, pyFA):
-	drawSlitEdges (freg, slit, pyF)
+lineListFile = "list_v2.0.dat"
+lineList = loadLineList (lineListFile)
 
-freg.close()
+im, imW = flatFieldCompensate (sciHduList[0].data, sciHduList[1].data,
+		ffHduList[0].data, ffHduList[1].data)
+
+spec, h = prepareSpectrum (inst, band, slitConfig[15], im, imW)
+g = absoluteWavelengthCalibrateSlit (inst, band, slitConfig[15], im, imW, lineList)
+
+nA1, iA1, _, _ = spec
+
+# Example diagnostics ... let's bring the sky in here ...
+skyBg1 = loadSkyBg (skyBgFile)
+lASky, iASky = zip(*[(l, i) for (l, i) in skyBg1 if (l >= band.minL and l <= band.maxL)])
+nASky =  g(h(lASky))
+iASky = np.array (iASky)
+iASky *= np.max (iA1) / np.max (iASky)
+
+import matplotlib.pyplot as plt
+
+plt.plot (1024 * nA1, iA1)
+plt.plot (1024 * nASky, iASky)
+plt.show ()

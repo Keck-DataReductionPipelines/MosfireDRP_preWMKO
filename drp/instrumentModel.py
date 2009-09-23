@@ -140,3 +140,38 @@ class TrivariateInterp ():
 	def xyF (self, zA):
 		#return splev (zA, self.tck)
 		return glmSep2D (self.bX, self.bY, [scipy.interpolate.splev(zA, tck) for tck in self.tckA])
+
+####
+
+# At the moment, this stuff used in the absolute wavelength calibration
+def getLegendre1D (m):
+	return [scipy.special.legendre(i) for i in xrange(m+1)]
+
+class glm1D ():
+	def __init__ (self, fAx):
+		self.fAx = fAx
+
+	# single-point update
+	# wy = 1/\sigma_y^2
+	def updatePoint (self, x, y, wy):
+		xA = [f(x) for f in self.fAx]
+		zA = np.dot (self.bCov, xA)
+		yh = np.dot (self.bh, xA)
+		denom = wy * np.dot (xA, zA) + 1.0
+		self.bh += (wy * (y-yh)/denom) * zA
+		self.bCov -= ((zA / denom) * zA[:,np.newaxis])
+
+	def gAA (self, xA):
+		return np.transpose ([f(xA) for f in self.fAx])
+
+	def __call__ (self, x):
+		return np.dot (self.bh, [f(x) for f in self.fAx])
+
+	# update ab-initio
+	# wA_i = 1/\sigma_i
+	def updateFull (self, xA, yA, wA):
+		gAA = self.gAA (xA)
+		gAA *= wA[:,np.newaxis]
+		gAAp = np.linalg.pinv (gAA)
+		self.bh = np.dot (gAAp, wA * yA)
+		self.bCov = np.dot (gAAp, np.transpose (gAAp))
