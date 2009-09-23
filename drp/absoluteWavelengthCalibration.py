@@ -4,7 +4,7 @@
 from instrumentModel import *
 import scipy.optimize
 
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import pdb
 
 # TODO - refactor
@@ -233,11 +233,11 @@ def absoluteWavelengthCalibrateSpectrum (inst, band, spec, h, lineList):
 	groups.sort (lambda g1, g2 : cmp (g2.pW, g1.pW))
 	# Then do the peak-fitting update
 	fitList = fitPeaks (inst, groups, g, spec)
-	# TODO - fix this update stuff ...
-	fitK, fitNu, fitW = unzip (fitList)
-	fitK = np.array (fitK); fitNu = np.array (fitNu); fitW = np.array (fitW)
-	g.updateFull (fitK, fitNu, fitW)
+	# TODO - do we want some iterative optimisation here?
+	#fitK, fitNu, fitW = unzip (fitList)
+	#fitK = np.array (fitK); fitNu = np.array (fitNu); fitW = np.array (fitW)
 	#pdb.set_trace ()
+	#g.updateFull (fitK, fitNu, fitW)
 	return g
 
 # Alright ... we also need to flat-field the science image ...

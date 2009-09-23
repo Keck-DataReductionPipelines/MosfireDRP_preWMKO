@@ -159,7 +159,7 @@ class glm1D ():
 		yh = np.dot (self.bh, xA)
 		denom = wy * np.dot (xA, zA) + 1.0
 		self.bh += (wy * (y-yh)/denom) * zA
-		self.bCov -= ((zA / denom) * zA[:,np.newaxis])
+		self.bCov -= ((zA * (wy / denom)) * zA[:,np.newaxis])
 
 	def gAA (self, xA):
 		return np.transpose ([f(xA) for f in self.fAx])
