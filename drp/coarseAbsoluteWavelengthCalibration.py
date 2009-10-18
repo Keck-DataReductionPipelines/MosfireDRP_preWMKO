@@ -23,10 +23,6 @@ import pdb
 def coarseAbsoluteWavelengthCalibrateSlit (inst, band, slitIm, iASky, lASky, h, hInv):
 	# where to get the convolution width from?
 	# TODO - refactor
-	# TESTING HACK
-	#nAA = slitIm[2]
-	#nAA *= 1.005
-	#
 	peakS = 1.4328993695242775 * (2.0/inst.nPx) # K and H bands (in normalised units)
 	# deltaTarget in units of kappa
 	deltaTarget = 0.5 * (2.0 / inst.nPx)

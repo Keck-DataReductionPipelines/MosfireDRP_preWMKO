@@ -7,14 +7,6 @@ import scipy.optimize
 #import matplotlib.pyplot as plt
 import pdb
 
-# TODO - refactor
-def loadLineList (fname):
-	f = open (fname, 'r')
-	def readLn (l) : return (float(l[0])/10000.0, float(l[1]))
-	d = [readLn(l.split()) for l in f if l[0] != '#']
-	f.close()
-	return d
-
 class lineGroup():
 	def __init__ (self, k, y, k0, k1):
 		self.k = k
@@ -277,61 +269,6 @@ def get_nu2i (nA, nSteps = 20):
 	iAsamp = np.arange (0, n, step)
 	return scipy.interpolate.InterpolatedUnivariateSpline (nA[iAsamp], iAsamp)
 
-# So, first task to is prepare our spectrum for processing ...
-# how best to do this? Let's spose, at first, that we've
-# got ... well, how about the lF : p_x, y -> \lambda function?
-# And ... maybe the pyF : p_x, y -> p_y function?
-def prepareSpectrum_old (inst, band, slit, im, imW):
-	# TODO - refactor this pattern?
-	y0, y1 = inst.slitEdges (slit)
-	slitX = slit['slitX']
-	slitY = slit['slitY']
-	slitX0 = slitX - inst.tanSlitTilt * slitY
-	# TODO - probably don't want to use the "band" values ... want
-	# to pass things through to replace these ...
-	pyF = band.pyF3.xyF (slitX0)
-	lF = band.lF3.xyF (slitX0)
-	#
-	pxCn = inst.px2pxn (np.arange (inst.nPx))
-	yC = np.linspace (y0, y1, 40) # FIXME - magic number
-	pyAA = np.transpose([inst.pyn2py (pyF (np.ones_like(yC)*px, yC)) for px in pxCn])
-	# TODO - think about whether we have any off-by-one problems
-	# here and in similar situations
-	py0 = max (0, int (floor (np.min (pyAA))))
-	py1 = min (inst.nPy-1, int (ceil (np.max (pyAA))))
-	pyC = np.arange (py0, py1+1)
-	nPyW = len(pyC)
-	#
-	yAA = np.transpose ([ resample1D (np.flipud(pyAA[:,i]), np.flipud (yC), pyC) for i in xrange(inst.nPx)])
-	lAA = lF(np.tile (pxCn, nPyW), np.ravel(yAA)).reshape ((nPyW, inst.nPx))
-	#
-	pxCns = np.linspace (-1.0, 1.0, 20)
-	yCentre = 0.5 * (y0 + y1)
-	lAs = lF (pxCns, np.ones_like (pxCns) * yCentre)
-	# TODO - make sure that we always need to flip here ...
-	# and probably refactor this "decision" in some sensible way?
-	f0Inv = scipy.interpolate.InterpolatedUnivariateSpline (np.flipud (lAs), np.flipud (pxCns))
-	#
-	nAA = f0Inv(np.ravel(lAA)).reshape ((len(pyC), inst.nPx))
-	#
-	# Now, we look at the actual image ...
-	nA0 = np.ravel(nAA)
-	iA0 = np.ravel(im[py0:py1+1])
-	wA0 = np.ravel(imW[py0:py1+1])
-	# cut stuff that's not "suitable"
-	cond1 = wA0 > 0.2 # FIXME - magic number
-	cond1 = np.logical_and (cond1, np.ravel(yAA) > y0 + 2 * (2.0 / inst.nPx))
-	cond1 = np.logical_and (cond1, np.ravel(yAA) < y1 - 2 * (2.0 / inst.nPx))
-	#
-	nA2 = nA0[cond1]
-	iSort = np.argsort (nA2)
-	nA1 = nA2[iSort]
-	iA1 = (iA0[cond1])[iSort]
-	wA1 = (wA0[cond1])[iSort]
-	# Okay ... that gives us our spectrum to work with ...
-	nu2i = get_nu2i (nA1)
-	return (nA1, iA1, wA1, nu2i), f0Inv
-
 def prepareSpectrum ((iAA, wAA, nAA, cond)):
 	nA0 = np.ravel (nAA[cond])
 	iA0 = np.ravel (iAA[cond])
@@ -343,11 +280,6 @@ def prepareSpectrum ((iAA, wAA, nAA, cond)):
 	nu2i = get_nu2i (nA)
 	# Okay - we want to return (nA, iA, wA, nu2i)
 	return nA, iA, wA, nu2i
-
-# Now, the overall trick ...
-def absoluteWavelengthCalibrateSlit_old (inst, band, slit, im, imW, lineList):
-	spec, h = prepareSpectrum (inst, band, slit, im, imW)
-	return absoluteWavelengthCalibrateSpectrum (inst, band, spec, h, lineList)
 
 # TODO - need to pass exposure parameters through to here in some way ...
 def absoluteWavelengthCalibrateSlit (inst, band, slitIm, hInv, lineList, nA0, kA0, kStep):

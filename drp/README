@@ -1,6 +1,9 @@
 -----------------------------------------------------
-Simulation of MOSFIRE spectroscopic-mode observations
+Prototype Data Reduction Pipeline stages for
+MOSFIRE spectroscopic-mode observations
 -----------------------------------------------------
+
+See the ../doc folder for documentation on algorithms.
 
 Required Libraries
 ------------------
@@ -13,9 +16,8 @@ Library (tested version):
 Console programs
 ----------------
 
-mosfireSimConsole.py,
-mosfireSimObservingSession.py
+calibrationTest.py
 
 For help, run programs with -h option, e.g.
 
-python mosfireSimConsole.py -h
+python calibrationTest.py -h

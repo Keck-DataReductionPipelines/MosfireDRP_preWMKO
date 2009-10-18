@@ -28,6 +28,7 @@ transferFiles = {'K' : os.path.join(path,"K_tp_tot.dat"),
 		'J' : os.path.join(path, "J_tp_tot.dat"),
 		'Y' : os.path.join(path, "Y_tp_tot.dat")}
 skyBgFile = os.path.join(path, 'nearIR_skybg_16_15_stripped.dat')
+lineListFile = os.path.join(path, 'list_v2.0.dat')
 
 def processOpticalData (inst, optData):
 	# convert from mm to pixels
@@ -69,12 +70,21 @@ def loadTransferFn (fname):
 	f.close()
 	return d
 
+# TODO - refactor these functions
+# Also, want to document where the various files came from ...
 def loadSkyBg (fname):
 	"""Load the sky background data from a file, returning
 	[(um, ph/sec/arcsec^2/nm/m^2)]"""
 	f = open(fname, 'r')
 	def readLn(l) : return (float(l[0])/1000.0, float(l[1]))
 	d = [readLn(l.split()) for l in f]
+	f.close()
+	return d
+
+def loadLineList (fname):
+	f = open (fname, 'r')
+	def readLn (l) : return (float(l[0])/10000.0, float(l[1]))
+	d = [readLn(l.split()) for l in f if l[0] != '#']
 	f.close()
 	return d
 

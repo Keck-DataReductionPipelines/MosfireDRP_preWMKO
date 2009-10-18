@@ -24,6 +24,9 @@ def saveAsFits (arr, fname):
 helpstring = """Wrapper program performing calibration on a specific slit configuration
 Options:
 -d [dir]  : set output directory to [dir]
+-f [file] : use flat-field image from [file]
+-s [file] : use sky image from [file]
+-n "n1 n2 ..."  : calibrate slits n1,n2,... (numbering is zero-based)
 """
 # utility function to write ds9 reg file
 def writeRegLines (f, xA, yA, colour):
@@ -62,15 +65,25 @@ def drawSlitEdges (inst, f, slit, pyF):
 # subtraction for that ...
 
 def main ():
-	opts, args = getopt.getopt (sys.argv[1:],"hd:")
+	opts, args = getopt.getopt (sys.argv[1:],"hd:f:s:n:")
 	#if opts == [] or opts[0][0] == "-h":
 	if opts != [] and opts[0][0] == "-h":
 		print helpstring
 		return
+	# default values - should probably have these from some file
 	outputdir = "calibOutput1"
+	ffFile = '/home/robert/Projects/mosfire/drp/mosfire/spectroscopicSimulator/session5/flatField.fits'
+	sciFile = '/home/robert/Projects/mosfire/drp/mosfire/spectroscopicSimulator/session5/0.fits'
+	slitNums = [0]
 	for o,a in opts:
 		if o == "-d":
 			outputdir = a
+		if o == "-f":
+			ffFile = a
+		if o == "-s":
+			sciFile = a
+		if o == "-n":
+			slitNums = [int(i) for i in a.split()]
 	if not os.path.exists (outputdir):
 		os.mkdir (outputdir)
 	# Okay - so, we need to modify the simulator so that we're including
@@ -79,9 +92,7 @@ def main ():
 	# Also need to sort out the 0.5 pixel mismatch ...
 	#
 	# Will be used for edge tracing ...
-	ffFile = '/home/robert/Projects/mosfire/drp/mosfire/spectroscopicSimulator/session5/flatField.fits'
 	#
-	sciFile = '/home/robert/Projects/mosfire/drp/mosfire/spectroscopicSimulator/session5/0.fits'
 	ffHduList = pyfits.open (ffFile)
 	sciHduList = pyfits.open (sciFile)
 	slitConfig = slitConfigFromFits (ffHduList)
@@ -97,9 +108,6 @@ def main ():
 	processOpticalData (inst, optData1)
 	band = bandFromRaytrace (inst, bandName, optData1)
 	getTransferFn (band)
-	# Which slits do we want to deal with?
-	# TODO - take this as input
-	slitNums = [35]
 	# Flat field edge tracing, i.e.
 	# inferring p_x, y -> p_y
 	# TODO - would be nice to be able to only process certain of the slits ...
@@ -124,7 +132,6 @@ def main ():
 	lASky, iASky = zip(*[(l, i) for (l, i) in skyBg1 if (l >= band.minL and l <= band.maxL)])
 	lASky = np.array (lASky)
 	iASky = np.array (iASky)
-	lineListFile = "list_v2.0.dat"
 	lineList = loadLineList (lineListFile)
 	outputIntermediateImages = True
 	# Now, do things a slit at a time from here ...
@@ -133,7 +140,6 @@ def main ():
 		# Relative wavelength calibration, i.e.
 		# inferring p_x, p_y -> \eta
 		# Have h : \eta -> \lambda
-		# TODO - want to pass pyF in here ...
 		pyF = pyFA[n]
 		py0, slitIm, h, hInv = relativeWavelengthCalibrateSlit (inst, band, slit, iSky, wSky, pyF)
 		# Coarse absolute wavelength calibration, i.e.
@@ -149,9 +155,10 @@ def main ():
 		nMax = np.max (nAA)
 		slitName = os.path.join (outputdir, "slit" + str(slitNums[n]))
 		if outputIntermediateImages:
+			# TODO - refactor
 			y0, y1 = inst.slitEdges (slit)
 			pxA = inst.px2pxn (np.arange (inst.nPx))
-			yC = np.linspace (y0, y1, 40)
+			yC = np.linspace (y0, y1, int(floor(0.5*inst.nPy*(y1-y0))))
 			pyAA = np.transpose([inst.pyn2py (pyF (np.ones_like(yC)*px, yC)) for px in pxA])
 			pyAA -= py0
 			pxCoords = np.tile (inst.pxn2px (pxA),  (len(yC),1))
@@ -173,7 +180,7 @@ def main ():
 		saveAsFits (iAA, slitName + "iAA.fits")
 		saveAsFits (wAA, slitName + "wAA.fits")
 		saveAsFits (nAA, slitName + "nAA.fits")
-		# FIXME - pyfits apparently doesn't like saving boolean images
+		# NB - pyfits apparently doesn't like saving boolean images
 		#saveAsFits (cond, slitName + "cond.fits")
 		saveAsFits (cond.astype(np.int), slitName + "cond.fits")
 		# Now - how to deal with the lambda stuff, exactly ... ?

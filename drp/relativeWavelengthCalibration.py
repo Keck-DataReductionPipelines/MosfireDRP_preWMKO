@@ -51,13 +51,9 @@ def relativeWavelengthCalibrateSlit (inst, band, slit, im, imW, pyF):
 	# FIXME - why does't iwAA = iAA * wAA work properly? Gives odd results ...
 	#iwAA = iAA * wAA
 	iwAA = iAA
-	# Now ... go for it ... probably don't want to actually return anyway ...
-	#return optimiseShift (inst, iwAA, nAA, cond)
-	#return optimiseShift (inst, iAA, nAA, cond)
 	# Don't bother optimising stuff atm - just pass right through ...
 	shiftAA = optimiseShift (inst, iwAA, nAA, cond)
 	#shiftAA = 0.0 # FIXME - pass straight through
-	#return (iAA, wAA, nAA, cond), h, hInv
 	return py0, (iAA, wAA, nAA + shiftAA, cond), h, hInv
 
 # Returns negative of proper value in order to interface properly to optimisation code ...
@@ -248,7 +244,7 @@ def getLLp (iwAA, nAA, cond, fAb, fR, fxA, fyA, b):
 		'b', 'npy', 'nbf', 'fxA', 'fyA', 'mx', 'my', 'gradient'])
 	return gradient
 
-# Getting the Hessian (assess how much better this is ...)
+# Getting the Hessian (assess how much better this is ... seems to be worth it)
 def getLLH (iwAA, nAA, cond, fAb, fR, fxA, fyA, b):
 	npy, npx = iwAA.shape
 	mx = len(fxA); my = len(fyA);
@@ -428,24 +424,9 @@ def optimiseShift (inst, iwAA, nAA, cond):
 	def fhess (b):
 		return getLLH (iwAA, nAA, cond, fAb, fR, fpxA, fpyA, b)
 	#
-	#ll0 = getLL (iwAA, nAA, cond, fAb, fR, fpxA, fpyA, b0)
-	#grad0 = getLLp (iwAA, nAA, cond, fAb, fR, fpxA, fpyA, b0)
-	#ll0 = getLL (b0)
-	#grad0 = getLLp (b0)
-	# Also, we need to put in a prior term into all this, I spose ... maybe?
-	# Well, see what's merited wrt that ...
-	# Gradient stuff seems to test fine ...
-	# Okay - how about we try to do some optimisation stuff here ... ?
-	# TODO - investigate how the function call stuff works ... looks like it uses
-	# some funny local cache ... hmmm ... so, we could just use "vanila" functions ... easier,
-	# then ... try that?
-	#bOpt1 = scipy.optimize.fmin_powell (lambda beta : - getLL (iwAA, nAA, cond, fAb, fR, fpxA, fpyA, beta), b, ftol = 1e-3)
-	#bOpt1 = scipy.optimize.fmin_ncg (f, b0, fprime = fprime)
-	#bOpt2 = scipy.optimize.fmin_ncg (ambda beta : - getLL (iwAA, nAA, cond, fAb, fR, fpxA, fpyA, beta), b0, fprime = lambda beta : - getLLp (iwAA, nAA, cond, fAb, fR, fpxA, fpyA, beta))
-	bOpt = scipy.optimize.fmin_ncg (f, b0, fprime = fprime, fhess = fhess, avextol = 1e-6)
-	# Alright ... convert the functions from lambdas into more sensible local functions ...
-	# hassles ...
-	#return ll0, grad0
+	# Do we want to bother with a prior term?
+	#bOpt = scipy.optimize.fmin_ncg (f, b0, fprime = fprime, fhess = fhess, avextol = 1e-6)
+	bOpt = scipy.optimize.fmin_ncg (f, b0, fprime = fprime, fhess = fhess)
 	fShift = glmSep2D (pxPolys, pyPolys, bOpt)
 	pxAA, pyAA = np.meshgrid (pxA, pyA)
 	shiftAA = fShift (np.ravel (pxAA), np.ravel (pyAA)).reshape (nAA.shape)
@@ -500,20 +481,7 @@ def prepareImage (inst, band, slit, iAA, wAA, pyF):
 	# again, we definitely want to share all our logic here with the later stages ...
 	iAAw = iAA[py0:py1+1]
 	wAAw = wAA[py0:py1+1]
-	# FIXME - magic number
-	#cond1 = wAAw > 0.2
+	# Do we want to cond out low-weight pixels for efficiency reasons
 	# make sure that we're properly within the slit ...
-	#cond1 = np.logical_and (cond1, yAA > y0 + 2 * (2.0 / inst.nPx))
-	#cond1 = np.logical_and (cond1, yAA < y1 - 2 * (2.0 / inst.nPx))
 	cond1 = np.logical_and (yAA > y0 + 2 * (2.0 / inst.nPx), yAA < y1 - 2 * (2.0 / inst.nPx))
-	# and now we're done ...
-	#ret = (iAAw, wAAw, nAA, cond1)
-	#return iAAw, wAAw, nAA, cond1
-	#
 	return py0, iAAw, wAAw, nAA, cond1, fn, fInv
-	# One thing - we probably don't want to consider parts of the spectrum
-	# that are outside the transfer bands - just wasted effort, really.
-	# So ... what should we do there? Thoughts? Hmmm ... well, we can view
-	# that kind of thing as an optimisation, and perhaps a premature one
-	# at the moment - let's just try to get the algorithm working first ...
-
