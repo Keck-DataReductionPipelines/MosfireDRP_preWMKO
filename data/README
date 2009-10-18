@@ -1,0 +1,40 @@
+-----------------------------------------------------
+Data Files
+-----------------------------------------------------
+
+band_tp_tot.dat : list of
+wavlength/um, instrument efficiency
+
+Source : personal communication from CCS (ccs@astro.caltech.edu)
+
+list_v2.0.dat : documentation in file - basically, 
+wavelength/A, theoretical intensity of OH line/arbitrary units
+
+Source : http://www.eso.org/sci/facilities/paranal/instruments/isaac/tools/oh/list_v2.0.dat
+
+MOSFIRE-5_2000nm_GLS4.fits : imaging flat-field from MOSFIRE science detector
+
+Source : personal communication from CCS (ccs@astro.caltech.edu)
+
+nearIR_skybg_16_15_stripped.dat : list of
+wavelength/nm, sky intensity/(ph/sec/arcsec2/nm/m2)
+
+0.9-5.6um (900-5600nm) sky emission above Mauna Kea 
+for 1.6mm H2O, 1.5 airmasses 
+resolution is 0.04nm (0.00004um)o
+
+Source : http://www.gemini.edu/sciops/ObsProcess/obsConstraints/atm-models/nearIR_skybg_16_15.dat
+(see http://www.gemini.edu/sciops/telescopes-and-sites/observing-condition-constraints/sky-background#Near-IR-short)
+
+raytrace-1.0.txt : table with columns
+band
+x position on telescope focal surface (normalised to [-1,1])
+y position on telescope focal surface (normalised to [-1,1])
+wavelength/um
+x position on telescope focal surface / mm
+y position on telescope focal surface / mm
+x position on detector surface / mm
+y position on detector surface / mm
+slit number
+
+Source : personal communication from NPK (npk@astro.caltech.edu)
