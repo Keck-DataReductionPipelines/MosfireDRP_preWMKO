@@ -216,11 +216,8 @@ def updateFromMaxima (inst, pyF, y0, y1, pImB, pImT):
 def shape1 (y):
 	return np.where (y <= 0, np.exp (- (y**2 / 2.0)), 1.0)
 
-def calibFlat (inst, band, ffHduList, qe0, shape):
-	# TODO - ask what negative QE values mean
-	qe = np.clip (qe0, 0.0, 1.0)
+def calibFlat (inst, band, ffHduList, qe, shape, slits):
 	ff, ffW = qeCompensate (ffHduList[0].data, ffHduList[1].data, qe)
-	slitConfig = slitConfigFromFits (ffHduList)
 	#
 	ker = shape (np.arange (-3, 8) - inst.edgeOffset)
 	ker -= np.mean (ker)
@@ -249,4 +246,4 @@ def calibFlat (inst, band, ffHduList, qe0, shape):
 		pyF.bh = bh1
 		return pyF
 	#
-	return [getPyF (slit) for slit in slitConfig]
+	return [getPyF (slit) for slit in slits]

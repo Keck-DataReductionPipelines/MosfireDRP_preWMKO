@@ -1,8 +1,9 @@
 # Simple "driver" for calibration routines
 # Robert Lasenby 2009
 
-from flatFieldEdgeTracing import *
 from absoluteWavelengthCalibration import *
+from relativeWavelengthCalibration import *
+from flatFieldEdgeTracing import *
 from mosfireRaytraceModel import *
 import pyfits
 
@@ -56,8 +57,10 @@ lineList = loadLineList (lineListFile)
 im, imW = flatFieldCompensate (sciHduList[0].data, sciHduList[1].data,
 		ffHduList[0].data, ffHduList[1].data)
 
-spec, h = prepareSpectrum (inst, band, slitConfig[15], im, imW)
-g = absoluteWavelengthCalibrateSlit (inst, band, slitConfig[15], im, imW, lineList)
+slitN = 35
+
+spec, h = prepareSpectrum (inst, band, slitConfig[slitN], im, imW)
+g = absoluteWavelengthCalibrateSlit (inst, band, slitConfig[slitN], im, imW, lineList)
 
 nA1, iA1, _, _ = spec
 

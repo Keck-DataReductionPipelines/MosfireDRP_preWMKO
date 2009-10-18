@@ -214,15 +214,22 @@ def fitPeaks (inst, groups, g, spec):
 
 # where spec = (nA, iA, wA, nu2i)
 # Should probaby pass through the "exposure parameters" here ...
-def absoluteWavelengthCalibrateSpectrum (inst, band, spec, h, lineList):
+# have g : \kappa -> \eta
+def absoluteWavelengthCalibrateSpectrum (inst, band, spec, h, lineList, nA0, kA0, kStep):
 	g = glm1D (getLegendre1D (5))
 	# Should do coarse alignment - wait on implementation of this
 	# until have the relative alignment sorted
 	# Okay ... how to init g?
 	# FIXME - look at this hack
-	w = (1.0/5.0) * inst.nPx
-	nuInit = np.linspace (-1.0, 1.0, 10)
-	g.updateFull (nuInit, nuInit, np.ones (10) * w)
+	#w = (1.0/5.0) * inst.nPx
+	#nuInit = np.linspace (-1.0, 1.0, 10)
+	#g.updateFull (nuInit, nuInit, np.ones (10) * w)
+	# TODO - pass this error as input ..
+	# This is wrong, since we should give the error in nu rather than in k, but
+	# anyway ... change this later ... should be good enough for now ...
+	w = 0.25/(kStep*kStep)
+	g.updateFull (kA0, nA0, np.ones_like (kA0) * w)
+	#
 	lA1, iA1 = unzip (lineList)
 	lA1 = np.array (lA1); iA1 = np.array (iA1)
 	# Now, want to get our groupings ...
@@ -258,6 +265,8 @@ def flatFieldCompensate (sciIm, sciW, ffIm, ffW):
 	return sciImFF, sciImFFw
 
 # Okay ... so, we need to obtain nu2i, h in some way ...
+# TODO - probably want to refactor this? Well, general refactoring is in order,
+# really ...
 def resample1D (oldx, y, newx):
 	iF = scipy.interpolate.InterpolatedUnivariateSpline (oldx, y)
 	return iF (newx)
@@ -272,7 +281,7 @@ def get_nu2i (nA, nSteps = 20):
 # how best to do this? Let's spose, at first, that we've
 # got ... well, how about the lF : p_x, y -> \lambda function?
 # And ... maybe the pyF : p_x, y -> p_y function?
-def prepareSpectrum (inst, band, slit, im, imW):
+def prepareSpectrum_old (inst, band, slit, im, imW):
 	# TODO - refactor this pattern?
 	y0, y1 = inst.slitEdges (slit)
 	slitX = slit['slitX']
@@ -323,7 +332,25 @@ def prepareSpectrum (inst, band, slit, im, imW):
 	nu2i = get_nu2i (nA1)
 	return (nA1, iA1, wA1, nu2i), f0Inv
 
+def prepareSpectrum ((iAA, wAA, nAA, cond)):
+	nA0 = np.ravel (nAA[cond])
+	iA0 = np.ravel (iAA[cond])
+	wA0 = np.ravel (wAA[cond])
+	iSort = np.argsort (nA0)
+	nA = nA0[iSort]
+	iA = iA0[iSort]
+	wA = wA0[iSort]
+	nu2i = get_nu2i (nA)
+	# Okay - we want to return (nA, iA, wA, nu2i)
+	return nA, iA, wA, nu2i
+
 # Now, the overall trick ...
-def absoluteWavelengthCalibrateSlit (inst, band, slit, im, imW, lineList):
+def absoluteWavelengthCalibrateSlit_old (inst, band, slit, im, imW, lineList):
 	spec, h = prepareSpectrum (inst, band, slit, im, imW)
 	return absoluteWavelengthCalibrateSpectrum (inst, band, spec, h, lineList)
+
+# TODO - need to pass exposure parameters through to here in some way ...
+def absoluteWavelengthCalibrateSlit (inst, band, slitIm, hInv, lineList, nA0, kA0, kStep):
+	spec = prepareSpectrum (slitIm)
+	g = absoluteWavelengthCalibrateSpectrum (inst, band, spec, hInv, lineList, nA0, kA0, kStep)
+	return g
