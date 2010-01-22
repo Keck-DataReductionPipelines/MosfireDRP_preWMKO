@@ -1,0 +1,121 @@
+\section{Relative Wavelength Calibration}
+
+\subsection{Overview}
+
+For this stage, we assume that we have a reasonably accurate guess as
+to $p_x, p_y \mapsto \lambda$ (e.g.\ from the flat-field edge tracing,
+precomputed instrument model etc.). The task is to optimise this map,
+up to a monotonic function of $\lambda$. That is,
+we try to align the ``rows'' of the $p_x, y$ image with each other, not
+with any external reference. To remove the arbitary-remapping degree
+of freedom, we can fix $\lambda(p_x, {p_y}_0)$ for some ${p_y}_0$, in
+effect aligning the rest of the slit image with respect to this row.
+
+\subsection{Progress}
+
+Implemented an algorithm optimising an approximated objective function via
+a non-linear optimisation routine. Problems:
+\begin{enumerate}
+\item By the nature of the approximation, the maximum of the
+approximated objective function might be suboptimal. Discovering how
+severe this problem is in practice would require further thought and
+testing
+\item The non-linear optimisation routine is not guaranteed to converge
+to the minimum of the (approximated) objective function supplied to
+it. Again, determining how much of a problem this is in practice would
+require more testing.
+\end{enumerate}
+Preliminary testing did show some problems (i.e. convergence to a poor
+solution) --- however, I did not have time to investigate these fully,
+so they could be a result of a bug in the implementation, rather than
+a problem with the algorithm itself.
+
+TODO : talk about whether a slower, but more `guaranteed' method could
+be constructed.
+
+\subsection{Algorithm}
+
+To recap : we want to optimise the map $p_x, p_y \mapsto \lambda$, given
+an initial guess, while fixing a specified row. 
+
+For convenience, we define $f_0 (p_x) = \lambda (p_x, {p_y}_0)$, and
+then $\eta (p_x, p_y) = f_0^{-1} (\lambda (p_x, p_y))$, for some $y_0$
+in the centre of the slit we're dealing with. We then proceed to
+optimise the map $p_x, p_y \mapsto \eta$, so we are attempting to align
+the rows with respect to the distinguished row in its `pixel space'. Our
+constraint is then that $p_x, {p_y}_0 \mapsto p_x$.
+
+In order to align the rows with respect to each other, we need
+an image which has variation in the horizontal direction, while ideally
+being approximately uniform in the vertical direction. Both the sky OH
+lines and the calibration lamp lines meet these criteria.
+
+In deciding how to optimise the map, a starting point is to investigate
+plausible forms of $P(D|\eta)$, where $D$ is the image data. If we
+assume that we have processed our raw count image such that the
+intensity should be spatially uniform (discussed in section (REF)), then
+we want to model the image as being a smooth function of $\eta$ alone,
+where the scale on which it should be smooth is determined by the slit
+width etc. (say more on this topic?). A possible model of a smooth
+univariate function is given by a `radial basis function network' ---
+that is, a linear combination of evenly spaced basis elements, each
+of which is a smooth, localised, symmetrical function.
+
+Letting $v$ denote the vector of image pixel values, $[\eta_i]$ their $\eta$
+values, $w$ their inverse variances (assumed uncorrelated), and $X_{ij}
+= g_j (\eta_i)$, where $g_j$ is $j$th basis function (so we aim for $v
+\approx X \beta$, where $\beta$ is the vector of amplitudes for the
+basis functions), we have (see BLAH, assuming $\beta_0 = 0$)
+\[
+\log P(v|X) = -\frac{n}{2}\log (2 \pi) - \frac{1}{2} \log |C| - \frac{1}{2}
+v^T C^{-1} v
+\]
+where $C = X \Sigma_\beta X^T + W^{-1}$, with $W = {\rm diag}(w)$.
+(TODO --- refer to somewhere explaining why we're going to ignore
+the $\log |C|$ term ...)
+
+Now, evaluating the matrix inversion here would be rather expensive, since
+$C$ is $n$ by $n$, where $n$ is the number of pixels in the image of the slit, so
+of order $2000 \times 100 = 2 \times 10^5$. In order to optimise this function
+numerically, we need to approximate it somehow. 
+
+If we assume that $W^{-1} \gg X \Sigma_\beta X^T$, then
+$C^{-1} \approx W - W X \Sigma_\beta X^T W$, so
+\[
+- v^T C^{-1} v \approx  - v^T W v + v^T W X \Sigma_\beta X^T W v
+\]
+so the relevant quantity (if we take $\Sigma_\beta = \sigma_\beta^2
+I$) is $S = \|X^T W v\|^2$. This approximation corresponds to the
+expectation that the parameter vector $\beta$ is very small --- thus
+the favouring of larger $X$ values in $\| X^T W v\|^2$. However, since
+$S = \sum_i ([g_i(\eta)] \cdot v)^2$ (weighting elided) is a sort of
+approximation to the magnitude of the projection of $v$ into the space of basis
+function combinations, it does have the desired property of increasing
+as $v$ can be better fit by such a combination. Also, we are
+not optimising $X$ directly, but intead trying to optimise
+$\eta$, with $X_{ij} = g_j (\eta_i)$. As a result, so long as the basis
+functions are closely space, the magnitude of $X$ should not vary much
+with $\eta$, making that issue non-lethal.
+
+The next task is to choose a model for $\eta$, and work out the details
+of the scheme to optimise $S$. A convenient model of the $p_x, p_y
+\mapsto \eta$ function is that is is separable, $\eta(p_x, p_y) = \eta_x
+(p_x) \eta_y (p_y)$, and that $\eta_x$, $\eta_y$ are linear combinations
+of a small number of basis functions (e.g. low-order polynomials).
+
+Having the gradient of the objective function available makes non-linear
+optimisation much easier (and similarly with the Hessian). We have (where
+we take $v$ to already have been weighted)
+\[
+S = v_a v_b g_c (\eta_a) g_c (\eta_b) = \sum_c (v_a g_c (\eta_a))^2
+\]
+and with no s.c. on $i$, have
+\[
+\frac{\partial S}{\partial \eta_i} = 2 v_i v_b g_c' (\eta_i) g_c (\eta_b)
+\]
+so with no s.c. on $i, j$, have
+\[
+\frac{\partial S}{\partial \eta_i \eta_j} = 2 \delta_{ij} v_i v_b g_c''(\eta_i) g_c (\eta_b)
++ 2 v_i v_j g_c'(\eta_i) g_c'(\eta_j)
+\]
+(NOTE - code doesn't seem to agree ... or at least it does it very differently).

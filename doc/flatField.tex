@@ -1,0 +1,120 @@
+\section{Flat field processing}
+
+\subsection{Edge tracing}
+
+To calibrate the $p_x, p_y \mapsto y$ map, we ideally need some image
+which has strong features corresponding to constant $y$ values. Slit
+edges are a good example of such a feature, and are most defined in
+bright images such as flat fields. Our goal, then, is to start with a
+guess at the $p_x, p_y \mapsto y$ map, and use the location of the slit
+edges in a flat field image to improve this.
+
+Different edges are pretty much separate image features, so it makes
+sense in terms of efficiency to fit each one separately.
+
+Though a slit edge may look like a sharp feature when viewed ``zoomed
+out'', it is actually (expected to be) a falloff over a small number
+(~3) of pixels. This means that determining the map to an accuracy
+of more than a few pixels demands that we make some assumptions as
+to how this falloff behaves --- these assumptions would need to be
+based on knowledge about how the instrument behaves, either derived
+from experiments or worked out from the geometry of the slits. For
+the moment, the code makes the ad-hoc assumption that the falloff is
+Gaussian, of a fixed width, and of a fixed offset with respect to
+$p_y(p_x, y)$.
+
+Given this assumption, and the fact that the slit edges are close to
+horizontal, we can usefully preprocesses the image, by calculating,
+for a set of sample points along each vertical column (e.g. one per pixel)
+the probability that the image around that point is the edge of a slit
+--- basically, by applying an `edge-detection filter' to the image.
+
+\subsubsection{Edge-detection filter}
+
+To implement this filter, we use a slightly ad-hoc `windowing' procedure.
+Suppose we're looking at a given vertical column of values $v_i$, weights
+$w_i$. For a proposed edge location ${p_y}_0$, we consider the values
+in the window $blah$, and model these as $v_i = \alpha + \beta g(blah) + \epsilon_i$,
+with $\epsilon_i \sim blah$. We take the figure of merit for this being
+the edge location to be the evidence in favour of this model versus a constant
+model for the window: that is, we're interested in
+\[
+L = \log P(v|shape window) - \log P(v|const window) = \frac{1}{2} (v_w^T \hat z)^2
+\]
+where $\hat z$ is the shape vector orthonormalised wrt the (unit)
+weighted constant vector --- i.e. $\hat z = z / \| z \|$ for $z =
+W^{1/2} s - (s^T W^{1/2} \hat u) \hat u$, where $\hat u_i = (1/\sigma_i)
+/ \sqrt{\sum_j 1/\sigma_j^2}$. The idea here is that we want the edge
+detection to be robust to overall changes in amplitude within our
+windowed area (this is necessarily slightly hand-waving since we're not
+constructing a proper model for the data, but it seems to work okay, and
+the fact that we're handling weighting properly means that it improves
+on a naive edge-detection filter).
+
+To calculate this efficiently for multiple values of ${p_y}_0$, we can
+use a series of convolutions:
+\begin{enumerate}
+\item Firstly, let
+\[
+f_v = v_i \quad , \quad f_w = 1/\sigma_i^2
+\]
+be the image and associated weighting image (or rather, a vertical
+column from these images).
+%
+\item Then, taking $k = (g(-blah), \dots, g(+blah))$ the (reversed)
+shape of the edge falloff, and $\Pi$ a top-hat kernel over the width of
+the window, we have
+\[
+v_w^T z |_{{p_y}_0} 
+= \sum_i \frac{v_i}{\sigma_i^2} \left(k_{{p_y}_0-i} - \frac{1}{\sum_k \frac{1}{\sigma_k^2}}
+\sum_j \frac{k_{{p_y}_0-j}}{\sigma_j^2}\right)
+\]
+\[
+= (f_v f_w) * k - ((f_y f_w) * \Pi)(f_w * k) / (f_w * \Pi)
+\]
+and
+\[
+z^T z |_{{p_y}_0}
+= 
+\sum \frac{1}{\sigma_i^2}\left(k_{{p_y}_0-i}s_i - \frac{\sum_j k_{{p_y}_0-j}/\sigma_j^2}
+{\sum_k 1/\sigma_k^2}\right)^2
+\]
+\[
+=
+\sum \frac{1}{\sigma_i^2}\left(k_{{p_y}_0-i}^2 - 2 k_{{p_y}_0-i} \frac{\sum_j k_{{p_y}_0-j}/\sigma_j^2}
+{\sum_k 1/\sigma_k^2} + \left(\frac{\sum_j k_{{p_y}_0-j}/\sigma_j^2}
+{\sum_k 1/\sigma_k^2}\right)^2\right)
+\]
+\[
+ = f_w * (k^2) - (f_w * k)^2 / (f_w * \Pi)
+\]
+%
+\item Thus the $v_w^T \hat z |_{{p_y}_0} = \frac{v_w^T z}{\sqrt{z^T z}}|_{{p_y}_0}$
+can be computed using 5 convolutions and some multiplications / divisions.
+\end{enumerate}
+
+TODO : show example of filtered image.
+
+\subsubsection{Edge fitting}
+
+Applying an edge detection filter does not immediately allow us to
+adjust the $p_x, p_y \mapsto y$ map, though it does make it easier to
+assess the goodness (at a fairly coarse scale) of a proposed slit edge
+curve. The current implementation obtains a first coarse solution by
+locating the maxima of the edge-filtered image in each column, and using
+these $p_x, p_y, y$ tuples to update the initial $p_x, y \mapsto p_y$
+map. It then applies a non-linear optimisation to the map, scoring a
+transformation by the sum of the `log-evidence' values from each of the
+pixels along the slit edges that the transformation describes.
+
+This process is not particularly efficient, due to the expensive
+non-linear optimisation stage. Also, there are slight issues with slits
+at the top and bottom of the image --- parts of these often lie in the
+5-pixel `dead zone' at the edge of the detector, so we loose a lot of
+the edge of the slit. Making sure that we do not try to fit to the
+`cut-off' shape could be approached either as a general regularisation
+issue --- that is, making sure that the optimisation ``realises'' that
+it doesn't have good information, and stays close to the prior ---
+or the top and bottom slits could be special-cased. Currently, the
+optimisation gives slightly dodgy results for these slits in some cases.
+

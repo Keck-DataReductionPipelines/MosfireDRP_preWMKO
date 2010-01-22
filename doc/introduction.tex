@@ -1,0 +1,135 @@
+\section{Introduction}
+
+During my 2009 SURF project (an overview of which is given in (REF)),
+I constructed a prototype implemention of the spectroscopic-mode
+data reduction pipeline (DRP) for the MOSFIRE near-infrared imaging
+spectrometer. A closely-related simulator for spectroscopic-mode MOSFIRE
+observations was also constructed. This report describes the algorithms
+used in these programs.
+
+\section{Instrument Overview}
+
+In order to derive information about astronomical objects
+from the instrument data, we need some description of how light from these
+objects, among other factors, affects the instrument. Such a description
+is also necessary for going in the other direction, i.e.\ simulating
+the output of the instrument.
+
+As described in (REF), the behaviour of the instrument can (for the
+purposes of the DRP) be summarised by a series of maps. The first of
+these is the `sky image' (spectral radiance) map,
+\[
+L_{sky} = L_{sky} (\lambda, x, y)
+\]
+where $x,y$ are coordinates determining position in the sky (e.g. RA
+and DEC), $\lambda$ the wavlength, and $L_{sky}$ the incident power
+per unit projected receiving area per unit solid angle. That is,
+$L_{sky}(\lambda, x, y)\, dA \, d\lambda$, evaluated for a specific
+point in space, gives the power received from the direction $(x,y)$
+by a small tile of area area $dA$ positioned at that point (with
+normal pointed towards $(x,y)$), in the frequency range $\lambda \pm
+d\lambda/2$. In general, $L_{sky}$ will depend on your position in
+space --- however, to a good approximation it will be constant across
+the surface of the telescope's mirror.
+
+As the telescope is within the Earth's atmosphere, the $L_{sky}$
+we observe is affected by the atmosphere, with
+\[
+L_{sky}(\lambda_0, x_0, y_0) = L_{atm}(\lambda_0, x_0, y_0) + \int d\lambda\, dx\, dy\, L_{space}(\lambda, x, y) t_{atm}[\lambda, x, y](\lambda_0, x_0, y_0)
+\]
+where $L_{atm}$ is due to radiation emitted by the atmosphere, and
+$t_{atm}$ is the atmosphere's transfer function. In general, this will
+have the form $t_{atm}[\lambda, x, y] = \epsilon_{atm}(\lambda, x,
+y) P[\lambda, x, y]$, where $\epsilon_{atm} (\lambda, x, y) \in
+\mathbb{R}^+$ is the atmosphere's transfer efficiency, and $P[\lambda,
+x, y]$ the normalised point spread function (PSF), which depends on the
+seeing conditions.
+
+$L_{sky}$ summarises what the telescope's mirror sees, but we're
+actually interested in what the instrument's detector sees. Since
+the dectector is, to a good approximation, equally sensitive to all
+frequencies in the relevent bands, this is summarised by the `detector
+image' (irradiance) map,
+\[
+E_{det} = E_{det} (p_x, p_y, L_{sky})
+\]
+where $p_x, p_y$ are coordinates for the detector surface, and
+$E_{det}$ is the incident power per unit area at this surface
+(integrated over the appropriate frequency range).
+
+Since the telescope and instrument form a linear optical system,
+we should have
+\[
+E_{det}(p_x, p_y, L_{sky}) = \int d\lambda\, dx\, dy\, L_{sky}(\lambda, x, y) t_{inst}[\lambda, x, y](p_x, p_y)
+\]
+where $t_{inst}$ is the combined transfer function of the telescope and the instrument.
+This splits as 
+\[
+t_{inst}[\lambda,x, y](p_x, p_y) = \epsilon_{inst} (\lambda, x, y)
+Q[\lambda, x, y]((p_x, p_y) - g (\lambda, x, y))
+\]
+where $\epsilon_{inst}$ is the transfer efficiency of the instrument
+(depending on factors such as the filters used, optical coatings etc.),
+$Q$ is the normalised and `centred' point spread function, and $g$ gives
+the position of the centre of the PSF.
+
+Finally, we need to know how the detector responds to incident radiation;
+the `detector response' map,
+\[
+P_{count} = P_{count} (s_0, [t_0, t_1], E_{det}(t))
+\]
+where $P_{count}$ is the probability distribution over output count images,
+and depends on the integration time $[t_0, t_1]$, the state $s_0$ of the detector
+at time $t_0$, and the detector irradiance as a function of time, $E_{det}(t)$.
+This relationship has been stated very generally, to account for the possibility
+of e.g.\ fluctuating sky state, fluctuating detector state, correlated pixels, etc.
+However, to a fairly good approximation, we expect detector pixels to be linear
+and uniform in their response to the integrated irradiance over their surfaces,
+and for separate pixels to have approximately independent responses. Then,
+we have
+$P_{count} \approx \prod_{p \in pixels} P_p$
+where $P_p$ is the probability distribution for the output count of pixel $p$.
+This should satisfy
+\[
+\mathbb{E}(E_p) \approx r_p \left (\int_{t_0}^{t_1} dt \int_A dp_x\, dp_y\, E(t, p_x, p_y)\right)
+\]
+where $r_p$ is response efficiency (in appropriate units) of pixel $p$. Of course,
+this discussion has neglected the quantum nature of light, but for large photon
+fluxes the continuous approximation should be good, with quantum discrete-ness
+providing some of the probability distribution's spread (and the rest due to instrumental
+noise etc.).
+
+TODO : talk about cosmic rays?
+
+This report is concerned with MOSFIRE's spectroscopic mode, so we are interested
+in the properties of the instrument when the CSU is in use. Assuming non-overlapping
+slits, we can split the detector irradiance as
+\[
+E_{det}(p_x, p_y, L_{sky}) = \sum_{s \in slits} \int d\lambda\, dx\, dy\, L_{sky}(\lambda, x, y) t_s[\lambda, x, y](p_x, p_y)
+\]
+i.e. with a separate transfer function for each slit, which will have
+transfer efficiency $\epsilon_s (\lambda, x, y)$ equal to zero outside
+the small $x,y$ domain viewed by the slit. Furthermore, assuming that
+slits are thin in the $x$ direction and comparatively long in $y$, then
+if $L$ and $g$ and $Q$ do not vary significantly over the relevant $x$
+range (say $x_0 \pm \Delta x / 2$), we have
+\[
+E_{det}(p_x, p_y, L_{sky}) \approx
+\sum_{s \in slits} \int d\lambda\, dy\, \Delta x\, L_{sky}(\lambda, x_0(y), y)
+E_s(\lambda, x_0(y), y) Q_s[\lambda, x_0(y), y]((p_x, p_y) - g_s (\lambda, x_0(y), y))
+\]
+where $E_s(\lambda, x_0(y), y)$ is the transfer efficiency integrated
+over $x$. The effect, if $Q_s$ is fairly concentrated, is that the slit
+$s$ defines an effective mapping $\lambda, y \mapsto g_s (\lambda,
+x_0(y), y) = p_x, p_y$. That is, light entering a slit from a specific
+(`vertical') sky position and at a specific wavelength is mapped to
+a specific position on the detector. In fact, the operation of the
+instrument is such that the map approximately separates into an affine
+$y \mapsto p_y$ transform, and an approximately exponential $\lambda
+\mapsto p_x$ transform caused by the reflection grating (see REF,
+especially figure 2). However, this approximation is not quite accurate
+enough for our purposes, and in the sections below we generally
+consider the $p_x, p_y \leftrightarrow \lambda, y$ relationship for a given
+slit (at a given position).
+
+Need to say anything more here?

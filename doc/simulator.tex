@@ -1,0 +1,112 @@
+\section{Simulator / Instrument Model}
+
+If only for the purposes of being able to test data reduction software,
+it is clearly important to have a source of simulated instrument data,
+which resembles that expected from the real instrument as far as is
+possible, but is much easier to generate and understand completely.
+Also, it is helpful in many stages of the data reduction pipeline to
+have good `guesses' as to various features of the instrument's behaviour
+(e.g. the $p_x, p_y \leftrightarrow \lambda, y$ mapping).
+
+In the code as it stands, the simulator and the `instrument model' used
+to make `guesses' in the DRP are separate, though they use the same data
+about the instrument. This is basically an artifact of the software
+development process, and there is no particular reason at the moment why
+the functionality could not be made common. In the longer term (i.e.\
+when the instrument is in operation), some thought might want to be
+given to how the DRP's instrument model would be updated if, say, the
+instrument parameters changed over time.
+
+\subsection{Simulator}
+
+The simulator, as currently implemented, operates as follows:
+%
+\begin{itemize}
+\item Constructs 3D interpolated versions of the $x_0, y, p_x \mapsto
+\lambda$, $x_0, y, p_x \mapsto p_y$ and $x_0, y, \lambda \mapsto p_x$
+maps, from a table giving $x, y, \lambda, p_x, p_y$ values for a large
+number of rays traced through an optical model of the instrument. The
+interpolated maps are constructed by performing linear interpolation in
+$y$ between 2D B-spline functions in the other two input variables.
+%
+\item Constructs univariate spline interpolation for the instrument
+transfer efficiency, and multiplies a simulated sky spectrum (obtained from REF)
+by this.
+%
+\item
+The simulator draw each slit into the image buffer in turn, so if two
+slits overlap, then the naive approach would incorrectly draw the
+overlap area twice. So, we check whether any slits do overlap, and if
+they do, remember to draw the overlap area as a weighted combination
+of them. This is not quite the correct method of handling things (the
+proper method would involve working out the geometry of partial slit
+overlaps etc.), but seems adequate.
+%
+\item
+To actually draw a slit into the buffer,
+\begin{itemize}
+\item Firstly, we generate a set of $y, x_0(y)$ values sampling the vertical
+extent of the slit, along with `transparency' values $\epsilon$ to implement
+and ad-hoc smooth falloff at the edge of each slit.
+%
+\item Then, for each $y, x_0(y)$ pair, we
+\begin{itemize}
+\item Calculate the $p_x$ range, $[p_x(x_0, y, \lambda_0), p_x (x_0, y, \lambda_1)]$
+corresponding to the wavelength band $[\lambda_0, \lambda_1]$ being used, and
+let $[p_i]$ be a vector of evenly-spaced samples in this range, at small enough
+spacing to capture the details of the theoretical (i.e.\ un-smeared) spectrum.
+%
+\item Let $\lambda_i = \lambda (x_0, y, p_i)$ be the corresponding
+$\lambda$ vector, and $I_i = \rho (\lambda_i)$ the interpolated
+theoretical spectrum sampled at these values.
+%
+\item Convolve this vector with a kernel of suitable width to
+approximate the effect of the instrument PSF etc. At the moment, the
+kernel is determined in a rather ad-hoc way.
+%
+\item Downsample the row to a pixel-spaced grid.
+\end{itemize}
+%
+\item This gives us a regularly-sampled image in $p_x, y$ space, but we want an image
+in $p_x, p_y$ space. To obtain this, we resample each column of the $p_x, y$ image
+individually, using a univariate spline interpolation (possible since we have the
+$x_0, y, p_x \mapsto p_y$ function available). This image is then drawn into the buffer.
+\end{itemize}
+%
+\item We end up with an ``image'' that consists of real flux values for
+each pixel. The output of the real detector is a count number for each
+pixel, which is drawn from a discrete set. To simulate this, we multiply
+by the exposure time to obtain an expected number of photons for each
+pixel, sample from the binomial probability distribution to determine
+the number of photons the pixel received, then add random noise to simulate
+detector readout noise. Currently, detector readout noise is modelled in an
+entirely ad-hoc manner by independent Gaussian samples.
+
+\end{itemize}
+%
+
+Problems: ...
+
+Desirable future features:
+\begin{itemize}
+\item Realistic simulation of cosmic ray impacts?
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%
+
+\subsection{Pipeline}
+
+The pipeline constructs its 3D interpolations in a slightly
+different to the simulator --- it does component-wise spline interpolation
+on parameter vectors describing 2D functions, where these paremeter vectors
+are generally the components of basis functions in some linear model.
+For example, the interpolated $x_0, y, p_x \mapsto p_y$ map is formed by
+constructing, for each value of $x_0$ in the raytraced dataset, a best-fit
+parameter vector for the linear model with basis functions $f_{i,j}(y, p_x) = L_i (y) L_j (p_x)$, where $L_i$ is the Legendre polynomial of order $i$ (when $y$
+and $p_x$ when both been scaled to lie in the region $[-1,1]$). We then construct
+a component-wise spline interpolation between these parameter vectors.
+
+As stated above, this difference exists mainly for `historical' software development
+reasons --- I haven't done any proper testing wrt which approach is superior, or
+fully investigated either of them for potential problems (though both approach
+fit the source data with small error, as would be expected).

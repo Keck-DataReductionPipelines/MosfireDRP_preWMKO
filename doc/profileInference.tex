@@ -1,0 +1,19 @@
+\section{Inferring profiles}
+
+There are a number of situations in which we might have an approximately
+separable image, i.e.\ $f(p_x, p_y) \approx f_1(p_x)f_2(p_y)$, and want
+to infer one or both of $f_1$, $f_2$. An example might be in performing
+reduction of a 2D spectrum to 1D --- if the object's spatial profile can
+be estimated accurately, then we can use this to lower the effective
+noise level of the extracted spectrum, by weighting down the wings of
+the profile, which will be mostly noise, and weighting up the centre,
+where the strongest signal will be.
+
+A simple approach to fitting a fairly flexible such `profile function'
+was implemented, but proved to be a be a bit too simple, not coping well
+with noise (basically, to infer the $p_y$ profile, it `guessed' the
+$p_x$ profile via the total magnitude of each column, then used this
+guessed profile to form a weighted sum --- with too much noise, the
+guessed $p_x$ profile was bad enough to cause problems). Further thought
+on how to solve this problem, and what exactly is necessary here,
+is needed.
