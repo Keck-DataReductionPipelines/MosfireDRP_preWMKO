@@ -30,25 +30,28 @@ the probability that the image around that point is the edge of a slit
 
 \subsection{Edge-detection filter}
 
-To implement this filter, we use a slightly ad-hoc `windowing' procedure.
-Suppose we're looking at a given vertical column of values $v_i$, weights
-$w_i$. For a proposed edge location ${p_y}_0$, we consider the values
-in the window $blah$, and model these as $v_i = \alpha + \beta g(blah) + \epsilon_i$,
-with $\epsilon_i \sim blah$. We take the figure of merit for this being
-the edge location to be the evidence in favour of this model versus a constant
-model for the window: that is, we're interested in
+To implement this filter, we use a slightly ad-hoc `windowing'
+procedure. Suppose we're looking at a given vertical column of values
+$v_i$, weights $w_i$. For a proposed edge location ${p_y}_0$, we
+consider the values $v_w$ in the window ${p_y}_0 \pm \Delta$ (where $\Delta$
+is the length-scale of the edge falloff), and model these as $v_i =
+\alpha + \beta g(p_y) + \epsilon_i$, with $\epsilon_i$ as per the weight
+vector $w$. We take the figure of merit for this being the edge location
+to be the evidence in favour of this model versus a constant model for
+the window: that is, we're interested in
 \[
-L = \log P(v|shape window) - \log P(v|const window) = \frac{1}{2} (v_w^T \hat z)^2
+L = \log P(v_w|{\mbox{shape + constant}}) - \log P(v_w|{\mbox{constant}}) = \frac{1}{2} (v_w^T \hat z)^2
 \]
 where $\hat z$ is the shape vector orthonormalised wrt the (unit)
 weighted constant vector --- i.e. $\hat z = z / \| z \|$ for $z =
 W^{1/2} s - (s^T W^{1/2} \hat u) \hat u$, where $\hat u_i = (1/\sigma_i)
-/ \sqrt{\sum_j 1/\sigma_j^2}$. The idea here is that we want the edge
-detection to be robust to overall changes in amplitude within our
-windowed area (this is necessarily slightly hand-waving since we're not
-constructing a proper model for the data, but it seems to work okay, and
-the fact that we're handling weighting properly means that it improves
-on a naive edge-detection filter).
+/ \sqrt{\sum_j 1/\sigma_j^2}$, and $s = g(p_y)$ the shape vector for the edge falloff. The
+idea here is that we want the edge detection to be robust to overall
+changes in amplitude within our windowed area (this is necessarily
+slightly hand-waving since we're not constructing a proper model for
+the data, but it seems to work okay, and the fact that we're handling
+weighting properly means that it improves on a naive edge-detection
+filter).
 
 To calculate this efficiently for multiple values of ${p_y}_0$, we can
 use a series of convolutions:
@@ -60,9 +63,8 @@ f_v = v_i \quad , \quad f_w = 1/\sigma_i^2
 be the image and associated weighting image (or rather, a vertical
 column from these images).
 %
-\item Then, taking $k = (g(-blah), \dots, g(+blah))$ the (reversed)
-shape of the edge falloff, and $\Pi$ a top-hat kernel over the width of
-the window, we have
+\item Then, taking $k$ to be the (reversed) shape vector, and $\Pi$ a
+top-hat kernel over the width of the window, we have
 \[
 v_w^T z |_{{p_y}_0} 
 = \sum_i \frac{v_i}{\sigma_i^2} \left(k_{{p_y}_0-i} - \frac{1}{\sum_k \frac{1}{\sigma_k^2}}
