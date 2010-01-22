@@ -1,6 +1,5 @@
-\section{Flat field processing}
-
-\subsection{Edge tracing}
+\section{Edge tracing}
+\label{sec:edgeTracing}
 
 To calibrate the $p_x, p_y \mapsto y$ map, we ideally need some image
 which has strong features corresponding to constant $y$ values. Slit
@@ -29,7 +28,7 @@ for a set of sample points along each vertical column (e.g. one per pixel)
 the probability that the image around that point is the edge of a slit
 --- basically, by applying an `edge-detection filter' to the image.
 
-\subsubsection{Edge-detection filter}
+\subsection{Edge-detection filter}
 
 To implement this filter, we use a slightly ad-hoc `windowing' procedure.
 Suppose we're looking at a given vertical column of values $v_i$, weights
@@ -95,7 +94,7 @@ can be computed using 5 convolutions and some multiplications / divisions.
 
 TODO : show example of filtered image.
 
-\subsubsection{Edge fitting}
+\subsection{Edge fitting}
 
 Applying an edge detection filter does not immediately allow us to
 adjust the $p_x, p_y \mapsto y$ map, though it does make it easier to

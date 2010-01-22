@@ -1,0 +1,28 @@
+\section{Weighting observations / error tracking}
+\label{sec:weighting}
+
+Since the DRP is supposed to produce scientifically-useful information,
+it is clearly important to estimate the uncertainty in its outputs,
+and this entails tracking such uncertainty throughout the computation.
+Presently, we use pretty much the simplest possible such scheme ---
+every data vector carries round a corresponding weight vector of inverse
+variances. That is, if $v_i$ is the data vector, then we are modelling
+it as being the sum of a `true' data vector $u_i$ and an error vector
+$\epsilon_i$, where the weight vector $w_i$ is such that $\epsilon_i
+\sim N(0, 1/w_i)$ (with the $\epsilon_i$ assumed independent).
+This is clearly a fairly crude way of doing things, but is better
+than nothing --- it also enables a unified treatment of bad pixels etc.,
+which can simply have their inverse variances set to zero, corresponding
+to their conveying no information.
+
+In the current implementations of the simulator and DRP, the simulated
+readout noise is the same for each pixels, so there is no difference in
+the initial per-pixel weights. However, if we want to compensate for
+effect of differing pixel QEs (by dividing each observed pixel value by
+the known pixel QE), then we need to modify the weight attached to the
+new value accordingly (i.e.\ the weight is multiplied by the square of
+the pixel QE).
+
+TODO : discussing of handling photon counting `noise' in this framework.
+
+TODO : more discussion here?

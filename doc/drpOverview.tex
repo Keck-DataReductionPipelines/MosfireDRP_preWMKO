@@ -1,0 +1,34 @@
+\section{DRP Overview}
+
+As described in~\cite{surfreport}, the purpose of the DRP is to go
+from raw instrument outputs to object spectra. Naively, if we had an
+accurate $p_x, p_y \mapsto \lambda$ map for a slit, and the raw slit
+image was $f(p_x, p_y) \propto \lambda(p_x, p_y)$ proportional to the target
+object's spectral power, then $\lambda \circ f$ would give a set of
+samples from the objects spectrum. Of course, the raw image has many
+other factors affecting it, all of which need to be compensated for in
+some way --- these include
+%
+\begin{itemize}
+\item Detector response varying between pixels.
+\item Instrument transfer function varying with $y$ and $\lambda$
+\item Atmospheric transparency varying with time and wavelength
+\item Atmospheric emission (night sky lines) contributing to image
+\end{itemize}
+%
+along with others. Unfortunately, there wasn't time during my SURF project
+to tackle these other areas properly --- I thought about all of them to some degree,
+but didn't get to the stage of proper prototype code. As a result, the prototype
+DRP currently consists only of the `calibration' stages; those involved in
+determining the $p_x, p_y \leftrightarrow \lambda, y$ relationship.
+
+This task has been factored in three main stages
+\begin{itemize}
+\item Determining the $p_x, p_y \mapsto y$ map, as discussed in
+section~\ref{sec:edgeTracing}.
+\item Determining the $p_x, p_y \mapsto \lambda$ map, up to a monotonic
+function of $\lambda$; referred to as `relative wavelength calibration'
+(section~\ref{sec:relativeWavelengthCalibration}).
+\item Determining the $p_x, p_y \mapsto \lambda$ map absolutely;
+referred to as `absolute wavelength calibration' (section~\ref{sec:absoluteWavelengthCalibration}).
+\end{itemize}

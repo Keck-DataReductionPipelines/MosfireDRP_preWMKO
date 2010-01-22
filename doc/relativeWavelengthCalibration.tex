@@ -1,4 +1,5 @@
 \section{Relative Wavelength Calibration}
+\label{sec:relativeWavelengthCalibration}
 
 \subsection{Overview}
 
@@ -36,7 +37,7 @@ be constructed.
 \subsection{Algorithm}
 
 To recap : we want to optimise the map $p_x, p_y \mapsto \lambda$, given
-an initial guess, while fixing a specified row. 
+an initial guess, while fixing a specified row.
 
 For convenience, we define $f_0 (p_x) = \lambda (p_x, {p_y}_0)$, and
 then $\eta (p_x, p_y) = f_0^{-1} (\lambda (p_x, p_y))$, for some $y_0$
@@ -45,27 +46,28 @@ optimise the map $p_x, p_y \mapsto \eta$, so we are attempting to align
 the rows with respect to the distinguished row in its `pixel space'. Our
 constraint is then that $p_x, {p_y}_0 \mapsto p_x$.
 
-In order to align the rows with respect to each other, we need
-an image which has variation in the horizontal direction, while ideally
-being approximately uniform in the vertical direction. Both the sky OH
-lines and the calibration lamp lines meet these criteria.
+In order to align the rows with respect to each other, we need an image
+which has variation in the horizontal direction, while ideally being
+approximately uniform in the vertical direction. Both the sky OH lines
+and the calibration lamp lines meet these criteria.
 
 In deciding how to optimise the map, a starting point is to investigate
-plausible forms of $P(D|\eta)$, where $D$ is the image data. If we
-assume that we have processed our raw count image such that the
-intensity should be spatially uniform (discussed in section (REF)), then
-we want to model the image as being a smooth function of $\eta$ alone,
-where the scale on which it should be smooth is determined by the slit
-width etc. (say more on this topic?). A possible model of a smooth
-univariate function is given by a `radial basis function network' ---
-that is, a linear combination of evenly spaced basis elements, each
-of which is a smooth, localised, symmetrical function.
+plausible forms of $P(D|\eta)$, where $D$ is the image data.
+If we assume that we have processed our raw count image such
+that the intensity should be spatially uniform (discussed in
+section~\ref{sec:profileInference}), then we want to model the image
+as being a smooth function of $\eta$ alone, where the scale on which
+it should be smooth is determined by the slit width etc. (say more on
+this topic?). A possible model of a smooth univariate function is given
+by a `radial basis function network' --- that is, a linear combination
+of evenly spaced basis elements, each of which is a smooth, localised,
+symmetrical function.
 
 Letting $v$ denote the vector of image pixel values, $[\eta_i]$ their $\eta$
 values, $w$ their inverse variances (assumed uncorrelated), and $X_{ij}
 = g_j (\eta_i)$, where $g_j$ is $j$th basis function (so we aim for $v
 \approx X \beta$, where $\beta$ is the vector of amplitudes for the
-basis functions), we have (see BLAH, assuming $\beta_0 = 0$)
+basis functions), we have (assuming $\beta_0 = 0$) % TODO - reference for all this ...
 \[
 \log P(v|X) = -\frac{n}{2}\log (2 \pi) - \frac{1}{2} \log |C| - \frac{1}{2}
 v^T C^{-1} v
@@ -99,23 +101,37 @@ with $\eta$, making that issue non-lethal.
 
 The next task is to choose a model for $\eta$, and work out the details
 of the scheme to optimise $S$. A convenient model of the $p_x, p_y
-\mapsto \eta$ function is that is is separable, $\eta(p_x, p_y) = \eta_x
-(p_x) \eta_y (p_y)$, and that $\eta_x$, $\eta_y$ are linear combinations
-of a small number of basis functions (e.g. low-order polynomials).
+\mapsto \eta$ function is a linear combination of separable low-order functions,
+$\eta(p_x, p_y) = \sum_{i,j} \alpha_{ij}  L_i(p_x) L_j(p_y)$, with e.g.\
+the $L_i$ being Legendre polynomials.
 
 Having the gradient of the objective function available makes non-linear
-optimisation much easier (and similarly with the Hessian). We have (where
-we take $v$ to already have been weighted)
+optimisation much easier (and similarly with the Hessian). Suppose $v$ has
+already been weighted, and let $J = (i,j)$ represent a combined index,
+so $\eta = \alpha_J L_J$, $L_J(p_x, p_y) = L_i(p_x)L_j(p_y)$
+Similarly, let $p_i = (p_x, p_y)$ be the pixel coordinates corresponding to $v_i$,
+and let $\eta_i = \eta(p_i)$. Then we have
 \[
-S = v_a v_b g_c (\eta_a) g_c (\eta_b) = \sum_c (v_a g_c (\eta_a))^2
+S = \sum_b (v_a g_b (\eta_a))^2
 \]
-and with no s.c. on $i$, have
+and with no summation convention on $c$, 
 \[
-\frac{\partial S}{\partial \eta_i} = 2 v_i v_b g_c' (\eta_i) g_c (\eta_b)
+\frac{\partial S}{\partial \alpha_J} = \sum_c 2 v_a g_b (\eta_a) v_c g_b' (\eta_c) \frac{
+\partial \eta_c}{\partial \alpha_J}
+= 2 v_a g_b (\eta_a) \sum_c v_c g_b'(\eta_c) L_J(p_c)
 \]
-so with no s.c. on $i, j$, have
-\[
-\frac{\partial S}{\partial \eta_i \eta_j} = 2 \delta_{ij} v_i v_b g_c''(\eta_i) g_c (\eta_b)
-+ 2 v_i v_j g_c'(\eta_i) g_c'(\eta_j)
-\]
-(NOTE - code doesn't seem to agree ... or at least it does it very differently).
+and
+\begin{align*}
+\frac{\partial^2 S}{\partial \alpha_J \partial \alpha_K} = & 2
+\left(\sum_a v_a g_b'(\eta_a) L_K (p_a)\right)
+\left(\sum_c v_c g_b'(\eta_c) L_J (p_c)\right)
+\\
+ &+ 2 v_a g_b (\eta_a)
+\sum_c v_c g_b''(\eta_c) L_J(p_c) L_K(p_c)
+\end{align*}
+%
+For an interative optimisation, it is important that these expressions
+can be computed efficiently. One way of doing this is to go along the
+rows, keeping track of which basis functions have support overlapping
+with with current pixel, and accumulating into that basis function's
+`slot' for the desired derivative.

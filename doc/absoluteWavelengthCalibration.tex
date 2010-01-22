@@ -1,11 +1,13 @@
 \section{Absolute Wavelength Calibration}
+\label{sec:absoluteWavelengthCalibration}
 
 \subsection{Overview}
 
-In the relative wavelength calibration section (REF), we optimised the
-$p_x, p_y \mapsto \eta$ map, where $f_0 \circ \eta = \lambda$ for some
-monotonic $f_0$. The task of the absolute wavelength calibration is to
-find the $f_0$ map.
+In the relative wavelength calibration section
+(\S~\ref{sec:relativeWavelengthCalibration}), we optimised the $p_x, p_y
+\mapsto \eta$ map, where $f_0 \circ \eta = \lambda$ for some monotonic
+$f_0$. The task of the absolute wavelength calibration is to find the
+$f_0$ map.
 
 To do this, we need some knowledge of what a spectrum should look like
 in $\lambda$ space. For the sky OH lines, this comes in two obvious
@@ -39,6 +41,7 @@ isn't advanced enough to make use of it \dots asking computer vision people
 about techniques from that field might be useful along these lines.
 
 \subsubsection{Algorithm}
+\label{subsubsec:coarseAlignmentAlgorithm}
 
 The task for this stage: we have a vector of pixel values
 $(\eta_i, v_i, w_i)$, with $v_i$ the pixel count (TODO : in what
@@ -324,11 +327,12 @@ peak-fitting (as is obvious by symmetry), only making it slightly less
 accurate.
 
 Explicitly, we let $\{d_i, \eta_i\}$ be the set of pixel values
-with $\eta_i$ in a small interval (of the order of the peak width)
-around $f^{-1}(\lambda_0)$. We model $d_i = \alpha + \beta g(\eta_i)
-+ \epsilon_i$, with $g$ a Guassian of appropriate width centred at
-$f^{-1}(\lambda_0) + \Delta\eta$. Then, as in section REF (4.2.2), for
-broad priors on $\alpha$ and $\beta$, the log likelihood is given by
+with $\eta_i$ in a small interval (of the order of the peak
+width) around $f^{-1}(\lambda_0)$. We model $d_i = \alpha + \beta
+g(\eta_i) + \epsilon_i$, with $g$ a Guassian of appropriate
+width centred at $f^{-1}(\lambda_0) + \Delta\eta$. Then, as in
+section~\ref{subsubsec:coarseAlignmentAlgorithm} , for broad priors on
+$\alpha$ and $\beta$, the log likelihood is given by
 \[
 L = P(d|\Delta\eta) = \dots + \frac{1}{2} \frac{(d^T W z)^2}{z^T W z}
 \]
