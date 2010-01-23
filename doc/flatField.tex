@@ -4,7 +4,7 @@
 To calibrate the $p_x, p_y \mapsto y$ map, we ideally need some image
 which has strong features corresponding to constant $y$ values. Slit
 edges are a good example of such a feature, and are most defined in
-bright images such as flat fields. Our goal, then, is to start with a
+bright images such as flat fields~\cite{surfreport}. Our goal, then, is to start with a
 guess at the $p_x, p_y \mapsto y$ map, and use the location of the slit
 edges in a flat field image to improve this.
 
@@ -13,52 +13,52 @@ sense in terms of efficiency to fit each one separately.
 
 Though a slit edge may look like a sharp feature when viewed ``zoomed
 out'', it is actually (expected to be) a falloff over a small number
-(~3) of pixels. This means that determining the map to an accuracy
+($\sim 3$) of pixels. This means that determining the map to an accuracy
 of more than a few pixels demands that we make some assumptions as
 to how this falloff behaves --- these assumptions would need to be
 based on knowledge about how the instrument behaves, either derived
 from experiments or worked out from the geometry of the slits. For
 the moment, the code makes the ad-hoc assumption that the falloff is
-Gaussian, of a fixed width, and of a fixed offset with respect to
-$p_y(p_x, y)$.
+Gaussian, of a fixed width, and at a fixed vertical offset with respect to
+the image location of the slit edge.
 
 Given this assumption, and the fact that the slit edges are close to
-horizontal, we can usefully preprocesses the image, by calculating,
-for a set of sample points along each vertical column (e.g. one per pixel)
-the probability that the image around that point is the edge of a slit
+horizontal, we can usefully preprocesses the image by calculating,
+for a set of sample points along each vertical column (e.g. one per pixel),
+the `probability' that the image around that point is the edge of a slit
 --- basically, by applying an `edge-detection filter' to the image.
 
 \subsection{Edge-detection filter}
 
 To implement this filter, we use a slightly ad-hoc `windowing'
-procedure. Suppose we're looking at a given vertical column of values
+procedure. Suppose we're looking at a given vertical column of pixel values
 $v_i$, weights $w_i$. For a proposed edge location ${p_y}_0$, we
-consider the values $v_w$ in the window ${p_y}_0 \pm \Delta$ (where $\Delta$
+consider the pixel values in the window ${p_y}_0 \pm \Delta$ (where $\Delta$
 is the length-scale of the edge falloff), and model these as $v_i =
 \alpha + \beta g(p_y) + \epsilon_i$, with $\epsilon_i$ as per the weight
-vector $w$. We take the figure of merit for this being the edge location
+vector $w$. We take the figure of merit for ${p_y}_0$ being the edge location
 to be the evidence in favour of this model versus a constant model for
 the window: that is, we're interested in
 \[
-L = \log P(v_w|{\mbox{shape + constant}}) - \log P(v_w|{\mbox{constant}}) = \frac{1}{2} (v_w^T \hat z)^2
+L = \log P(v|{\mbox{shape + constant}}) - \log P(v|{\mbox{constant}}) = \frac{1}{2} (v|^T W^{1/2} \hat z)^2
 \]
-where $\hat z$ is the shape vector orthonormalised wrt the (unit)
-weighted constant vector --- i.e. $\hat z = z / \| z \|$ for $z =
-W^{1/2} s - (s^T W^{1/2} \hat u) \hat u$, where $\hat u_i = (1/\sigma_i)
-/ \sqrt{\sum_j 1/\sigma_j^2}$, and $s = g(p_y)$ the shape vector for the edge falloff. The
-idea here is that we want the edge detection to be robust to overall
-changes in amplitude within our windowed area (this is necessarily
-slightly hand-waving since we're not constructing a proper model for
-the data, but it seems to work okay, and the fact that we're handling
-weighting properly means that it improves on a naive edge-detection
-filter).
+where $v|$ is $v$ restricted to the window, and $\hat z$ is the shape
+vector orthonormalised wrt the (unit) weighted constant vector --- i.e.
+$\hat z = z / \| z \|$ for $z = W^{1/2} s - (s^T W^{1/2} \hat u) \hat
+u$, where $\hat u_i = (1/\sigma_i) / \sqrt{\sum_j 1/\sigma_j^2}$, and $s
+= g(p_y)$ the shape vector for the edge falloff. The idea here is that
+we want the edge detection to be robust to overall changes in amplitude
+as we move our window (this is necessarily slightly hand-waving since
+we're not constructing a proper model for the data, but it seems to work
+okay, and the fact that we're handling weighting properly means that it
+improves on a naive edge-detection filter).
 
 To calculate this efficiently for multiple values of ${p_y}_0$, we can
 use a series of convolutions:
 \begin{enumerate}
 \item Firstly, let
 \[
-f_v = v_i \quad , \quad f_w = 1/\sigma_i^2
+f_v = v_i \quad , \quad f_w = w_i = 1/\sigma_i^2
 \]
 be the image and associated weighting image (or rather, a vertical
 column from these images).
@@ -77,7 +77,7 @@ and
 \[
 z^T z |_{{p_y}_0}
 = 
-\sum \frac{1}{\sigma_i^2}\left(k_{{p_y}_0-i}s_i - \frac{\sum_j k_{{p_y}_0-j}/\sigma_j^2}
+\sum \frac{1}{\sigma_i^2}\left(s_i k_{{p_y}_0-i} - \frac{\sum_j k_{{p_y}_0-j}/\sigma_j^2}
 {\sum_k 1/\sigma_k^2}\right)^2
 \]
 \[
@@ -90,11 +90,11 @@ z^T z |_{{p_y}_0}
  = f_w * (k^2) - (f_w * k)^2 / (f_w * \Pi)
 \]
 %
-\item Thus the $v_w^T \hat z |_{{p_y}_0} = \frac{v_w^T z}{\sqrt{z^T z}}|_{{p_y}_0}$
+\item Thus the $v_w^T \hat z |_{{p_y}_0} = \frac{v_w^T z}{\sqrt{z^T z}}|_{{p_y}_0}$ image
 can be computed using 5 convolutions and some multiplications / divisions.
 \end{enumerate}
 
-TODO : show example of filtered image.
+%TODO : show example of filtered image.
 
 \subsection{Edge fitting}
 
@@ -111,7 +111,7 @@ pixels along the slit edges that the transformation describes.
 This process is not particularly efficient, due to the expensive
 non-linear optimisation stage. Also, there are slight issues with slits
 at the top and bottom of the image --- parts of these often lie in the
-5-pixel `dead zone' at the edge of the detector, so we loose a lot of
+5-pixel `dead zone' at the edge of the detector~\cite{mosfirepaper}, so we loose a lot of
 the edge of the slit. Making sure that we do not try to fit to the
 `cut-off' shape could be approached either as a general regularisation
 issue --- that is, making sure that the optimisation ``realises'' that

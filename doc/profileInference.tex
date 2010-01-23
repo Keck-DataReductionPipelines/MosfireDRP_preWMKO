@@ -8,10 +8,11 @@ reduction of a 2D spectrum to 1D --- if the object's spatial profile can
 be estimated accurately, then we can use this to lower the effective
 noise level of the extracted spectrum, by weighting down the wings of
 the profile, which will be mostly noise, and weighting up the centre,
-where the strongest signal will be.
+where the strongest signal will be (sometimes termed `optimal extraction').
+% TODO - reference here?
 
 A simple approach to fitting a fairly flexible such `profile function'
-was implemented, but proved to be a be a bit too simple, not coping well
+was implemented, but proved to be a bit too simple, not coping well
 with noise (basically, to infer the $p_y$ profile, it `guessed' the
 $p_x$ profile via the total magnitude of each column, then used this
 guessed profile to form a weighted sum --- with too much noise, the

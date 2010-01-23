@@ -13,7 +13,7 @@ to make `guesses' in the DRP are separate, though they use the same data
 about the instrument. This is basically an artifact of the software
 development process, and there is no particular reason at the moment why
 the functionality could not be made common. In the longer term (i.e.\
-when the instrument is in operation), some thought might want to be
+when the instrument is in operation), some thought should probably to be
 given to how the DRP's instrument model would be updated if, say, the
 instrument parameters changed over time.
 
@@ -29,9 +29,9 @@ number of rays traced through an optical model of the instrument. The
 interpolated maps are constructed by performing linear interpolation in
 $y$ between 2D B-spline functions in the other two input variables.
 %
-\item Constructs univariate spline interpolation for the instrument
+\item Constructs a univariate spline interpolation for the instrument
 transfer efficiency, and multiplies a simulated sky spectrum (obtained
-from~\cite{geminibackground}) by this.
+from~\cite{geminibackground}) by this, simulating $L_{sky} t_{inst}$.
 %
 \item
 The simulator draw each slit into the image buffer in turn, so if two
@@ -47,7 +47,7 @@ To actually draw a slit into the buffer,
 \begin{itemize}
 \item Firstly, we generate a set of $y, x_0(y)$ values sampling the vertical
 extent of the slit, along with `transparency' values $\epsilon$ to implement
-and ad-hoc smooth falloff at the edge of each slit.
+an ad-hoc smooth falloff at the edge of each slit.
 %
 \item Then, for each $y, x_0(y)$ pair, we
 \begin{itemize}
@@ -59,8 +59,9 @@ spacing to capture the details of the theoretical (i.e.\ un-smeared) spectrum.
 \item Let $\lambda_i = \lambda (x_0, y, p_i)$ be the corresponding
 $\lambda$ vector, and $I_i = \rho (\lambda_i)$ the interpolated
 theoretical spectrum sampled at these values.
+%TODO - need to comment on the scale-change factor stuff
 %
-\item Convolve this vector with a kernel of suitable width to
+\item Convolve $I_i$ with a kernel of suitable width to
 approximate the effect of the instrument PSF etc. At the moment, the
 kernel is determined in a rather ad-hoc way.
 %
@@ -74,7 +75,7 @@ $x_0, y, p_x \mapsto p_y$ function available). This image is then drawn into the
 \end{itemize}
 %
 \item We end up with an ``image'' that consists of real flux values for
-each pixel. The output of the real detector is a count number for each
+each pixel. The output of the actual detector is a count number for each
 pixel, which is drawn from a discrete set. To simulate this, we multiply
 by the exposure time to obtain an expected number of photons for each
 pixel, sample from the binomial probability distribution to determine
@@ -93,7 +94,6 @@ testing. However, it uses a number of approximations (as detailed above)
 which would have to be checked against real data to see if they are
 acceptable. Also, in terms of implemention, it could definitely do with
 refactoring into a system that handles inputs and outputs more cleanly.
-
 Possibly desirable future features include:
 \begin{itemize}
 \item Realistic simulation of cosmic ray impacts
@@ -108,7 +108,7 @@ only point objects with black-body spectra are supported)
 \subsection{Pipeline}
 
 The pipeline constructs its 3D interpolations in a slightly
-different to the simulator --- it does component-wise spline interpolation
+different way to the simulator --- it does component-wise spline interpolation
 on parameter vectors describing 2D functions, where these paremeter vectors
 are generally the components of basis functions in some linear model.
 For example, the interpolated $x_0, y, p_x \mapsto p_y$ map is formed by
@@ -120,4 +120,6 @@ a component-wise spline interpolation between these parameter vectors.
 As stated above, this difference exists mainly for `historical' software development
 reasons --- I haven't done any proper testing wrt which approach is superior, or
 fully investigated either of them for potential problems (though both approach
-fit the source data with small error, as would be expected).
+fit the source data with small error, as would be expected). However, the linear-model
+nature of the approach used in the pipeline does make the restricted 2D maps easier to update,
+which is used in a number of places.
