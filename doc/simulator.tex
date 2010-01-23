@@ -92,7 +92,7 @@ The simulator works sufficiently well (at least, as compared to
 expectations regarding the real instrument) to be useful for DRP
 testing. However, it uses a number of approximations (as detailed above)
 which would have to be checked against real data to see if they are
-acceptable. Also, in terms of implemention, it could definitely do with
+acceptable. Also, in terms of implementation, it could definitely do with
 refactoring into a system that handles inputs and outputs more cleanly.
 Possibly desirable future features include:
 \begin{itemize}
@@ -109,7 +109,7 @@ only point objects with black-body spectra are supported)
 
 The pipeline constructs its 3D interpolations in a slightly
 different way to the simulator --- it does component-wise spline interpolation
-on parameter vectors describing 2D functions, where these paremeter vectors
+on parameter vectors describing 2D functions, where these parameter vectors
 are generally the components of basis functions in some linear model.
 For example, the interpolated $x_0, y, p_x \mapsto p_y$ map is formed by
 constructing, for each value of $x_0$ in the raytraced dataset, a best-fit

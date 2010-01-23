@@ -19,7 +19,7 @@ of a typical spectrum (basically, the relative separations, and very
 approximate relative magnitudes, between lines) enables us to identify
 which theoretical features lines in the observed spectrum correspond
 to, and we can then use our knowledge of the exact wavelengths these
-should be at to calibrate the wavlength accurately. As a result, it
+should be at to calibrate the wavelength accurately. As a result, it
 makes sense to perform the absolute wavelength calibration in two
 stages --- first a coarse alignment to get features sufficiently close
 to the correct theoretical lines, then a fine alignment using the exact
@@ -65,7 +65,7 @@ z = p - \frac{\sum p_i w_i}{\sum w_i}
 and $p_i = \rho (f (\eta_i))$.
 
 Since we have lots of pixels ($\sim 10^5$), iteratively optimising $f$
-by directly evaluating this likelihood at every new value of $p$ would
+by directly evaluating this (marginal) likelihood at every new value of $p$ would
 be rather expensive. However, suppose that $p = X \beta$, where $\beta$
 is some `low-dimensional' parameter vector (e.g. the amplitudes for a
 couple of thousand radial basis functions, which is low-dimensional
@@ -93,7 +93,7 @@ products, which makes an iterative optimisation feasible.
 
 With regard to finding the the $\beta$ corresponding to a given $f :
 \eta \mapsto \lambda$, we want that $p = \rho (f (\eta)) \approx X
-\beta$, with $X$ is the fixed RBF matrix. To a resonable approximation,
+\beta$, with $X$ is the fixed RBF matrix. To a reasonable approximation,
 we can simply use $\beta_i= \rho (f (\eta_i))$, since $X$ should
 simply function as a mild smoothing, and not do anything too bad to a
 well-behaved $\rho \circ f$. 
@@ -135,7 +135,7 @@ identity.
 
 This `coarse-to-fine' procedure is not as accurate as it could be, due
 to the use of a regular grid search rather than some more sophisticated
-optimisation, but it is simple, predictable and appears to peform
+optimisation, but it is simple, predictable and appears to perform
 adequately in testing.
 
 %TODO : talk about how to determine spacing of basis functions etc. at some point.
@@ -173,12 +173,12 @@ task (assigning each observed peak to its correct emission line) more
 difficult.
 
 While it would be possible to fit multiple closely-overlapping peaks
-simulataneously, it is simpler (and more efficient) to stick with
+simultaneously, it is simpler (and more efficient) to stick with
 fitting only a single peak at a time, and split the task into two
 stages. Firstly, we process the theoretical line list, using the known
 peak-spread and noise characteristics of the instrument to determine
 whether a group of emission lines will appear in the spectrum as a
-single well-definied peak --- and if so, what its characteristics will
+single well-defined peak --- and if so, what its characteristics will
 be --- or whether the ambiguity will be such that we are best off not
 using a set of lines as part of the calibration process. Once we have
 reduced to this set of amalgamated, hopefully trouble-free peaks, we
@@ -294,7 +294,7 @@ L = \frac{(d^T \hat p)^2}{2 \sigma^2} \approx
 \frac{\sqrt \pi}{2} \frac{y^2}{\sigma^2} N \Delta  \,
  e^{- \delta_x^2 / (2 \Delta^2)} 
 \]
-This makes sense dimesionally and intuitively --- $N \Delta$ counts the number
+This makes sense dimensionally and intuitively --- $N \Delta$ counts the number
 of sample points that `matter' to the fitting, so the log-evidence should be linear
 in this, and it is quadratic in the height $y$.
 
@@ -312,8 +312,6 @@ calculating the peak groups, we compute the estimated accuracy of
 fitting for each, and sort them by this for use in the fitting stage.
 %taking those groups with the best estimated accuracy.
 
-% TODO : check use of likelihood versus evidence throughout ...
-
 % TODO : talk about mathematics of whether peaks merge or not
 
 \vspace{1em}
@@ -326,7 +324,7 @@ fitting for each, and sort them by this for use in the fitting stage.
 
 In keeping with the slightly ad-hoc nature of the `line-group' concept,
 we don't attempt to keep track of the probable shape of the resulting
-peak, instead assuming that it will be a Guassian of the width given
+peak, instead assuming that it will be a Gaussian of the width given
 by the instrument spread function. For the most common cases (that of
 very closely spaced and physically-related lines, whose amplitudes will
 probably vary together), this assumption is very likely to be good
@@ -337,10 +335,10 @@ accurate.
 Explicitly, we let $\{d_i, \eta_i\}$ be the set of pixel values
 with $\eta_i$ in a small interval (of the order of the peak
 width) around $f^{-1}(\lambda_0)$. We model $d_i = \alpha + \beta
-g(\eta_i) + \epsilon_i$, with $g$ a Guassian of appropriate
+g(\eta_i) + \epsilon_i$, with $g$ a Gaussian of appropriate
 width centred at $f^{-1}(\lambda_0) + \Delta\eta$. Then, as in
 section~\ref{subsubsec:coarseAlignmentAlgorithm} , for broad priors on
-$\alpha$ and $\beta$, the log likelihood is given by
+$\alpha$ and $\beta$, the log (marginal) likelihood is given by
 \[
 L = P(d|\Delta\eta) = \dots + \frac{1}{2} \frac{(d^T W z)^2}{z^T W z}
 \]
@@ -368,5 +366,5 @@ is fitted, by parameterising $f^{-1}$ as a low-order polynomial and using
 a Kalman-filter style update method. This operates on the assumption of
 uncorrelated Gaussian errors --- if this assumption seemed to be causing
 poor fitting, a more sophisticated fitting algorithm that considered all
-of the peak fits simulataneously could be implemented.
+of the peak fits simultaneously could be implemented.
 

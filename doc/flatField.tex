@@ -23,7 +23,7 @@ Gaussian, of a fixed width, and at a fixed vertical offset with respect to
 the image location of the slit edge.
 
 Given this assumption, and the fact that the slit edges are close to
-horizontal, we can usefully preprocesses the image by calculating,
+horizontal, we can usefully preprocess the image by calculating,
 for a set of sample points along each vertical column (e.g. one per pixel),
 the `probability' that the image around that point is the edge of a slit
 --- basically, by applying an `edge-detection filter' to the image.
@@ -31,14 +31,15 @@ the `probability' that the image around that point is the edge of a slit
 \subsection{Edge-detection filter}
 
 To implement this filter, we use a slightly ad-hoc `windowing'
-procedure. Suppose we're looking at a given vertical column of pixel values
-$v_i$, weights $w_i$. For a proposed edge location ${p_y}_0$, we
-consider the pixel values in the window ${p_y}_0 \pm \Delta$ (where $\Delta$
-is the length-scale of the edge falloff), and model these as $v_i =
-\alpha + \beta g(p_y) + \epsilon_i$, with $\epsilon_i$ as per the weight
-vector $w$. We take the figure of merit for ${p_y}_0$ being the edge location
-to be the evidence in favour of this model versus a constant model for
-the window: that is, we're interested in
+procedure. Suppose we're looking at a given vertical column of pixel
+values $v_i$, weights $w_i$. For a proposed edge location ${p_y}_0$,
+we consider the pixel values in the window ${p_y}_0 \pm \Delta$ (where
+$\Delta$ is the length-scale of the edge falloff), and model these as
+$v_i = \alpha + \beta g(p_y) + \epsilon_i$, with $\epsilon_i$ as per the
+weight vector $w$, and $g$ the known falloff shape. We take the figure
+of merit for ${p_y}_0$ being the edge location to be the evidence in
+favour of this model versus a constant model for the window: that is,
+we're interested in
 \[
 L = \log P(v|{\mbox{shape + constant}}) - \log P(v|{\mbox{constant}}) = \frac{1}{2} (v|^T W^{1/2} \hat z)^2
 \]
