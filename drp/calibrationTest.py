@@ -65,7 +65,7 @@ def drawSlitEdges (inst, f, slit, pyF):
 # subtraction for that ...
 
 def main ():
-	opts, args = getopt.getopt (sys.argv[1:],"hd:f:s:n:")
+	opts, args = getopt.getopt (sys.argv[1:],"hd:f:s:n:c:")
 	#if opts == [] or opts[0][0] == "-h":
 	if opts != [] and opts[0][0] == "-h":
 		print helpstring
@@ -74,7 +74,10 @@ def main ():
 	outputdir = "calibOutput1"
 	ffFile = '/home/robert/Projects/mosfire/drp/mosfire/spectroscopicSimulator/session5/flatField.fits'
 	sciFile = '/home/robert/Projects/mosfire/drp/mosfire/spectroscopicSimulator/session5/0.fits'
-	slitNums = [0]
+	slitConfigFile = None
+	#slitNums = [0]
+	slitNums = range (0, 46)
+	#slitNums = range (0, 30)
 	for o,a in opts:
 		if o == "-d":
 			outputdir = a
@@ -84,6 +87,8 @@ def main ():
 			sciFile = a
 		if o == "-n":
 			slitNums = [int(i) for i in a.split()]
+		if o == "-c":
+			slitConfigFile = a
 	if not os.path.exists (outputdir):
 		os.mkdir (outputdir)
 	# Okay - so, we need to modify the simulator so that we're including
@@ -95,7 +100,11 @@ def main ():
 	#
 	ffHduList = pyfits.open (ffFile)
 	sciHduList = pyfits.open (sciFile)
-	slitConfig = slitConfigFromFits (ffHduList)
+	slitConfig = None
+	if slitConfigFile == None:
+		slitConfig = slitConfigFromFits (ffHduList)
+	else:
+		slitConfig = slitConfigFromFile (slitConfigFile)
 	qe0 = pyfits.getdata (detectorQEFile)
 	# TODO - what do the -ve qe values mean?
 	qe = np.clip (qe0, 0.0, 1.0)
@@ -123,7 +132,7 @@ def main ():
 		for slit, pyF in zip (slits, pyFA):
 			drawSlitEdges (inst, freg, slit, pyF)
 		freg.close ()
-	#return
+	return
 	# Preparing the sky image for use (masking out object, flat-fielding, adding in Poisson-variance stuff, etc.)
 	# Okay ... 
 	iSky, wSky = qeCompensate (sciHduList[0].data, sciHduList[1].data, qe)

@@ -236,6 +236,8 @@ def calibFlat (inst, band, ffHduList, qe, shape, slits):
 		slitY = slit['slitY']
 		slitX0 = slitX - inst.tanSlitTilt * slitY		
 		pyF = band.pyF3.xyF (slitX0)
+		# HACK - return the first guess
+		#return pyF
 		y0, y1 = inst.slitEdges (slit)
 		#
 		bh0 = pyF.bh

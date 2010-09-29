@@ -4,6 +4,7 @@
 from math import *
 from drpUtils import *
 import numpy as np
+import pickle
 import scipy.special
 import scipy.interpolate
 
@@ -36,6 +37,16 @@ def slitConfigFromFits (hdulist):
 	d = [td.field ('slit number'),
 			td.field ('slit width'), td.field ('slit length'),
 			td.field ('slitX'), td.field ('slitY')]
+	dt = np.dtype ([('slit number', 'i4'), ('slit width', 'f8'),
+		('slit length', 'f8'),  ('slitX', 'f8'), ('slitY', 'f8')])
+	da = np.rec.fromarrays (d, dtype=dt)
+	return da
+
+## HACK
+def slitConfigFromFile (fname):
+	f = open (fname, "r")
+	d = pickle.load (f)
+	f.close ()
 	dt = np.dtype ([('slit number', 'i4'), ('slit width', 'f8'),
 		('slit length', 'f8'),  ('slitX', 'f8'), ('slitY', 'f8')])
 	da = np.rec.fromarrays (d, dtype=dt)

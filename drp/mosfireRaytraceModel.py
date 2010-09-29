@@ -16,13 +16,18 @@ mosfire.tanSlitTilt = tan(mosfire.slitTilt) # angle of slits relative to detecto
 # This approximation doesn't seem to be working as well as it should - TODO : investigate
 mosfire.edgeOffset = 0.70910000000000006
 
+mosfire.focalSurfaceScale = 0.7238 # mm per arcsecond
+mosfire.barPitch = 8.0 # arcsec : spatial y distance between centres of bars
+mosfire.barGap = 0.7 / mosfire.focalSurfaceScale # arcsec : width of blocked-out gap between bars
+
 if os.environ.has_key('MOSFIRE_DATA'):
 	path = os.environ['MOSFIRE_DATA']
 else:
 	path = '../data'
 
 raytraceFile = os.path.join(path,"raytrace-1.0.txt")
-detectorQEFile = os.path.join(path, "MOSFIRE-5_2000nm_GLS4.fits")
+#detectorQEFile = os.path.join(path, "MOSFIRE-5_2000nm_GLS4.fits")
+detectorQEFile = os.path.join(path, "qe1.fits")
 transferFiles = {'K' : os.path.join(path,"K_tp_tot.dat"),
 		'H' : os.path.join(path, "H_tp_tot.dat"),
 		'J' : os.path.join(path, "J_tp_tot.dat"),
