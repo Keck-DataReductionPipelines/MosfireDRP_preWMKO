@@ -127,8 +127,8 @@ def make_image_plot(): # make figure and save to file
     py.plot(badflag_x,badflag_y,'kx',lw=3)
     py.errorbar(SC,y,ones(46),SEP,',')
     py.axis([0,2048,0,2048])  
-    bw = imread('Hx.png')
-    imshow(bw,aspect='equal',origin='upper', extent=(0,2048,-190,2048))
+    #bw = imread('Hy.png')
+    #imshow(bw,aspect='equal',origin='upper', extent=(0,2048,-190,2048))
     py.title('Imaged Bar Locations and Header Bar Positions')
     py.annotate('Header', xy=(15, 15), xytext=(1500, -350), color='b')
     py.annotate('Image', xy=(15, 15), xytext=(1800, -356), color='r')
@@ -165,7 +165,7 @@ im_median = median(scidata)
 FWHM = [ ]
 bars_pix = zeros(92)
 SEP = [ ]
-eplot = 200
+eplot = 1#error multiplier to make more visible in plot
 
 print ' ------------------------- '
 
@@ -212,7 +212,7 @@ for spec in range(len(scidata[0])-10, offset,-height):
         L = [ ]
         M = [ ]
         i = 0
-        for val in scidata[spec,:]: # This loop tkae the first pass from above and clips it down to just the actual slit.
+        for val in scidata[spec,:]: # This loop take the first pass from above and clips it down to just the actual slit.
             i = i+1
             if val >= edge:
                 if i in range(loc-width,loc+width):
