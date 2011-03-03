@@ -1,7 +1,0 @@
-'''
-MOSFIRE Data Reduction Pipeline
-'''
-import IO, CSU, Detector
-
-Version = "march_3_2011"
-
