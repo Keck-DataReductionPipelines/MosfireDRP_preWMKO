@@ -1,0 +1,29 @@
+# Wed 14:23:50 12-Jan-2011
+begin	linear_mm2pix_120k
+	xrefmean	1047.483
+	yrefmean	1015.372
+	xmean		0.4451433
+	ymean		-3.111243
+	geometry	rscale
+	function	legendre
+	xshift		-136.6738
+	yshift		-134.8976
+	xmag		0.1303657
+	ymag		0.1303657
+	xrotation	0.244268
+	yrotation	0.244268
+	xrms		0.02328891
+	yrms		0.0228377
+	surface1	11
+			2.	2.
+			2.	2.
+			2.	2.
+			0.	0.
+			1.	1.
+			2048.	2048.
+			1.	1.
+			2048.	2048.
+			-2.545892	-1.908529
+			133.4281	-0.5688451
+			0.5688451	133.4281
+	surface2	0

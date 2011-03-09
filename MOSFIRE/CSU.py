@@ -42,7 +42,6 @@ center = (1042.99, 1035.88)
 barpitch_mm = (5.8 * mm * tempscale)/demagnification
 barpitch_pix = mm_to_pix(5.8 * mm * tempscale)
 
-
 def csu_mm_to_pix(x_mm, slitno):
         '''Convert a slit's position into a pixel value. This is a linear approximation to a sixth order polynomial fit by ccs.'''
 

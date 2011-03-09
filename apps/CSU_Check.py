@@ -1,7 +1,11 @@
-# Written March 3rd 2011 by npk.
+'''
+
+Written March 3rd 2011 by npk
+'''
 
 import numpy as np, pyfits as pf
 import pylab as pl
+from pyraf import iraf
 from MOSFIRE import CSU, Detector, IO, Fit
 
 
@@ -35,6 +39,9 @@ def median_tails(v):
         return t
 
 def make_slice(pos, w, h):
+        '''Returns [ [xslice, ylsice], [x0, x1, y0, x1] ] where
+        xslice is used as Array[x0:x1]
+        yslice is used as Array[y0:y1]'''
         x0 = pos[0]-w
         if x0 < 0: x0 = 0
         x1 = pos[0] + w

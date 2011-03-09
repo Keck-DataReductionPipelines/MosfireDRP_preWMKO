@@ -1,0 +1,19 @@
+
+Jan 15 19:05: IMCOMBINE
+  combine = average, scale = none, zero = none, weight = none
+  reject = minmax, nlow = 1, nhigh = 1
+  blank = 0.
+  statsec = Jan 15 19:05
+                Images 
+      m110115_1030.fits
+      m110115_1031.fits
+      m110115_1032.fits
+      m110115_1033.fits
+      m110115_1034.fits
+      m110115_1035.fits
+      m110115_1036.fits
+      m110115_1037.fits
+      m110115_1038.fits
+      m110115_1039.fits
+
+  Output image = fcs_fiducial, ncombine = 10
