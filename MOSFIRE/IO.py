@@ -30,7 +30,7 @@ def parse_header_for_bars(header):
         for i in range(1,CSU.numbars+1):
                 p = posfmt % i
                 s = statfmt % i
-                pos = header[p]
+                pos = np.float32(header[p])
                 if header[s] != 'OK':
                         pos *= -1
                 poss.append(pos)
