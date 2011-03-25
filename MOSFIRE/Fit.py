@@ -7,6 +7,7 @@ from scipy.special import erf
 import scipy.optimize as optimize
 import numpy as np
 import pylab as pl
+from pytools import nmpfit
 
 import unittest
 
@@ -53,6 +54,21 @@ def fit_pair(p, x):
         '''
         return slit_edge_fun(x - p[1], p[0]) * p[2] + p[3] - slit_edge_fun(x - p[1] - p[4], p[0]) * p[2]
 
+def fit_disjoint_pair(p,x):
+        '''
+        The fitting function ussed by "do_fit". The sum of two edge functions.
+
+        p[0] ---> Sigma
+        p[1] ---> Horizontal offset
+        p[2] ---> Multipicative offset side 1
+        p[3] ---> Multiplicative offset side 2
+        p[4] ---> Additive offset
+        p[5] ---> Width of slit
+'''
+
+        return slit_edge_fun(x - p[1], p[0]) * p[2] + p[4] - slit_edge_fun(x - p[1] - p[5], p[0]) * p[3]
+
+
 def residual(p, x, y, f):
         '''The square of residual is minimized by the least squares fit. Formally this is (f(x | p) - y)**2'''
         return f(p, x) - y
@@ -64,6 +80,10 @@ def residual_single(p, x, y):
 def residual_pair(p, x, y):
         '''Convenience funciton around residual'''
         return residual(p, x, y, fit_pair)
+
+def residual_disjoint_pair(p, x, y):
+        '''Convenience funciton around residual'''
+        return residual(p, x, y, fit_disjoint_pair)
 
 def residual_bar_edge(p, x, y):
         return residual(p, x, y, fit_bar_edge)
@@ -90,6 +110,11 @@ def do_fit(data, residual_fun=residual_single):
                         p0 = [0.5, len(data)/2., -max(data), 0.0, 3.0]
         elif residual_fun==residual_pair:
                 p0 = [0.5, find_max(data), max(data), 0.0, 4.0]
+        elif residual_fun==residual_disjoint_pair:
+                width = 5
+                p0 = [0.5, find_min(data)[0], -np.median(data[0:3]), -np.median(data[-4:-1]), np.median(data), width]
+        else:
+                raise Exception("residual_fun not specified")
 
 
         lsf = optimize.leastsq(residual_fun, p0, args=(xs, data), full_output=True)
@@ -101,6 +126,15 @@ def do_fit_edge(xs, ys):
         p0 = [ys.mean()]
 
         return optimize.leastsq(residual_bar_edge, p0, args=(xs, ys))
+
+def polyfit_clip(xs, ys, order, nsig=2.5):
+
+        ff = np.poly1d(np.polyfit(xs, ys, order))
+        sd = np.std(ys - ff(xs))
+
+        r = np.abs(ys - ff(xs))
+        ok = r < (sd * nsig)
+        return np.polyfit(xs[ok], ys[ok], order)
 
 class TestFitFunctions(unittest.TestCase):
 

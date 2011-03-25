@@ -40,7 +40,7 @@ def mm_to_pix(mm):
 mm = 1
 demagnification = 7.24254
 center_pix = (1042.986, 1035.879)
-barpitch_mm = (5.8 * mm * tempscale)/demagnification
+barpitch_mm = (5.8 * mm * tempscale)
 barpitch_pix = mm_to_pix(5.8 * mm * tempscale)
 
 def in_field(px, py):
@@ -160,6 +160,11 @@ class Barset:
 
         pos = [] 
         pos_pix = []
+        targs = []
+        # Science slit list, mechanical slit list, & alignment slit list.
+        ssl = []
+        msl = []
+        asl = []
 
         def __init__(self):
                 pass

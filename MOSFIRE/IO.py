@@ -12,14 +12,29 @@ import CSU
 import unittest
 
 
-
 def readfits(path):
-        '''Read a fits file from path and return a tuple of (header, data).'''
+        '''Read a fits file from path and return a tuple of (header, data, 
+        Target List, Science Slit List (SSL), Mechanical Slit List (MSL),
+        Alignment Slit List (ASL)).'''
         hdulist = pf.open(path)
         header = hdulist[0].header
         data = hdulist[0].data
 
         return (header, data)
+
+def readfits_all(path):
+        '''Read a fits file from path and return a tuple of (header, data, 
+        Target List, Science Slit List (SSL), Mechanical Slit List (MSL),
+        Alignment Slit List (ASL)).'''
+        hdulist = pf.open(path)
+        header = hdulist[0].header
+        data = hdulist[0].data
+        targs = hdulist[1].data
+        ssl = hdulist[2].data
+        msl = hdulist[3].data
+        asl = hdulist[4].data
+
+        return (header, data, targs, ssl, msl, asl)
 
 def parse_header_for_bars(header):
         '''Parse {header} and convert to an array of CSU bar positions in mm. If the positon is negative it means the barstat is not OK'''

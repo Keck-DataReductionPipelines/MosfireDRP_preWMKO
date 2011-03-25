@@ -293,5 +293,9 @@ def generate_fname(num):
                         return fn
                 if fn.find("20_%4.4i" % num) > 0:
                         return fn
+                if fn.find("21_%4.4i" % num) > 0:
+                        return fn
+                if fn.find("24_%4.4i" % num) > 0:
+                        return fn
 
-[ts, bs] = go(path + generate_fname(1993))
+[ts, bs] = go(path + generate_fname(2846))
