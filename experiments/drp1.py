@@ -1,8 +1,11 @@
 '''
 
-DRP Experiment code.
+DRP Experiment code. Measure slit edges on a single bar, determine the polynomial order to use.
 
 npk March 23rd 2011
+
+Conclusions:
+        5-order polynomial is sufficient
 
 '''
 import MOSFIRE
@@ -18,7 +21,7 @@ reload(IO)
 (x,y) = (936, 85) # Central pixels picked by eye
 (x,y) = (936, 1807) # Central pixels picked by eye
 (x,y) = (936, 1006) # Central pixels picked by eye
-(x,y) = (936, 85+43.532*10) # Central pixels picked by eye
+(x,y) = (936, 85+44.25*(21+7)) # Central pixels picked by eye
 
 pl.figure(1)
 pl.clf()
@@ -37,11 +40,10 @@ for i in range(-49, 50):
         pl.plot(v, '*')
         pl.ylabel("slice")
 
-        xposs.append(x+delt*i)
-
 
         ff = Fit.do_fit(v, residual_fun=Fit.residual_disjoint_pair)
         if (0 < ff[4] < 4):
+                xposs.append(x+delt*i)
                 xs = np.arange(len(v))
                 pl.plot(xs, Fit.fit_disjoint_pair(ff[0], xs))
 
@@ -52,9 +54,17 @@ for i in range(-49, 50):
                 print "Skipping: %i" % (x+delt*i)
 
 (xposs, yposs, widths) = map(np.array, (xposs, yposs, widths))
-i = 6
-fun = np.poly1d(Fit.polyfit_clip(xposs, yposs, i))
-wfun = np.poly1d(Fit.polyfit_clip(xposs, widths, i))
+
+for i in range(7):
+        fun = np.poly1d(Fit.polyfit_clip(xposs, yposs, i))
+        wfun = np.poly1d(Fit.polyfit_clip(xposs, widths, i))
+
+        res = fun(xposs) - yposs
+        sd = np.std(res)
+        ok = np.abs(res) < 2*sd
+
+        print "%i Fit Residuals Sigma: %5.3f P2V: %5.3f" % (i, np.std(res), res.max()-res.min())
+        print "%i Clipped Resid Sigma: %5.3f P2V: %5.3f" % (i, np.std(res[ok]), res[ok].max()-res[ok].min())
 
 pl.figure(2)
 pl.clf()
@@ -62,14 +72,6 @@ mn = np.min(fun(xposs))
 pl.plot(xposs, yposs-mn, 'b.')
 pl.plot(xposs, fun(xposs)-mn, 'r')
 pl.ylabel("ypos")
-
-res = fun(xposs) - yposs
-sd = np.std(res)
-ok = np.abs(res) < 2*sd
-
-
-print "Fit Residuals Sigma: %5.3f P2V: %5.3f" % (np.std(res), res.max()-res.min())
-print "Clipped Resid Sigma: %5.3f P2V: %5.3f" % (np.std(res[ok]), res[ok].max()-res[ok].min())
 
 
 regout = ""
@@ -90,6 +92,6 @@ for i in range(50):
         regout  += "line(%f, %f, %f, %f) # color=blue\n" % (sx, sy, ex, ey)
 
 
-f=open("/users/npk/desktop/ds9.reg","w")
+f=open("/users/npk/desktop/ds9.reg","a")
 f.write(regout)
 f.close()

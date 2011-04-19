@@ -8,9 +8,9 @@ Provides tools to read fits files and parse their headers.
 import numpy as np
 import pyfits as pf
 import CSU
+from pyraf import iraf
 
 import unittest
-
 
 def readfits(path):
         '''Read a fits file from path and return a tuple of (header, data, 
@@ -34,6 +34,9 @@ def readfits_all(path):
         msl = hdulist[3].data
         asl = hdulist[4].data
 
+        ssl = ssl[ssl["Slit_Number"] != ' ']
+        msl = msl[ssl["Slit_Number"] != ' ']
+
         return (header, data, targs, ssl, msl, asl)
 
 def parse_header_for_bars(header):
@@ -56,6 +59,27 @@ def parse_header_for_bars(header):
 
         return np.array(poss)
 
+def imcombine(filelist, out, bpmask=None, reject="none"):
+        '''Convenience wrapper around IRAF task imcombine
+        
+        reject: none, minmax, sigclip, avsigclip, pclip'''
+        iraf.images()
+
+        filelist = ["%s[0]" % f for f in filelist]
+        pars = iraf.imcombine.getParList()
+        iraf.imcombine.unlearn()
+
+        s = ("%s," * len(filelist))[0:-1]
+        s = s % tuple(filelist)
+
+        t = iraf.imcombine(s, out, Stdin=filelist, Stdout=1,
+                        reject=reject)
+
+
+        iraf.imcombine.setParList(pars)
+
+
+        
 
 class TestIOFunctions(unittest.TestCase):
 

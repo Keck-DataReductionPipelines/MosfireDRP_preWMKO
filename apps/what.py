@@ -8,9 +8,11 @@ MOSFIRE 'what' command:
 
 npk - March 23 2011
 '''
+
 import MOSFIRE
 import glob
 import sys
+
 
 files = []
 if len(sys.argv) == 1:

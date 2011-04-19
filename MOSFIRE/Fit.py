@@ -11,6 +11,26 @@ from pytools import nmpfit
 
 import unittest
 
+def xcor(a,b,lags):
+
+        if len(a) != len(b):
+                raise Exception("cross correlation (xcor) requires a and b to be of same length")
+        cors = np.zeros(len(lags))
+
+        a_pad = np.zeros(len(a)+len(lags))
+        b_pad = np.zeros(len(b)+len(lags))
+
+        st = np.argmin(np.abs(lags))
+        a_pad[st:st+len(a)] = a
+        b_pad[st:st+len(b)] = b
+
+        for i in range(len(lags)):
+                cors[i] = np.correlate(a_pad, np.roll(b_pad, lags[i]), 'valid')
+
+        return cors
+
+
+
 def find_max(v):
         return np.where(v == v.max())[0][0]
 
