@@ -1,0 +1,143 @@
+
+ I. Data Reduction Pipeline
+II. Observing Support software 
+
+ I.       Data Reduction Pipeline Design
+          ==============================
+  v1. 27 March 2011
+  v2. 14 April 2011 -- Totally revamped
+  v3. 19 April 2011 -- Updated after meeting w/ ccs, created multiple output options
+
+
+Data reduction pipeline will have an automated tool to generate a plan. The plan is executed by a "Dispatcher". At first the dispatcher will be simple. We should try to write it to (eventually) take advantage of the "embarrassingly parallel" nature of DRPs. Python has some really nice tools that do a lot of dispatching automatically (e.g. gluepy http://www.logos.ic.i.u-tokyo.ac.jp/~kenny/gluepy/wiki/GridComputing) but this is a refinement feature. In principle, one can write a second dispatcher DRP that handles data as they are coming in from the telescope.
+
+The first-light DRP will produce a variety of output files to experiment on. We'd like to use the first-light DRP to:
+
+1. Determine if dither patterns are necessary for sky subtraction.
+2. Determine if its best to extract spectra from rectified slits, or leave slits unrectified.
+3. For that matter, determine how to extract spectra (at least for the science cases we're interested in).
+3. Take some longslit spectra of "standard" stars.
+4. Measure wavelenght solution on night sky emission lines.
+
+----------------------------
+Plan
+        a. Programmatically look through fits header to determine darks, flats, and arclamps.
+	b. Generate plan
+
+TODO: make sure the plan generator works in a quicklooks mode.
+
+{maskname}:
+	{band}:
+		flats: list of file names
+		science:
+			{nod position}: list of file names
+		arcs: [] --- Not used currently, but leave hooks to use arc files
+
+
+
+_____________________________
+Directory Structure
+
+The plan will be used by the dispatcher (described below) to generate the following files:
+Each directory will have associated data-quality plots. These are not listed here
+
+{date}/
+	m{date}_{fileno}.fits
+	m{date}_{fileno}_g{group num}.fits
+
+out/
+	{maskname}/
+		dark_2d.fits --- The 2d dark frame [photon/s/pixel]
+		spec_2d_{band}_{nod position}.fits --- The 2d spectrum [photon/s/pixel]
+                diff_2d_band_{nod position 1}-{nod position 2}.fits --- Difference 2d spectrum?
+		spec_1d_{band}.fits --- Initial 1d spectra [erg/s/Angstrom]? [photon/s/pixel]? 
+		combflat_2d_{band}.fits --- The 2d combined flat field "imcombined"
+                pixflat_2d_{band}.fits --- The 2d pixel flat (all values ~ 1.0)
+		lambda_2d_{band}.fits --- The 2d lambda  [angstrom]
+		position_2d_{band.fits} --- The 2d position [arcsecond? fraction of slit? mm?]
+		slit-edges_{band}.np --- Convenience file from pipeline
+		wavelengths_{band}.np --- Convenience file from pipeline
+
+_____________________________
+The Dispatcher:
+	Take plan from above, produce outputs in directory structure.
+	Dispatcher has the following steps	
+
+* Process darks
+        a. Create dark image for each exposure time with CRR
+        b. Mask out bad pixels Use stored? Create new? bad pixel mask. 
+	c. Interpolate over pixels?
+
+CCS: interpolation over bad pixels ? How/when to deal with this?
+
+* Process Flats
+
+	for each mask
+		for each band
+			imcombine* the flats (* or equivalent) into combflat_2d_{band}.fits
+			trace edges with low-order polynomial
+                        mesaure light between slits (is this scattered light?)
+			write a pixel response flat (all values ~ 1) called pixelflat_2d_{band}.fits
+
+	> pixelflat_2d_{band}.fits}
+		meta - Pertinent meta information
+		flat - arbitrary units, most pixels ~ 1.0
+                pixel mask - [bad pixel, off-order pixel?]
+		? scattered - scattered light model ?
+                
+* Process Science Frames
+	TODO: Handle group reads? Is there a way to handle consistently?
+
+	for each mask
+		for each filter
+			for each nod position
+				for each science frame:
+					dark subtract ?
+					flat field field with pixel response flat
+					fit (px, py) --> (lambda, spatial) B-spline, call this solution(x,y)    
+                                                store solution() somewhere.
+                                        option 1:
+                                                determine sky spectrum w/ B-splines
+                                                subtract off sky spectrum
+                                        
+                                option 2:
+                                        produce a difference image
+                                        determine residual sky image
+                                        subtract off residual sky
+                                
+				sum each 2d spectrum according to solution(x,y)? Rectify spectra?
+				
+
+	> spec_2d_{band}_{position}
+                        meta - Pertinent meta information (slit #, nod position, etc)
+                        flux - count / sec
+                        ivar - 1/(count/sec)^2
+                        mask - [bad pixel, off-order, CR]
+                        slit function 
+
+* Spectral Extraction
+	The purpose of this 1d Spectral extraction is to produce something quick and dirty. This will only be used during commissioning.
+
+	for each mask
+		for each filter
+			(Assume ABAB pattern)
+			Simple extraction here...
+
+
+II.        Observing Support Software
+           ==========================
+
+Needs to be updated?
+
+1. Autodisplay
+        a. Automatically displays the current frame or most current group read. This part is complete.
+        b. Monitors instrument configuration and gives indication of proper data writing: are the fits headers there? if yes, are temperatures in order? if yes, is any mechanism in the instrument marked as moving? etc.. This part is in the works.
+
+2. Slit mask reconfiguration software.
+        If during a move the CSU loses power, or undergoes a condition where it emergency stops, we need a way to recover bar positions. The CSU GUI currently indicates errors. New software is needed that will process a frame taken in imaging mode that shows the shadows of CSU Bars and:
+
+        a. Display the predicted bar locations against measured bar locations for each bar.
+        b. Highlight bars that deviate significantly from the requested positions.
+        c. Allow the user to interactively indicate the locations of bars (say, through ds9)
+        d. Refit the new bar positions
+        e. Communicate the new bar positions
