@@ -31,7 +31,10 @@ for fname in files:
     try:
         header = MOSFIRE.IO.readheader(fname)
     except IOError, err:
-        print "Skipping %s" % fname
+        print "Couldn't IO %s" % fname
+        continue
+    except:
+        print "%s is unreadable" % fname
         continue
 
     lamps = ""
@@ -45,9 +48,9 @@ for fname in files:
         
     header.update("lamps", lamps)
     try:
-        print "%(datafile)12s %(object)25s %(truitime)6.1f %(maskname)25s %(lamps)3s %(filter)6s %(mgtname)7s" % (header)
+        print "%(datafile)12s %(object)25s %(truitime)6.1f s %(maskname)25s %(lamps)3s %(filter)6s %(mgtname)7s" % (header)
     except:
         try:
-            print "%(datafile)12s %(object)25s %(truitime)6.1f %(lamps)3s %(filter)6s %(mgtname)7s" % (header)
+            print "%(datafile)12s %(object)25s %(truitime)6.1f s %(lamps)3s %(filter)6s %(mgtname)7s" % (header)
         except:
             print "%s Skipped" % fname
