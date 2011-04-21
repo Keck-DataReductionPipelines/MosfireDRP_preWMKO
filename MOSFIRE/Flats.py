@@ -40,6 +40,10 @@ def tester(band):
             handle_flats([path % 3242, path % 3243, path % 3244], 
                             "npk_calib3_q1700_pa_0", band, options)
 
+    if band == 'H':
+            handle_flats([path % 3248, path % 3249, path % 3250], 
+                            "npk_calib3_q1700_pa_0", band, options)
+
     if band == 'K':
             handle_flats([path % 3251, path % 3252, path % 3253], 
                             "npk_calib3_q1700_pa_0", band, options)
@@ -63,6 +67,8 @@ def tester3(band):
 
 def handle_flats(flatlist, maskname, band, options):
     '''
+    handle_flats is the primary entry point to the Flats module.
+
     handle_flats takes a list of individual exposure FITS files and creates:
     1. A CRR, dark subtracted, pixel-response flat file.
     2. A set of polynomials that mark the edges of a slit
@@ -108,31 +114,37 @@ def make_pixel_flat(data, results, options, outfile):
     Convert a flat image into a flat field
     '''
 
+    def pixel_min(y): return np.floor(np.min(y))
+    def pixel_max(y): return np.ceil(np.max(y))
+
+    def collapse_flat_box(dat):
+        '''Collapse data to the spectral axis (0)'''
+        v = np.median(dat, axis=0).ravel()
+
+        return v
+
     tick = time.clock()
     xs = np.arange(Options.npix)
     flat = np.ones(shape=(Options.npix, Options.npix))
 
     for result in results[0:-1]:
-            print result["Target_Name"]
-            bf = result["bottom"]
-            tf = result["top"]
+        print result["Target_Name"]
+        bf = result["bottom"]
+        tf = result["top"]
 
-            top = np.floor(np.min(tf(xs)))-2
-            bottom = np.ceil(np.max(bf(xs)))+2
+        top = pixel_min(tf(xs))
+        bottom = pixel_max(bf(xs))
 
-            print "Bounding box is btw %i-%i" % (bottom, top)
+        print "Bounding top/bottom: %i/%i" % (bottom, top)
 
-            v = np.median(data[bottom:top,:], axis=0).ravel()
-            v = scipy.ndimage.median_filter(v,options["flat-field-order"])
+        v = collapse_flat_box(data[bottom:top,:])
+        ok = v > 180
 
-            ok = v > 180
-            v = np.poly1d(np.polyfit(xs[ok],v[ok],7))(xs).ravel()
+        v = np.poly1d(np.polyfit(xs[ok],v[ok],
+            options['flat-field-order']))(xs).ravel()
 
-            top = np.round(np.min(tf(xs)))
-            bottom = np.round(np.max(bf(xs)))
-
-            for i in np.arange(bottom, top):
-                    flat[i,:] = v
+        for i in np.arange(bottom-1, top+1):
+                flat[i,:] = v
 
     for r in range(len(results)-2):
             print r
@@ -235,7 +247,29 @@ def find_edge_pair(data, y, roi_width):
     yposs []: The fitted y positions of the "top" edge of the slit [pix]
     widths []: The fitted delta from the top edge of the bottom [pix]
     scatters []: The amount of light between slits
+
+
+    The procedure is as follows
+    1: starting from a guess spatial position (parameter y), march
+        along the spectral direction in some chunk of pixels
+    2: At each spectral location, construct a cross cut across the
+        spatial direction; select_roi is used for this.
+    3: Fit a two-sided error function Fit.residual_disjoint_pair
+        on the vertical cross cut derived in step 2.
+    4: If the fit fails, store it in the missing list, otherwise
+        store the position and fitted values in xposs, yposs, and widths.
+    5: In the vertical cross-cut, there is a minimum value. This minimum
+        value is stored as a measure of scattered light.
+
+    Another procedure is used to fit polynomials to these fitted values.
     '''
+
+    def select_roi(data, roi_width):
+        v = data[y-roi_width:y+roi_width, xp-2:xp+2]
+        v = np.median(v, axis=1) # Axis = 1 is spatial direction
+
+        return v
+
 
     yposs = []
     widths = []
@@ -243,30 +277,36 @@ def find_edge_pair(data, y, roi_width):
     xposs_missing = []
     scatters = []
 
+    #1 
     rng = np.linspace(10, 2040, 100).astype(np.int)
     for i in rng:
-            xp = i
-            v = data[y-roi_width:y+roi_width, xp-2:xp+2]
-            v = np.median(v, axis=1)
+        xp = i
+        #2
+        v = select_roi(data, roi_width)
+        xs = np.arange(len(v))
 
-            if np.median(v) < 200:
-                    xposs_missing.append(xp)
-                    continue
+        if np.median(v) < 200:
+            xposs_missing.append(xp)
+            continue
 
-            ff = Fit.do_fit(v, residual_fun=Fit.residual_disjoint_pair)
-            if (0 < ff[4] < 4):
-                    xposs.append(xp)
-                    xs = np.arange(len(v))
+        #3
+        ff = Fit.do_fit(v, residual_fun=Fit.residual_disjoint_pair)
+        fit_ok = 0 < ff[4] < 4
+        if fit_ok:
+            (sigma, offset, mult1, mult2, add, width) = ff[0]
 
-                    (sigma, offset, mult1, mult2, add, width) = ff[0]
-                    yposs.append(offset - roi_width)
-                    widths.append(width)
-                    # pixel between 
-                    between = offset + width/2
-                    scatters.append(np.min(v[between-2:between+2]))
+            xposs.append(xp)
+            yposs.append(offset - roi_width)
+            widths.append(width)
+
+            between = offset + width/2
+            if 0 < between < len(v)-1:
+                scatters.append(np.min(v[between-2:between+2])) # 5
             else:
-                    xposs_missing.append(xp)
-                    print "Skipping: %i" % (xp)
+                scatters.append(np.nan)
+        else:
+            xposs_missing.append(xp)
+            print "Skipping: %i" % (xp)
 
     
     return map(np.array, (xposs, xposs_missing, yposs, widths, scatters))
@@ -360,59 +400,60 @@ def find_and_fit_edges(data, ssl, options):
     toc = 0
     slits = []
     top = [0., np.float(Options.npix)]
-    numslits = np.round(np.array(ssl["Slit_length"], dtype=np.float) / 7.02)
+    numslits = np.round(np.array(ssl.field("Slit_length"), 
+        dtype=np.float) / 7.02)
 
 
     results = []
     result = {}
-    result["Target_Name"] = ssl[0]["Target_Name"]
+    result["Target_Name"] = ssl[0].field("Target_Name")
 
     # 1
     result["top"] = np.poly1d([2027])
 
     for target in range(len(ssl) - 1):
-            y -= 44.25 * numslits[target]
-            print "-------------==========================-------------"
-            print "Finding Slit Edges for %s starting at %4.0i" % (
-                            ssl[target]["Target_Name"], y)
-            tock = time.clock()
+        y -= 44.25 * numslits[target]
+        print "-------------==========================-------------"
+        print "Finding Slit Edges for %s starting at %4.0i" % (
+                        ssl[target].field("Target_Name"), y)
+        tock = time.clock()
 
-            (xposs, xposs_missing, yposs, widths, scatters) = \
-                            find_edge_pair(data, y, 
-                                            options["edge-fit-width"])
-            (fun, wfun, res, sd, ok) = fit_edge_poly(xposs, 
-                            xposs_missing, yposs, widths, 
-                            options["edge-order"])
+        (xposs, xposs_missing, yposs, widths, scatters) = \
+                        find_edge_pair(data, y, 
+                                        options["edge-fit-width"])
+        (fun, wfun, res, sd, ok) = fit_edge_poly(xposs, 
+                        xposs_missing, yposs, widths, 
+                        options["edge-order"])
 
-            bottom = fun.c.copy() 
-            top = wfun.c.copy() + fun.c.copy()
-            bottom[-1] += y 
-            top[-1] += y 
+        bottom = fun.c.copy() 
+        top = wfun.c.copy() + fun.c.copy()
+        bottom[-1] += y 
+        top[-1] += y 
 
-            #4
-            result["xposs"] = xposs
-            result["yposs"] = yposs
-            result["bottom"] = np.poly1d(bottom)
-            result["sd"] = sd
-            result["ok"] = ok
-            result["scatter"] = scatters
+        #4
+        result["xposs"] = xposs
+        result["yposs"] = yposs
+        result["bottom"] = np.poly1d(bottom)
+        result["sd"] = sd
+        result["ok"] = ok
+        result["scatter"] = scatters
 
-            results.append(result)
+        results.append(result)
 
-            #5
-            result = {}
-            result["Target_Name"] = ssl[target]["Target_Name"]
-            result["top"] = np.poly1d(top)
+        #5
+        result = {}
+        result["Target_Name"] = ssl[target].field("Target_Name")
+        result["top"] = np.poly1d(top)
 
 
-            print fun
-            print "Clipped Resid Sigma: %5.3f P2V: %5.3f" % (
-                            np.std(res[ok]), res[ok].max()-res[ok].min())
+        print fun
+        print "Clipped Resid Sigma: %5.3f P2V: %5.3f" % (
+                        np.std(res[ok]), res[ok].max()-res[ok].min())
 
-            tic = time.clock()
+        tic = time.clock()
 
-            print " .... %4.2f s elapsed." % (tic - tock)
-            print
+        print " .... %4.2f s elapsed." % (tic - tock)
+        print
 
     #6
     result["bottom"] = np.poly1d([3])
@@ -433,12 +474,12 @@ class TestFlatsFunctions(unittest.TestCase):
                             IO.readfits_all("/users/npk/desktop/c9/m110326_3242.fits")
             data = data1
 
-            ssl = ssl[ssl["Slit_Number"] != ' ']
+            ssl = ssl[ssl.field("Slit_Number") != ' ']
             numslits = np.round(np.array(ssl["Slit_length"], 
                     dtype=np.float) / 7.02)
 
             for i in range(len(ssl)):
-                    print ssl[i]["Target_Name"], numslits[i]
+                    print ssl[i].field("Target_Name"), numslits[i]
 
 if __name__ == '__main__':
     unittest.main()
