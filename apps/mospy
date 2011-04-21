@@ -1,7 +1,12 @@
 #!/bin/csh
 
-setenv MOSPATH /scr2/npk/mosfire/
+#
+# Example mospy startup script.
+# 
+#  Unless you're at caltech you will need to change the environmental variables
+#
 
+setenv MOSPATH /scr2/npk/mosfire/
 setenv PYTHONPATH ${PYTHONPATH}:/home/phobos/npk/local/lib/python2.5/site-packages/:/scr8/npk/python/lib/python2.4/:${MOSPATH}
 
 if ($#argv == 0) then
