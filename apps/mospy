@@ -1,0 +1,22 @@
+#!/bin/csh
+
+setenv MOSPATH /scr2/npk/mosfire/
+
+setenv PYTHONPATH ${PYTHONPATH}:/home/phobos/npk/local/lib/python2.5/site-packages/:/scr8/npk/python/lib/python2.4/:${MOSPATH}
+
+if ($#argv == 0) then
+	echo "Starting MOSFIRE Python"
+	\ipython -pylab -colors LightBG
+endif
+
+switch ( $argv[1] )
+	case "libs":
+		python -c "import sys; print sys.path"
+		breaksw
+	case "what":
+		\python ${MOSPATH}/apps/what.py $*
+		breaksw
+	default:
+		\python $*
+		breaksw
+endsw

@@ -7,7 +7,6 @@ from scipy.special import erf
 import scipy.optimize as optimize
 import numpy as np
 import pylab as pl
-from pytools import nmpfit
 
 import unittest
 
@@ -38,7 +37,9 @@ def find_min(v):
         return np.where(v == v.min())[0]
 
 def slit_edge_fun(x, s):
-        ''' The edge of a slit, convolved with a Gaussian, is well fit by the error function. slit_edge_fun is a reexpression of the error function in the classica gaussian "sigma" units'''
+        ''' The edge of a slit, convolved with a Gaussian, is well fit by 
+        the error function. slit_edge_fun is a reexpression of the error 
+        function in the classica gaussian "sigma" units'''
         sq2 = np.sqrt(2)
         sig = sq2 * s
 
@@ -72,7 +73,8 @@ def fit_pair(p, x):
         p[3] ---> Additive offset
         p[4] ---> Width of slit
         '''
-        return slit_edge_fun(x - p[1], p[0]) * p[2] + p[3] - slit_edge_fun(x - p[1] - p[4], p[0]) * p[2]
+        return slit_edge_fun(x - p[1], p[0]) * p[2] + p[3] - slit_edge_fun(x 
+                        - p[1] - p[4], p[0]) * p[2]
 
 def fit_disjoint_pair(p,x):
         '''
@@ -86,11 +88,13 @@ def fit_disjoint_pair(p,x):
         p[5] ---> Width of slit
 '''
 
-        return slit_edge_fun(x - p[1], p[0]) * p[2] + p[4] - slit_edge_fun(x - p[1] - p[5], p[0]) * p[3]
+        return slit_edge_fun(x - p[1], p[0]) * p[2] + p[4] - slit_edge_fun(x 
+                        - p[1] - p[5], p[0]) * p[3]
 
 
 def residual(p, x, y, f):
-        '''The square of residual is minimized by the least squares fit. Formally this is (f(x | p) - y)**2'''
+        '''The square of residual is minimized by the least squares fit. 
+        Formally this is (f(x | p) - y)**2'''
         return f(p, x) - y
 
 def residual_single(p, x, y):
@@ -132,12 +136,14 @@ def do_fit(data, residual_fun=residual_single):
                 p0 = [0.5, find_max(data), max(data), 0.0, 4.0]
         elif residual_fun==residual_disjoint_pair:
                 width = 5
-                p0 = [0.5, find_min(data)[0], -np.median(data[0:3]), -np.median(data[-4:-1]), np.median(data), width]
+                p0 = [0.5, find_min(data)[0], -np.median(data[0:3]), 
+                                -np.median(data[-4:-1]), np.median(data), width]
         else:
                 raise Exception("residual_fun not specified")
 
 
-        lsf = optimize.leastsq(residual_fun, p0, args=(xs, data), full_output=True)
+        lsf = optimize.leastsq(residual_fun, p0, args=(xs, data), 
+                        full_output=True)
 
         return lsf
 
