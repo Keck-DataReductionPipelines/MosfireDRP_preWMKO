@@ -147,18 +147,18 @@ def make_pixel_flat(data, results, options, outfile):
                 flat[i,:] = v
 
     for r in range(len(results)-2):
-            print r
-            first = results[r]
-            second = results[r+1]
+        print r
+        first = results[r]
+        second = results[r+1]
 
-            tf = first["bottom"]
-            bf = second["top"]
+        tf = first["bottom"]
+        bf = second["top"]
 
-            for i in range(Options.npix):
-                    top = np.floor(tf(i))
-                    bottom = np.ceil(bf(i))
-                    
-                    data[top:bottom, i] = flat[top:bottom,i]
+        for i in range(Options.npix):
+            top = np.floor(tf(i))
+            bottom = np.ceil(bf(i))
+            
+            data[top:bottom, i] = flat[top:bottom,i]
 
     lowsn = data<225
     flat[lowsn] = data[lowsn]
@@ -183,28 +183,28 @@ def save_ds9_edges(results, options):
     
     S = 1
     for i in range(len(results) - 1):
-            res = results[i]
+        res = results[i]
 
-            top = res["top"]
-            bottom = res["bottom"]
-            for i in np.arange(W/delt):
-                    x = delt * i
-                    sx = x + 1
-                    ex = x + delt + 1
+        top = res["top"]
+        bottom = res["bottom"]
+        for i in np.arange(W/delt):
+            x = delt * i
+            sx = x + 1
+            ex = x + delt + 1
 
-                    sy = top(sx) + 1
-                    ey = top(ex) + 1
-                    ds9 += "line(%f, %f, %f, %f) # fixed=1 edit=0 move=0 rotate=0 delete=0" % (sx, sy, ex, ey)
+            sy = top(sx) + 1
+            ey = top(ex) + 1
+            ds9 += "line(%f, %f, %f, %f) # fixed=1 edit=0 move=0 rotate=0 delete=0" % (sx, sy, ex, ey)
 
-                    if i == W/2:
-                            ds9 += " # text={S%2.0i (%s)}" % (S, 
-                                            res["Target_Name"])
+            if i == W/2:
+                    ds9 += " # text={S%2.0i (%s)}" % (S, 
+                                    res["Target_Name"])
 
-                    ds9 += "\n"
+            ds9 += "\n"
 
-                    sy = bottom(sx) + 1
-                    ey = bottom(ex) + 1
-                    ds9 += "line(%f, %f, %f, %f) # fixed=1 edit=0 move=0 rotate=0 delete=0 color=blue\n" % (sx, sy, ex, ey)
+            sy = bottom(sx) + 1
+            ey = bottom(ex) + 1
+            ds9 += "line(%f, %f, %f, %f) # fixed=1 edit=0 move=0 rotate=0 delete=0 color=blue\n" % (sx, sy, ex, ey)
 
     band = results[-1]["band"]
     fn = os.path.join(options["outdir"], results[-1]["maskname"], 
