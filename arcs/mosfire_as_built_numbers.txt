@@ -1,0 +1,123 @@
+ Wavelength-averaged throughput over MOSFIRE bands (includes as-built grating, filter, glass transmission, coatings, and detector). 
+
+Spec:
+
+Y band:  0.308 +/- 0.055  (0.972-1.125 microns)
+J band:  0.325 +/- 0.061  (1.153-1.353 microns)
+H band:  0.361 +/- 0.069  (1.465-1.808 microns) 
+Ks band: 0.364 +/- 0.053  (1.990-2.304 microns)
+K band:  0.350 +/- 0.043  (1.920-2.405 microns)
+
+
+Imaging, estimate for as-built optical throughput (not including
+the telescope):
+
+Y:      0.567 
+J:      0.581
+H:      0.614
+Ks      0.569
+K       0.551
+
+Summary: Average of best focus values over field,
+average line width at best focus, average line width
+for 500 micron slit (eq. to 0.61" on the sky)
+at focus = -200 steps.
+
+Y   -410+/-80    2.25+/-0.12    2.46       
+J    -10+/-70    2.40+/-0.21    2.51
+H   -210+/-80    2.38+/-0.12    2.39
+K   -300+/-80    2.25+/-0.12    2.42
+
+Avg  -230+/-170  2.35+/-0.26    2.45+/-0.18
+********************************************************
+
+
+Conclusion: good images over the full field in each band
+can be obtained adopting a single focus value of -200 
+for all modes.
+
+Dispersion numbers: 
+
+K:    2.1691 A/pix   
+H:    1.6269 A/pix   
+J:    1.3028 A/pix  
+Y:    1.0855 A/pix   (filter bw is 0.975-1.125 covers 1383 pixels)
+
+Filt     dispersion      range at X center     center wave on detector    filter b/w    Shift A/mm
+
+K       2.1691 Å/pix    19540-23970 Ang        lambda_c = 21760 Ang       19210-24060     -12.209
+                                                         
+Ks      2.1691 A/pix    19540-23970 Ang        lambda_c = 21760 Ang       19898-23040     -12.209
+                                                          
+H       1.6269 Å/pix    14681-18041 Ang        lambda_c = 16321 Ang       14645-18086      -9.157
+                                                          
+J       1.3028 Å/pix    11160-13810 Ang        lambda_c = 12450 Ang       11526-13522      -7.460
+                                                          
+Y       1.0855 Å/pix     9263-11473 Ang        lambda_c = 10373 Ang        9716-11247      -6.216
+
+
+Measured Spectral Resolution (0.7" nominal entrance slit-- actually 0.61), with fixed focus=-200:
+
+Y      2.46 pix   1.0855 A/pix  Lc=10373    R=3880
+J      2.51 pix   1.3028 A/pix  Lc=12450    R=3800
+H      2.39 pix   1.6269 A/pix  Lc=16321    R=4200
+K      2.42 pix   2.1691 A/pix  Lc=21760    R=4150 
+
+An object placed at +/-90" from center of the field will cause a shift in the spectral format of "Shift" times 90" (90" = 90.*0.72515 = +/- 65.26mm). This shift corresponds to:
+
+Y 65.26*6.216 = +/- 405.66 A
+J 65.26*7.460 = +/- 486.84 A
+H 65.26*9.157 = +/- 597.59 A
+K 65.26*12.209= +/- 796.76 A
+
+   Y(-1.5) = 9716-11250   Y(center): 9716-11250   Y(+1.5): 9716-11070 
+        100%                        100%               88% 
+
+   J(-1.5): 11530-13520  J(center): 11530-13520   J(+1.5): 11650-13520
+        100%                        100%                94%
+
+   H(-1.5): 14640-17440   H(center): 14680-18040   H(+1.5): 15280-18090
+        82%                         100%                82% 
+
+   K(-1.5'): 19210-23170   K(center): 19540-23970   K(+1.5'): 20340-24060
+     82%                         100%                82%      
+
+Imaging Plate Scale:
+
+Focal reduction measure using pinhole mask, with nearest linear focal reduction from CSU to detector of 0.13036 mm/detector pixel. Assuming the telescope plate scale is 0.72515 mm/arcsec, one detector pixel projects to 0.1798"/pix. The plate scale variation is very small over the inner 2/3 of the field of view, and reaches a maximum of +/- 25 microns amplitude, or < +/-0.1% peak to peak. 
+
+There are 2040 x 2040 active pixels on the H2RG detector, giving 2040.*0.1798= 6'.11 edge to edge in each dimension. The field stop baffle has a diameter measured to be D=6.89'. 
+
+With FCS enabled in fiducial position, the geometric center of the field is at pixel (1033,1035.5) in imaging mode, and ~(1022, 1024) in spectroscopy mode. The detector is rotated by an angle of 0.22 degrees relative to the CSU, in the sense that the effective slit tilt at the detector is 4.22 degrees.  Note that the CSU center is not identical to the pinhole mask center, which fell at detector pixel (1042.9,1035.8) in imaging mode with flexure compensation enabled. 
+
+Image quality in imaging mode is difficult to measure, but the average pinhole measured during cooldown had a measured FWHM (averaged over the field, in all bands without re-focus) of ~0.21", which may be considered an upper limit to the true average. 
+
+In CSU control units as of 3/14/2011, the best coordinate for the center of the CSU field of view is 137.4mm, which corresponds to ~136.9mm at 120K using the nominal shrink factor for Al of 0.99646. 
+The X coordinate at the left edge of the detector is 136.45mm from the pinhole mask center. 
+
+In spectroscopic mode, NPK has estimated the following ensquared energy percentages based on pinhole images (100 microns ~ 0.138"), numbers are fraction of light in 2x2 pixel box. (NPK, Meeting 74). 
+
+Y  92% average over field
+J  84% 
+H  88%
+K  88%
+
+Detector noise result from cooldown 8, based on a series of 1800s darks, and various Fowler sampled frames. Assumes inverse gain of 2.15 e-/ADU using software version 2.30 . Note that the CDS value measured by Teledyne was 13.9e- with the highest gain setting. Following numbers are from Kristin's measurements w/outlier rejection, after dark subtraction. 
+
+            
+CDS        17.2
+MCDS 4      8.9
+MCDS 8      6.4
+MCDS 16     4.9
+MCDS 32     3.8
+MCDS 64     3.2
+MCDS100     3.0
+MCDS 128    3.0
+ 
+
+Dark current measures limited by bias stability; median net signal over 1800s frames is <0.008 e-/sec/pix (cooldown 8, w/pinhole mask). This is a firm upper limit on the dark current rate. 
+
+
+
+               
+
