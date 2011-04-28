@@ -5,12 +5,11 @@ Written March 2, 2011 by npk
 Provides tools to read fits files and parse their headers.
 '''
 
-import numpy as np
 import pyfits as pf
-import CSU
-from pyraf import iraf
-
+import numpy as np
 import unittest
+
+import CSU
 
 def readfits(path):
     '''Read a fits file from path and return a tuple of (header, data, 
@@ -41,11 +40,15 @@ def readfits_all(path):
 
     ssl = ssl[ssl.field("Slit_Number") != ' ']
     msl = msl[msl.field("Slit_Number") != ' ']
+    asl = asl[asl.field("Slit_Number") != ' ']
 
-    return (header, data, targs, ssl, msl, asl)
+    bs = CSU.Barset()
+    bs.set_header(header, ssl=ssl, msl=msl, asl=asl)
+    return (header, data, bs)
 
 def parse_header_for_bars(header):
-    '''Parse {header} and convert to an array of CSU bar positions in mm. If the positon is negative it means the barstat is not OK'''
+    '''Parse {header} and convert to an array of CSU bar positions in mm. If 
+    the positon is negative it means the barstat is not OK'''
 
     poss = []
     posfmt = "B%2.2iPOS"
@@ -59,7 +62,8 @@ def parse_header_for_bars(header):
         poss.append(pos)
 
     if len(poss) != CSU.numbars:
-        raise CSU.MismatchError("Found %i bars instead of %i" % (lens(poss), CSU.numbars))
+        raise CSU.MismatchError("Found %i bars instead of %i" % 
+                (lens(poss), CSU.numbars))
         
 
     return np.array(poss)
@@ -68,6 +72,10 @@ def imcombine(filelist, out, bpmask=None, reject="none"):
     '''Convenience wrapper around IRAF task imcombine
     
     reject: none, minmax, sigclip, avsigclip, pclip'''
+
+    #TODO: REMOVE Iraf and use python instead. STSCI Python has
+    # A builtin routine.
+    from pyraf import iraf
     iraf.images()
 
     filelist = ["%s[0]" % f for f in filelist]

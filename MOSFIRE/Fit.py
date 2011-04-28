@@ -15,7 +15,8 @@ def xcor(a,b,lags):
 
     if len(a) != len(b):
         raise Exception(
-                "cross correlation (xcor) requires a and b to be of same length")
+                "cross correlation (xcor) requires a and b "
+                "to be of same length")
     cors = np.zeros(len(lags))
 
     a_pad = np.zeros(len(a)+len(lags))
@@ -31,54 +32,51 @@ def xcor(a,b,lags):
     return cors
 
 
-def wavelength_model(p, x):
-    order = p[0]
-    (alpha, sinbeta, gamma, delta) = p[1:]
-    sinbeta = np.radians(sinbeta)
-    d = 1e3/110.5
 
-    return alpha/(order/d) * (np.sin(18.0/250e3 * (x-1024)) + sinbeta) \
-        + gamma * (x - delta)**3
+# TODO: Document mpfit_* functions
+def mpfit_residuals(modelfun):
 
-def wavelength_residuals(p, fjac=None, x=None, y=None, error=None):
-    model = wavelength_model(p, x)
-    status = 0 # >= 0 means OK
+    def fun(param, fjac=None, x=None, y=None, error=None):
+        '''Generic function'''
+        model = modelfun(param, x)
+        status = 0
 
-    if error is None:
-        return [status, (y-model)]
+        if error is None:
+            return [status, y-model]
 
-    return [status, (y-model)/error]
+        return [status, (y-model)/error]
 
-def do_fit_wavelengths(pixels, lambdas, alphaguess, 
-        sinbetaguess, gammaguess, deltaguess, band, error=None):
+    return fun
 
-    bmap = {"Y": 6, "J": 5, "H": 4, "K": 3}
-    order = bmap[band]
+def mpfit_do(residual_fun, # function returned from mpfit_residuals() above
+        x, # input x
+        y, # input y = f(x)
+        parinfo, # initial parameter guess
+        error=None):
 
-    
-    parinfo = [
-            {'fixed': 1, 'value': order, 'parname': 'order', 
-                'limited': [0,0], 'limits': [0,0]},
-            {'fixed': 0, 'value': alphaguess, 'parname': 'alpha', 'step': 1e-5,
-                'limited': [0,0], 'limits': [0,0]},
-            {'fixed': 0, 'value': sinbetaguess, 'parname': 'sinbeta', 
-                'step': 1e-5, 'limited': [0,0], 'limits': [30,50]},
-            {'fixed': 0, 'value': gammaguess, 'parname': 'gamma','step': 1e-15,
-                'limited': [1,1], 'limits': [0,20e-13]},
-            {'fixed': 0, 'value': deltaguess, 'parname': 'delta', 'step': 1e-1,
-                'limited': [1,1], 'limits': [0,2048]}
-            ]
+    #TODO : Document parinfo part
 
-    fa = {"x": pixels, "y": lambdas}
+    fa = {"x": x, "y": y}
     if error is not None:
         fa["error"] = error
 
-    return mpfit.mpfit(wavelength_residuals, parinfo=parinfo, functkw=fa, 
-            quiet=1)
+    lsf = mpfit.mpfit(residual_fun, parinfo=parinfo, functkw=fa, 
+            quiet=1, maxiter=20)
+
+    return lsf
+
+
 
 
 # MPFITPEAK
 def gaussian(p, x):
+    ''' gaussian model
+    p[0] -- scale factor
+    p[1] -- centroid
+    p[2] -- sigma
+    p[3] -- offset
+    p[4] -- slope
+    '''
     
     u = (x - p[1])/p[2]
     return p[0]*np.exp(-0.5*u*u) + p[3] + p[4]*x
@@ -94,19 +92,78 @@ def gaussian_residuals(p, fjac=None, x=None, y=None, error=None):
 
     return [status, delt/error]
 
+def multi_gaussian(p, x):
+    N = p[0]
+    sigma = p[1]
+    offset = p[2]
+    slope = p[3]
+
+    y = np.zeros(len(x))
+    j = 4
+    for i in range(np.int(N)):
+        y += gaussian([p[j], p[j+1], sigma, 0, 0], x)
+        j+=2
+
+    y += offset + slope*x
+
+    return y
+
+
+def multi_gaussian_residuals(p, fjac=None, x=None, y=None, error=None):
+
+    model = multi_gaussian(p, x)
+    status = 0
+    delt = y - model
+    if error is None:
+        return [status, delt]
+
+    return [status, delt]
+
+
 def mpfitpeak(x, y, error=None):
     
-    parinfo = [{"value": np.max(y), "fixed": 0, "name": "Peak Value"},
-                {"value": x[np.argmax(y)], "fixed": 0, "name": "Centroid"},
-                {"value": 1., "fixed": 0, "name": "Sigma"},
-                {"value": np.min(y), "fixed": 0, "name": "Offset"},
-                {"value": 0, "fixed": 0, "name": "Slope"}]
+    parinfo = [{"value": np.max(y), "fixed": 0, "name": "Peak Value",
+                    'step': 10},
+                {"value": x[np.argmax(y)], "fixed": 0, "name": "Centroid",
+                    'step': .1},
+                {"value": 1.1, "fixed": 0, "name": "Sigma",
+                    'step': .1},
+                {"value": np.min(y), "fixed": 0, "name": "Offset",
+                    'step': 10},
+                {"value": 0, "fixed": 0, "name": "Slope",
+                    'step': 1e-5}]
 
     fa = {"x": x, "y": y}
     if error is not None: fa["error"] = error
 
     return mpfit.mpfit(gaussian_residuals, parinfo=parinfo, functkw=fa, quiet=1)
             
+def mpfitpeaks(x, y, N, error=None):
+
+    pars = [1, np.min(y), 0]
+    parinfo = [ {"value": N, "fixed": 1, "name": "Number of Peaks",
+                    "limited": [0, 0], "limits": [0, 0]},
+                {"value": 1.6, "fixed": 0, "name": "Sigma",
+                    "limited": [0, 0], "limits": [0, 0]},
+                {"value": pars[1], "fixed": 0, "name": "Offset",
+                    "limited": [0, 0], "limits": [0, 0]},
+                {"value": pars[2], "fixed": 0, "name": "Slope",
+                    "limited": [0, 0], "limits": [0, 0]}]
+    
+    for i in range(N):
+        v = {"value": np.max(y)/2., "fixed": 0, "name": "Peak Value(%i)" % i,
+                "limited": [1, 0], "limits": [0, 0]}
+        pars.append(np.max(y))
+        parinfo.append(v)
+
+        v = {"value": x[np.argmax(y)], "fixed": 0, "name": "Centroid(%i)" % i}
+        pars.append(x[np.argmax(y)])
+        parinfo.append(v)
+
+    fa = {"x": x, "y": y}
+    if error is not None: fa["error"] = error
+    return mpfit.mpfit(multi_gaussian_residuals, parinfo=parinfo, functkw=fa,
+            quiet=1)
 
 def slit_edge_fun(x, s):
     ''' The edge of a slit, convolved with a Gaussian, is well fit by 
@@ -286,4 +343,39 @@ class TestFitFunctions(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def do_fit_wavelengths(pixels, lambdas, alphaguess, 
+        sinbetaguess, gammaguess, deltaguess, band, pixel_y, error=None):
+
+    ''' THIS HSOULD BE REMOVED'''
+
+    bmap = {"Y": 6, "J": 5, "H": 4, "K": 3}
+    order = bmap[band]
+
+    
+    parinfo = [
+            {'fixed': 1, 'value': order, 'parname': 'order', 
+                'limited': [0,0], 'limits': [0,0]},
+            {'fixed': 1, 'value': pixel_y, 'parname': 'Y',
+                'limited': [0,0], 'limits': [0,0]},
+            {'fixed': 0, 'value': alphaguess, 'parname': 'alpha', 'step': 1e-5,
+                'limited': [0,0], 'limits': [0,0]},
+            {'fixed': 0, 'value': sinbetaguess, 'parname': 'sinbeta', 
+                'step': 1e-5, 'limited': [0,0], 'limits': [30,50]},
+            {'fixed': 0, 'value': gammaguess, 'parname': 'gamma','step': 1e-15,
+                'limited': [1,1], 'limits': [0,20e-13]},
+            {'fixed': 0, 'value': deltaguess, 'parname': 'delta', 'step': 1e-1,
+                'limited': [1,1], 'limits': [0,2048]},
+            ]
+
+    fa = {"x": pixels, "y": lambdas}
+    if error is not None:
+        fa["error"] = error
+
+    lsf = mpfit.mpfit(wavelength_residuals, parinfo=parinfo, functkw=fa, 
+            quiet=1, maxiter=20)
+
+    return lsf
+
 
