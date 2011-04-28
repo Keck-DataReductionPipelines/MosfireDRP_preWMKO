@@ -1,0 +1,15 @@
+
+
+Directory structure:
+
+hg/             top level
+  MOSFIRE/      MOSFIRE DRP library. The main entrypoints for the DRP are here.
+  apps/         MOSFIRE applications, these are command line commands
+  arcs/         Notes from CCS showing arc line spectra
+  data/         Created by Lasenby, test data for the simulator
+  doc/          Documentation
+  drp/          Lasenby's data reduction code, this is not being updated
+  experiments/  Numerical experiments
+  
+  
+In general, npk writes code in the experiments directory. These are quick and ugly pieces of code that flat field, or determine lambda solutions, and (eventually) sky subtractiong. Once the experiment is complete, it is rewritten and put into the "MOSFIRE" code path.
