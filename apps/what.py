@@ -12,6 +12,7 @@ npk - March 23 2011
 '''
 
 import MOSFIRE
+import MOSFIRE.IO
 import glob
 import sys
 
