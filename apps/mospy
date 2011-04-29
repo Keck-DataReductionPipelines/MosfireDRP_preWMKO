@@ -5,6 +5,8 @@
 # 
 #  Unless you're at caltech you will need to change the environmental variables
 #
+source /usr/stsci/envconfig.mac/cshrc
+iraf
 
 setenv MOSPATH /path/to/code
 setenv PYTHONPATH ${PYTHONPATH}:${MOSPATH}
