@@ -73,7 +73,7 @@ def fit_lambda(mfits, fname, maskname, options):
     linelist = pick_linelist(header)
     solutions = []
     lamout = np.zeros(shape=(2048, 2048), dtype=np.float32)
-    for slitno in range(1, 46):
+    for slitno in range(1, 47):
         print("-==== Fitting Slit %i" % slitno)
         parguess = guess_wavelength_solution(slitno, header, bs)
         sol_1d = fit_wavelength_solution(data, parguess, 
@@ -89,7 +89,7 @@ def fit_lambda(mfits, fname, maskname, options):
         solutions.append(sol)
 
         path = os.path.join(options["outdir"], maskname)
-        fn = os.path.join(path, "lambda_coeffs_{0}".format(
+        fn = os.path.join(path, "lambda_coeffs_{0}.npy".format(
             fname.replace(".fits","")))
 
         print "Saving: ", fn
@@ -127,8 +127,7 @@ def apply_lambda(mfits, fname, maskname, options):
         all_gammas = []
         all_deltas = []
 
-        # FIXME -1 accounts for a bug
-        for i in xrange(1,len(bs.ssl)-1):
+        for i in xrange(1,len(bs.ssl)):
             ss = bs.ssl[i]
             edges = slitedges[i]
 
@@ -200,7 +199,8 @@ def apply_lambda(mfits, fname, maskname, options):
     fn = os.path.join(path, "slit-edges_{0}.npy".format(band))
     edgedata = np.load(fn)
 
-    fn = os.path.join(path, "lambda_coeffs_{0}.npy".format(fname))
+    fn = os.path.join(path, "lambda_coeffs_{0}.npy".format(
+        fname.replace(".fits","")))
     lambdadata = np.load(fn)
 
     
@@ -310,7 +310,7 @@ def apply_lambda(mfits, fname, maskname, options):
 
 
     hdu = pf.PrimaryHDU(lams*1e4)
-    fn = os.path.join(path, "lambda_solution_{0}.fits".format(fname))
+    fn = os.path.join(path, "lambda_solution_{0}".format(fname))
     try: os.remove(fn)
     except: pass
     hdu.writeto(fn)
@@ -326,7 +326,7 @@ def apply_lambda(mfits, fname, maskname, options):
         rectified[i,:] = f(ll_fid)
 
     hdu = pf.PrimaryHDU(rectified)
-    fn = os.path.join(path, "rectified_{0}.fits".format(fname))
+    fn = os.path.join(path, "rectified_{0}".format(fname))
     try: os.remove(fn)
     except: pass
     hdu.writeto(fn)
@@ -528,20 +528,7 @@ def fit_wavelength_solution(data, parguess, lines, options, search_num=45,
         print("MAD: %3.3f A" % MAD)
 
         if MAD > 0.1: print "  search"
-        else: 
-
-            for i in range(4):
-                prevMAD = MAD
-                ll = wavelength_model(params, pix)
-                [xs, sxs, sigmas] = find_known_lines(lines, ll, spec, options)
-                [deltas, params, perror] = fit_model_to_lines(xs, sxs, lines, 
-                    params, options, fixed)
-                MAD = np.median(deltas)
-                print "{0} Old MAD: {1:3.5}, New MAD: {2:3.5}".format(i, 
-                        prevMAD, MAD)
-                if (MAD-prevMAD)/MAD < 0.01: 
-                    break
-            break
+        else: break
 
 
     if MAD < 0.1:
@@ -563,7 +550,6 @@ def fit_outwards_xcor(data, sol_1d, lines, options):
         ret = []
         spec = np.median(data[y0-1:y0+1, :], axis=0)
 
-        print deltays
         for deltay in deltays:
             params = params0.copy()
             params[5] = y0+deltay
@@ -588,7 +574,7 @@ def fit_outwards_xcor(data, sol_1d, lines, options):
             print "%i: Beta --->: %3.4f" % (params[5], params[1])
 
             [deltas, params, perror, sigmas] = fit_wavelength_solution(
-                    data, params, lines, options, search_num=3, fixed=False)
+                    data, params, lines, options, search_num=5, fixed=False)
 
             success = True
             if (len(deltas) < 2) or (np.median(deltas) > .4):
