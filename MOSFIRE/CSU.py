@@ -219,7 +219,10 @@ class Barset:
 
         return (os+es)/2.
         
-
+    def scislit_to_csuslit(self, scislit):
+        '''Convert a science slit number to a mechanical slit list'''
+        return self.scislit_to_slit[scislit]
+    
     def csu_slit_to_pixel(self, slit):
         '''Convert a CSU slit number to spatial pixel'''
         y0 = 2004.9

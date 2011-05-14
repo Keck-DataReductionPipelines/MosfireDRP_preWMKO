@@ -91,13 +91,13 @@ def handle_flats(flatlist, maskname, band, options):
 
     # Imcombine
     combine(flatlist, maskname, band, options)
-    (header, data, targs, ssl, msl, asl) = IO.readfits_all(flatlist[0])
+    (header, data, bs) = IO.readmosfits(flatlist[0])
     path = os.path.join(options["outdir"], "npk_calib3_q1700_pa_0", 
                     "combflat_2d_%s.fits" % band)
     (header, data) = IO.readfits(path)
 
     # Edge Trace
-    results = find_and_fit_edges(data, ssl, options)
+    results = find_and_fit_edges(data, bs.ssl, options)
     results[-1]["maskname"] = maskname
     results[-1]["band"] = band
     np.save(os.path.join(options["outdir"], maskname, 
@@ -285,6 +285,8 @@ def find_edge_pair(data, y, roi_width):
         v = select_roi(data, roi_width)
         xs = np.arange(len(v))
 
+        # TODO: The number 200 is hardcoded and essentially made up.
+        # A smarter piece of code belongs here.
         if np.median(v) < 200:
             xposs_missing.append(xp)
             continue
@@ -421,6 +423,7 @@ def find_and_fit_edges(data, ssl, options):
         (xposs, xposs_missing, yposs, widths, scatters) = \
                         find_edge_pair(data, y, 
                                         options["edge-fit-width"])
+
         (fun, wfun, res, sd, ok) = fit_edge_poly(xposs, 
                         xposs_missing, yposs, widths, 
                         options["edge-order"])

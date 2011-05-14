@@ -52,7 +52,8 @@ def mpfit_do(residual_fun, # function returned from mpfit_residuals() above
         x, # input x
         y, # input y = f(x)
         parinfo, # initial parameter guess
-        error=None):
+        error=None,
+        maxiter=20):
 
     #TODO : Document parinfo part
 
@@ -61,12 +62,9 @@ def mpfit_do(residual_fun, # function returned from mpfit_residuals() above
         fa["error"] = error
 
     lsf = mpfit.mpfit(residual_fun, parinfo=parinfo, functkw=fa, 
-            quiet=1, maxiter=20)
+            quiet=1, maxiter=maxiter)
 
     return lsf
-
-
-
 
 # MPFITPEAK
 def gaussian(p, x):
@@ -135,6 +133,7 @@ def mpfitpeak(x, y, error=None):
 
     fa = {"x": x, "y": y}
     if error is not None: fa["error"] = error
+
 
     return mpfit.mpfit(gaussian_residuals, parinfo=parinfo, functkw=fa, quiet=1)
             
@@ -270,8 +269,12 @@ def do_fit(data, residual_fun=residual_single):
         p0 = [0.5, np.argmax(data), max(data), 0.0, 4.0]
     elif residual_fun==residual_disjoint_pair:
         width = 5
-        p0 = [0.5, np.argmin(data)[0], -np.median(data[0:3]), 
-                -np.median(data[-4:-1]), np.median(data), width]
+        p0 = [0.5, 
+                np.argmin(data), 
+                -np.median(data[0:3]), 
+                -np.median(data[-4:-1]), 
+                np.median(data), 
+                width]
     else:
         raise Exception("residual_fun not specified")
 

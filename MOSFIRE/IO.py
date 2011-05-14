@@ -26,10 +26,11 @@ def readheader(path):
 
     return pf.getheader(path)
 
-def readfits_all(path):
-    '''Read a fits file from path and return a tuple of (header, data, 
-    Target List, Science Slit List (SSL), Mechanical Slit List (MSL),
-    Alignment Slit List (ASL)).'''
+def readmosfits(path):
+    '''Read a fits file written by MOSFIRE from path and return a tuple of 
+    (header, data, Target List, Science Slit List (SSL), Mechanical Slit 
+    List (MSL), Alignment Slit List (ASL)).'''
+
     hdulist = pf.open(path)
     header = hdulist[0].header
     data = hdulist[0].data

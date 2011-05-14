@@ -22,6 +22,7 @@ INPUT:
 OUTPUT:
 
 npk April 26 2011
+npk   May  4 2011
 
 '''
 
@@ -30,6 +31,7 @@ import os
 import numpy as np
 import pylab as pl
 import pyfits as pf
+from scipy.interpolate import interp1d
 
 from MOSFIRE import CSU, Fit, IO, Options
 
@@ -59,40 +61,327 @@ def handle_lambdas(imglist, maskname, options):
     for fname in imglist:
         fp = os.path.join(path, fname)
 
-        mfits = IO.readfits_all(fp)
-        fit_lambda(mfits, options)
+        mfits = IO.readmosfits(fp)
+        fit_lambda(mfits, fname, maskname, options)
+        apply_lambda(mfits, fname, maskname, options)
 
-def fit_lambda(mfits, options):
+def fit_lambda(mfits, fname, maskname, options):
     global sol_2d
     np.seterr(all="ignore")
     
     (header, data, bs) = mfits
     linelist = pick_linelist(header)
     solutions = []
-    lamout = np.zeros(shape=(2048, 2048))
-    for slitno in range(1,47):
+    lamout = np.zeros(shape=(2048, 2048), dtype=np.float32)
+    for slitno in range(1, 46):
         print("-==== Fitting Slit %i" % slitno)
         parguess = guess_wavelength_solution(slitno, header, bs)
         sol_1d = fit_wavelength_solution(data, parguess, 
                 linelist, options)
 
-        sol_2d = fit_outwards(data, sol_1d, linelist, options)
+        sol_2d = fit_outwards_xcor(data, sol_1d, linelist, options)
         lamout = merge_solutions(lamout, slitno, parguess[4], bs, sol_2d, 
                 options)
 
         sol = {"slitno": slitno, "center_sol": [sol_1d[1], sol_1d[2]], 
-                "sigmas": sol_1d[3], "2d": sol_2d}
+                "sigmas": sol_1d[3], "2d": sol_2d, "lines": linelist,
+                "csupos_mm": parguess[-1]}
         solutions.append(sol)
 
-        
-        fn = "/Users/npk/desktop/c9_reduce/npk_calib3_q1700_pa_0/lam.fits"
+        path = os.path.join(options["outdir"], maskname)
+        fn = os.path.join(path, "lambda_coeffs_{0}".format(
+            fname.replace(".fits","")))
+
+        print "Saving: ", fn
         try: os.remove(fn)
         except: pass
-        hdu = pf.PrimaryHDU(lamout)
-        hdu.writeto(fn)
+        np.save(fn, solutions)
+
     return solutions
 
 
+def apply_lambda_tester():
+    fn = "/users/npk/desktop/c9_reduce/npk_calib3_Q1700_pa_0/m110323_2718.fits"
+    mfits = IO.readmosfits(fn)
+
+    apply_lambda(mfits, "m110323_2718", "npk_calib3_Q1700_pa_0", 
+            Options.wavelength)
+
+def apply_lambda(mfits, fname, maskname, options):
+    '''Perform global fit to the mask'''
+
+    def filter_2d_solutions(x):
+        sds = x[1]
+        MAD = x[2]
+        success = x[3]
+
+        return (sds is not None) \
+            and (sds[0] < 2e-5) \
+            and (MAD < 0.1) \
+            and (success)
+
+    def mechanical_to_science_slit():
+        all_pixs = []
+        all_alphas = []
+        all_betas = []
+        all_gammas = []
+        all_deltas = []
+
+        # FIXME -1 accounts for a bug
+        for i in xrange(1,len(bs.ssl)-1):
+            ss = bs.ssl[i]
+            edges = slitedges[i]
+
+            csuslits = bs.scislit_to_csuslit(i-1)
+            print("Science slit {0} has CSU Slits: {1}".format(i, csuslits))
+
+
+            scislit_pixs = []
+            scislit_alphas = []
+            scislit_betas = []
+            scislit_gammas = []
+            scislit_deltas = []
+            print ss[-2]
+            for csuslit in csuslits:
+                sol = lambdadata[csuslit-1]
+                print sol["slitno"], csuslit
+                ff = filter(filter_2d_solutions, sol["2d"])
+                assert(sol["slitno"] == csuslit)
+                ar = np.array(map(lambda x:x[0], ff))
+
+                pix = ar[:, 5]
+                alpha = ar[:, 0]
+                beta = ar[:, 1]
+                gamma = ar[:, 2]
+                delta = ar[:, 3]
+
+                scislit_pixs.extend(pix)
+                scislit_alphas.extend(alpha)
+                scislit_betas.extend(beta)
+                scislit_gammas.extend(gamma)
+                scislit_deltas.extend(delta)
+
+            (scislit_pixs, scislit_alphas, scislit_betas, scislit_gammas, 
+                    scislit_deltas) = map(np.array, [scislit_pixs, 
+                        scislit_alphas, scislit_betas, scislit_gammas, 
+                        scislit_deltas])
+
+            srt = np.argsort(scislit_pixs)
+            scislit_pixs = scislit_pixs[srt]
+            scislit_alphas = scislit_alphas[srt]
+            scislit_betas = scislit_betas[srt]
+            scislit_gammas = scislit_gammas[srt]
+            scislit_deltas = scislit_deltas[srt]
+
+            all_pixs.append(scislit_pixs)
+            all_alphas.append(scislit_alphas)
+            all_betas.append(scislit_betas)
+            all_gammas.append(scislit_gammas)
+            all_deltas.append(scislit_deltas)
+
+        return [all_pixs, all_alphas, all_betas, all_gammas, all_deltas]
+
+    def fit_mask(pars, ys):
+        pars.extend(np.zeros(len(pixel_set)))
+        pars = np.array(pars)
+
+        parinfo = []
+        for par in pars:
+            parinfo.append({"fixed": 0, "value": par, "limited": [0, 0], 
+                "limits": [0, 0]})
+
+        return Fit.mpfit_do(merit_fun, pixel_set, ys, parinfo)
+
+    ### -- End of convenience functions
+    (header, data, bs) = mfits
+
+    band = header['filter'].rstrip()
+    path = os.path.join(options["outdir"], maskname)
+    fn = os.path.join(path, "slit-edges_{0}.npy".format(band))
+    edgedata = np.load(fn)
+
+    fn = os.path.join(path, "lambda_coeffs_{0}.npy".format(fname))
+    lambdadata = np.load(fn)
+
+    
+    slitedges = edgedata[0:-1]
+    edgeinfo = edgedata[-1]
+
+    # pixel_ and beta_set are lists containing the
+    # measured values of beta for each scientific slit
+    (pixel_set, alpha_set, beta_set, gamma_set, 
+            delta_set) = mechanical_to_science_slit()
+
+    merit_fun = Fit.mpfit_residuals(mask_model)
+
+    # FIT Alphas
+    print "Alpha fit"
+    alpha_lsf = fit_mask([0.99, 0, 0, 1024], np.concatenate(alpha_set))
+
+    # FIT Betas
+    print "Beta fit"
+    beta_lsf = fit_mask([40., 0, 0, 1024], np.concatenate(beta_set))
+
+        # FIT Gammas
+    print "Gamma fit"
+    gamma_lsf = fit_mask([7e-13, 0, 0, 1024], np.concatenate(gamma_set))
+
+        # FIT Deltas
+    print "Delta fit"
+    delta_lsf = fit_mask([1000, 0, 0, 1024.], np.concatenate(delta_set))
+
+    pixels = np.concatenate(pixel_set)
+
+    print alpha_lsf.params
+    print beta_lsf.params
+    print gamma_lsf.params
+    print delta_lsf.params
+
+    pl.ion()
+
+
+    alphas, betas, gammas, deltas = map(np.concatenate, [alpha_set, beta_set,
+        gamma_set, delta_set])
+    
+    def plotfun(px, ys, lsf, i):
+        pl.plot(px, ys, '.')
+        params = np.copy(lsf.params[0:5])
+        params[4] = lsf.params[4+i]
+        my = mask_model(params, [px])
+        pl.plot(px, my)
+
+    pl.figure(3)
+    pl.clf()
+    pl.subplot(2,2,1)
+    pl.plot(pixels, alphas, '.')
+    for i in xrange(len(pixel_set)):
+        plotfun(pixel_set[i], alpha_set[i], alpha_lsf, i)
+
+    pl.subplot(2,2,2)
+    for i in xrange(len(pixel_set)):
+        plotfun(pixel_set[i], beta_set[i], beta_lsf, i)
+
+    pl.subplot(2,2,3)
+    pl.plot(pixels, np.concatenate(gamma_set), '.')
+    for i in xrange(len(pixel_set)):
+        plotfun(pixel_set[i], gamma_set[i], gamma_lsf, i)
+
+    pl.subplot(2,2,4)
+    pl.plot(pixels, np.concatenate(delta_set), '.')
+    for i in xrange(len(pixel_set)):
+        plotfun(pixel_set[i], delta_set[i], delta_lsf, i)
+
+
+    def convfun(params, px, i):
+        pp = np.copy(params[0:5])
+        pp[4] = params[4+i]
+        return mask_model(pp, [px])
+
+    # write lambda
+    lams = np.zeros((2048, 2048), dtype=np.float)
+    xx = np.arange(2048)
+    for i in xrange(len(pixel_set)):
+        print "---", i
+        edges = slitedges[i]
+        top = edges["top"](xx)
+        bottom = edges["bottom"](xx)
+        px = np.arange(np.min(bottom), np.max(top))
+
+        print "alphas"
+        alphas = convfun(alpha_lsf.params, px, i)
+        print "betas"
+        betas = convfun(beta_lsf.params, px, i)
+        print "gammas"
+        gammas = convfun(gamma_lsf.params, px, i)
+        print "deltas"
+        deltas = convfun(delta_lsf.params, px, i)
+
+        cnt = 0
+        for j in px:
+            lams[j,:] = wavelength_model(
+                    [alphas[cnt],
+                        betas[cnt],
+                        gammas[cnt],
+                        deltas[cnt],
+                        4,
+                        j], xx)
+            cnt += 1
+
+
+
+    hdu = pf.PrimaryHDU(lams*1e4)
+    fn = os.path.join(path, "lambda_solution_{0}.fits".format(fname))
+    try: os.remove(fn)
+    except: pass
+    hdu.writeto(fn)
+
+    print "rectifying"
+    rectified = np.zeros((2048, 2048), dtype=np.float)
+    ll_fid = lams[1024, :]
+    for i in xrange(2048):
+        ll = lams[i,:]
+        ss = data[i,:]
+
+        f = interp1d(ll, ss, bounds_error=False)
+        rectified[i,:] = f(ll_fid)
+
+    hdu = pf.PrimaryHDU(rectified)
+    fn = os.path.join(path, "rectified_{0}.fits".format(fname))
+    try: os.remove(fn)
+    except: pass
+    hdu.writeto(fn)
+
+
+    pl.figure(4)
+    pl.clf()
+
+    fvs = []
+    poss= [2012, 1955, 1925, 1868, 1824, 1774, 1740, 1700, 1654, 1614, 1575,
+            1519, 1476, 1433, 1396, 1300, 1073, 1036, 904, 858, 806, 725,
+            682, 633, 591, 546, 497, 459, 408, 365, 316, 282, 235, 192]
+    for i in poss:
+        print i
+        ll = lams[i,:]
+        ss = data[i,:]
+
+        roi = np.abs(ll-1.5997)<.001
+
+        if not roi.any(): continue
+        pl.plot(ll[roi]*1e4, ss[roi]/np.max(ss[roi]))
+
+        pp = Fit.mpfitpeak(ll[roi]*1e4, ss[roi])
+        fvs.append(pp.params[1])
+
+    pl.ylim([-.1,1.1])
+    print np.std(fvs)
+    pl.figure(5)
+    pl.clf()
+    pl.plot(poss, fvs,'*')
+
+
+def param_guess_functions(band):
+    # The following values are determined through experimentation
+    # with c9 data
+
+    alpha_pixel = np.poly1d([-8.412e-16, 3.507e-12, -3.593e-9, 
+        6.303e-9, 0.9963])
+
+    if band == 'Y' or band == 'J':
+        sinbeta_position = np.poly1d([0.0239, 36.2])
+        sinbeta_pixel = np.poly1d([-2.578e-7, 0.00054, -0.2365])
+        gamma_pixel = np.poly1d([1.023e-25, -4.313e-22, 7.668e-17, 6.48e-13])
+    elif band == 'H' or band == 'K':
+        sinbeta_position = np.poly1d([2.331e-2, 38.24])
+        sinbeta_pixel = np.poly1d([-2.664e-7, 5.534e-4, -1.992e-1])
+        gamma_pixel = np.poly1d([1.033e-25, -4.36e-22, 4.902e-19, -8.021e-17,
+            6.654e-13])
+
+    delta_pixel = np.poly1d([-1.462e-11, 6.186e-8, -5.152e-5, -0.0396, 1193])
+
+    return [alpha_pixel, sinbeta_position, sinbeta_pixel, 
+            gamma_pixel, delta_pixel]
+
+    
 def guess_wavelength_solution(slitno, header, bs):
     '''Given a slit number guess the coefficient values
     return [order, y0, alpha, sinbeta, gamma, delta]
@@ -110,26 +399,16 @@ def guess_wavelength_solution(slitno, header, bs):
     # The following values are determined through experimentation
     # with c9 data
 
-    alpha_pixel = np.poly1d([1.257e-9, -2.440e-6, 9.965e-1])
-
-    if band == 'Y' or band == 'J':
-        sinbeta_position = np.poly1d([0.0239, 36.2])
-        sinbeta_pixel = np.poly1d([-2.578e-7, 0.00054, -0.2365])
-        gamma_pixel = np.poly1d([-1.19e-19, 2.442e-16, 4.181e-13])
-    elif band == 'H' or band == 'K':
-        sinbeta_position = np.poly1d([2.331e-2, 38.24])
-        sinbeta_pixel = np.poly1d([-2.664e-7, 5.534e-4, -1.992e-1])
-        gamma_pixel = np.poly1d([-1.630e-19, 3.461e-16, 5.807e-13])
-
-    delta_pixel = np.poly1d([4.284e-5, -0.1145, 1219])
-
+    [alpha_pixel, sinbeta_position, sinbeta_pixel, gamma_pixel, 
+            delta_pixel] = param_guess_functions(band)
 
     return [alpha_pixel(y0),
             sinbeta_position(csupos_mm) + sinbeta_pixel(y0),
             gamma_pixel(y0),
             delta_pixel(y0),
             order,
-            y0]
+            y0, 
+            csupos_mm]
 
 def find_known_lines(lines, ll, spec, options):
     inf = np.inf
@@ -137,8 +416,6 @@ def find_known_lines(lines, ll, spec, options):
     sxs = []
     sigmas = []
 
-    pl.figure(4)
-    pl.clf()
     pix = np.arange(2048.)
     for lam in lines:
         f = options["fractional-wavelength-search"]
@@ -185,7 +462,7 @@ def find_known_lines(lines, ll, spec, options):
 
     return map(np.array, [xs, sxs, sigmas])
 
-def fit_model_to_lines(xs, sxs, lines, parguess, options):
+def fit_model_to_lines(xs, sxs, lines, parguess, options, fixed):
 
     ok = np.isfinite(sxs)
 
@@ -198,10 +475,10 @@ def fit_model_to_lines(xs, sxs, lines, parguess, options):
         {'fixed': 0, 'value': parguess[0], 'parname': 'alpha', 'step': 1e-5,
             'limited': [0,0], 'limits': [0,0]},
         {'fixed': 0, 'value': parguess[1], 'parname': 'sinbeta', 
-            'step': 1e-5, 'limited': [0,0], 'limits': [0, 0]},
-        {'fixed': 0, 'value': parguess[2], 'parname': 'gamma','step': 1e-15,
+            'step': 1e-7, 'limited': [0,0], 'limits': [0, 0]},
+        {'fixed': fixed, 'value': parguess[2], 'parname': 'gamma','step': 1e-13,
             'limited': [1,1], 'limits': [0,20e-13]},
-        {'fixed': 0, 'value': parguess[3], 'parname': 'delta', 'step': 1e-1,
+        {'fixed': fixed, 'value': parguess[3], 'parname': 'delta', 'step': 1e-1,
             'limited': [1,1], 'limits': [0,2048]},
         {'fixed': 1, 'value': parguess[4], 'parname': 'order', 
             'limited': [0,0], 'limits': [3,7]},
@@ -218,7 +495,8 @@ def fit_model_to_lines(xs, sxs, lines, parguess, options):
 
 
 
-def fit_wavelength_solution(data, parguess, lines, options, search_num=45):
+def fit_wavelength_solution(data, parguess, lines, options, search_num=45,
+        fixed=False):
     '''Tweaks the guessed parameter values and provides 1d lambda solution
     
     '''
@@ -231,7 +509,7 @@ def fit_wavelength_solution(data, parguess, lines, options, search_num=45):
     spec = np.median(data[y0-1:y0+1, :], 
         axis=0) # axis = 0 is spatial direction
 
-    d = search_num*0.008
+    d = search_num*0.003
     dsinbetas = np.sort(np.abs(np.linspace(-d/2., d/2., search_num)))
 
     sinbetadirection = 1.0
@@ -244,21 +522,94 @@ def fit_wavelength_solution(data, parguess, lines, options, search_num=45):
         ll = wavelength_model(parguess, pix)
         [xs, sxs, sigmas] = find_known_lines(lines, ll, spec, options)
         [deltas, params, perror] = fit_model_to_lines(xs, sxs, lines, 
-                pars, options)
+                pars, options, fixed)
 
         MAD = np.median(deltas)
         print("MAD: %3.3f A" % MAD)
 
-        if MAD > 0.2: print "  search"
-        else: break
+        if MAD > 0.1: print "  search"
+        else: 
 
-    if MAD < 0.2:
+            for i in range(4):
+                prevMAD = MAD
+                ll = wavelength_model(params, pix)
+                [xs, sxs, sigmas] = find_known_lines(lines, ll, spec, options)
+                [deltas, params, perror] = fit_model_to_lines(xs, sxs, lines, 
+                    params, options, fixed)
+                MAD = np.median(deltas)
+                print "{0} Old MAD: {1:3.5}, New MAD: {2:3.5}".format(i, 
+                        prevMAD, MAD)
+                if (MAD-prevMAD)/MAD < 0.01: 
+                    break
+            break
+
+
+    if MAD < 0.1:
         print("%3.5f %4.3f %3.3e %4.1f" % (params[0], params[1], params[2], 
             params[3]))
         return [deltas, params, perror, sigmas]
     else:
         print("Could not find parameters")
         return [[], parguess, None, []]
+
+def fit_outwards_xcor(data, sol_1d, lines, options):
+    lags = np.arange(-5,5)
+    pix = np.arange(2048.)
+
+    def sweep(deltays):
+        deltas, params0, perror, sigmas = sol_1d
+        params0 = np.array(params0)
+        y0 = params0[5]
+        ret = []
+        spec = np.median(data[y0-1:y0+1, :], axis=0)
+
+        print deltays
+        for deltay in deltays:
+            params = params0.copy()
+            params[5] = y0+deltay
+            print("Fitting at %i" % params[5])
+
+            if (params[5] < 0) or (params[5] > 2047):
+                print "%i: Skipping out of bounds %i" % (deltay, params[5])
+                continue
+
+            spec2 = np.median(data[params[5]-1:params[5]+1, :], axis=0)
+            xcs = []
+            for lag in lags:
+                xc = np.sum(spec * np.roll(spec2, lag))
+                xcs.append(xc)
+
+            fp = Fit.mpfitpeak(lags, np.array(xcs))
+            spec = spec2
+
+            print "%i: Shift is %1.2f pix. Beta now: %3.4f" % (params[5], 
+                    fp.params[1], params[1])
+            params[1] -= np.degrees(fp.params[1] * 18/250e3)
+            print "%i: Beta --->: %3.4f" % (params[5], params[1])
+
+            [deltas, params, perror, sigmas] = fit_wavelength_solution(
+                    data, params, lines, options, search_num=3, fixed=False)
+
+            success = True
+            if (len(deltas) < 2) or (np.median(deltas) > .4):
+                success = False
+
+            print "%i: Success: %i" % (params[5], success)
+            ret.append([params, perror, np.median(deltas), success])
+
+        return ret
+
+    pix = np.arange(2048.)
+
+    params_up = sweep(range(0,20,2))
+    params_down = sweep(range(-1,-20,-2))
+    params = params_down
+
+    params.reverse()
+    params.extend(params_up)
+
+    return params
+
 
 def fit_outwards(data, sol_1d, lines, options):
 
@@ -273,7 +624,7 @@ def fit_outwards(data, sol_1d, lines, options):
 
             print("Fitting at %i" % params[5])
             [deltas, params, perror, sigmas] = fit_wavelength_solution(data, 
-                    params, lines, options, search_num=10)
+                    params, lines, options, search_num=7)
             success = True
 
             if (len(deltas) < 2) or (np.median(deltas) > .4):
@@ -285,8 +636,8 @@ def fit_outwards(data, sol_1d, lines, options):
     
     pix = np.arange(2048.)
 
-    params_up = sweep(1, 20) # sweep up
-    params_down = sweep(-1, 20) # sweep down
+    params_up = sweep(1, 18) # sweep up
+    params_down = sweep(-1, 18) # sweep down
 
     params_down.reverse()
     params_down.extend(params_up)
@@ -303,22 +654,28 @@ def merge_solutions(lamout, slitno, order, bs, sol_2d, options):
             (x[3] == True), sol_2d)
     ar = np.array(map(lambda x: x[0], ff))
 
-    pixel = ar[:,5]
+    pixels = ar[:,5]
 
-    alpha = ar[:,0]
-    beta = ar[:,1]
-    gamma = ar[:,2]
-    delta = ar[:,3]
+    alphas = ar[:,0]
+    betas = ar[:,1]
+    gammas = ar[:,2]
+    deltas = ar[:,3]
 
-    alphamodel = np.poly1d(np.polyfit(pixel, alpha, 1))
-    betamodel  = np.poly1d(np.polyfit(pixel, beta, 1))
-    gammamodel = np.poly1d(np.polyfit(pixel, gamma, 1))
-    deltamodel = np.poly1d(np.polyfit(pixel, delta, 1))
-    
+    alphamodel = np.poly1d(np.polyfit(pixels, alphas, 2))
+    betamodel  = np.poly1d(np.polyfit(pixels, betas, 2))
+    gammamodel = np.poly1d(np.polyfit(pixels, gammas, 2))
+    deltamodel = np.poly1d(np.polyfit(pixels, deltas, 2))
 
-    mn = np.min(pixel)-4
+    print "Alpha scatter: %3.6f" % np.std(alphas-alphamodel(pixels))
+    print " Beta scatter: %3.4f" % np.std(betas-betamodel(pixels))
+    print "Fitting pixels: ", pixels
+
+    print betas
+    print alphas
+
+    mn = np.min(pixels)-4
     if mn < 0: mn = 0
-    mx = np.max(pixel)+4
+    mx = np.max(pixels)+4
     if mx > 2047: mx = 2047
 
     pixs = np.arange(2048.)
@@ -378,6 +735,60 @@ def wavelength_model(p, x):
             (np.sin(scale * (x-1024)) + sinbeta) + \
             gamma * (x - delta)**3
 
+def mask_model(p, xs):
+    '''Fit a continuous smooth function to parameters in the mask.
+
+    parameters:
+        linear model is:
+        x = xs - p[3]         2         3
+        p[0] + p[1] x + p[2] x  + p[3] x  + discontinuity
+
+        p[4:] -- [N] list of discontinuities
+        '''
+
+    cpix = p[0]
+    cpar = p[1]
+    radius_pix = p[2]
+    radius_par = p[3]
+    coeffs = p[4:]
+
+    vals = []
+    for i in xrange(len(coeffs)):
+        x = np.array(xs[i]) - p[3]
+        c = coeffs[i]
+        y = p[0] + p[1] * x + p[2] * x*x + c
+        vals.extend(y)
+
+    return np.array(vals).ravel()
+
+def beta_model(p, xs):
+    '''Fits a continuous smooth function to betas in the mask.
+    Parameters:
+        p[0] -- center pixel position
+        p[1] -- center beta position
+        p[2] -- radius in pixel direction
+        p[3] -- radius in beta direction
+        p[4:] -- [N] list of discontinuities
+        
+        xs -- A list of [N] lists. Each list contains the beta values for
+        each slit.
+        '''
+
+    cpix = p[0]
+    cbeta = p[1]
+    radius_pix = p[2]
+    radius_beta = p[3]
+    coeffs = p[4:]
+
+    bs = []
+    for i in xrange(len(coeffs)):
+        x = np.array(xs[i]) - cpix
+        c = coeffs[i]
+        y = np.abs(radius_beta)*np.sqrt(1-(x/radius_pix)**2) + cbeta - c
+        bs.extend(y)
+
+    return np.array(bs).ravel()
+
 
 def pick_linelist(header):
     band = header["filter"]
@@ -406,19 +817,143 @@ def pick_linelist(header):
 
     
 
+def plot_data_quality(fname):
+    global solution
+    from matplotlib.backends.backend_pdf import PdfPages
 
 
+    solutions = np.load(fname)
+
+    pp = PdfPages("/users/npk/desktop/mp.pdf")
+    filter_fun = (lambda x:
+            (x[1] is not None) and
+            (x[1][0] < 2e-5) and
+            (x[2] < .1) and
+            (x[3] == True))
+
+    all_pix = []
+    all_alphas = []
+    all_betas = []
+    all_gammas = []
+    all_deltas = []
+    for solution in solutions:
+        sol_2d = solution["2d"]
+        print "Slit: {0}".format(solution["slitno"])
+        ff = filter(filter_fun, sol_2d)
+        ar = np.array(map(lambda x: x[0], ff))
+
+        pixels = ar[:,5]
+
+        alphas = ar[:,0]
+        betas = ar[:,1]
+        gammas = ar[:,2]
+        deltas = ar[:,3]
+                
+
+        all_pix.extend(pixels)
+        all_alphas.extend(alphas)
+        all_betas.extend(betas)
+        all_gammas.extend(gammas)
+        all_deltas.extend(deltas)
+
+        alphamodel = np.poly1d(np.polyfit(pixels, alphas, 1))
+        betamodel  = np.poly1d(np.polyfit(pixels, betas, 1))
+        gammamodel = np.poly1d(np.polyfit(pixels, gammas, 1))
+        deltamodel = np.poly1d(np.polyfit(pixels, deltas, 1))
+
+        print "Scatters: {0:3.5} {1:3.5} {2:3.5} {3:3.5}".format(
+                np.std(alphas-alphamodel(pixels)),
+                np.std(betas-betamodel(pixels)),
+                np.std(gammas-gammamodel(pixels)),
+                np.std(deltas-deltamodel(pixels)),
+                )
+
+        pl.clf()
+        pl.subplot(2,2,1)
+        pl.title("Slit {0}".format(solution["slitno"]))
+        pl.scatter(pixels, alphas)
+        pl.plot(pixels, alphamodel(pixels))
+        pl.ylabel(r'$\alpha$')
+
+        pl.subplot(2,2,2)
+        pl.scatter(pixels, betas)
+        pl.plot(pixels, betamodel(pixels))
+        pl.ylabel(r'$\beta$')
+
+        pl.subplot(2,2,3)
+        pl.scatter(pixels, gammas)
+        pl.plot(pixels, gammamodel(pixels))
+        pl.ylim([0,1e-12])
+        pl.ylabel(r'$\gamma$')
+
+        pl.subplot(2,2,4)
+        pl.scatter(pixels, deltas)
+        pl.plot(pixels, deltamodel(pixels))
+        pl.ylabel(r'$\delta$')
+
+
+        pp.savefig()
+
+    [alpha_pixel, sinbeta_position, sinbeta_pixel, gamma_pixel, 
+            delta_pixel] = param_guess_functions('H')
+    pl.clf()
+    pl.subplot(1,1,1)
+    pl.scatter(all_pix, all_alphas, c=all_deltas)
+    pl.plot(all_pix, alpha_pixel(all_pix), 'r')
+
+    ff = np.poly1d(np.polyfit(all_pix, all_alphas, 4))
+    pl.plot(all_pix, ff(all_pix))
+    print "Alpha: ", ff
+    pl.ylabel(r'$\alpha$')
+    pp.savefig()
+
+    pl.clf()
+    delts = all_alphas - ff(all_pix)
+    pl.scatter(all_pix, delts, c=all_gammas)
+    pl.ylabel(r'$\Delta \alpha$')
+    print "Scatter is {0} pixels".format(np.std(delts)*2048)
+    pp.savefig()
+
+    pl.clf()
+    pl.scatter(all_pix, all_betas, s=.1)
+    pl.ylabel(r'$\beta$')
+    pp.savefig()
+
+    pl.clf()
+    pl.scatter(all_pix, all_gammas, c=all_gammas)
+    pl.plot(all_pix, gamma_pixel(all_pix), 'r')
+    ff = np.poly1d(np.polyfit(all_pix, all_gammas, 4))
+    print "Gamma: ", ff
+
+    pl.plot(all_pix, ff(all_pix), 'b')
+    pl.ylabel(r'$\gamma$')
+    pp.savefig()
+
+    pl.clf()
+    delta_pixel = np.poly1d([4.284e-5, -0.1145, 1219])
+    pl.scatter(all_pix, all_deltas, c=all_gammas)
+    pl.plot(all_pix, delta_pixel(all_pix), 'r')
+    
+    ff = np.poly1d(np.polyfit(all_pix, all_deltas, 4))
+    print "Delta: ", ff
+
+    pl.ylabel(r'$\delta$')
+    pp.savefig()
+
+    pp.close()
 
 if __name__ == "__main__":
     np.set_printoptions(precision=3)
-    global bs, sol_2d
-    pl.ion()
-    tester()
+    global bs, sol_2d, solution
+    if False:
+        tester()
 
-    ff = filter(lambda x: (x[1] is not None) and (x[1][0] < 3e-5) and 
-            (x[2] < .1) and (x[3] == True), sol_2d)
+        ff = filter(lambda x: (x[1] is not None) and (x[1][0] < 3e-5) and 
+                (x[2] < .1) and (x[3] == True), sol_2d)
 
-    ar = np.array(map(lambda x: x[0], ff))
+        ar = np.array(map(lambda x: x[0], ff))
+    else:
+        plot_data_quality("/Users/npk/desktop/c9_reduce/npk_calib3_q1700_pa_0/lambda_coeffs_m110323_2718.npy")
 
 
 
