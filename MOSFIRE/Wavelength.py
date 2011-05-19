@@ -42,17 +42,14 @@ reload(CSU)
 reload(IO)
 reload(Fit)
 
-def tester():
-    handle_lambdas(['m110323_2718.fits'], 
-            'npk_calib3_q1700_pa_0',
-            Options.wavelength)
+#
+# Glue code
+#
+
     
 def handle_lambdas(imglist, maskname, options):
-    '''
-    handle_lambdas is the priamry entry point to the Wavelengths module.
-    '''
+    ''' handle_lambdas is the entry point to the Wavelengths module. '''
     
-    global bs
     path = os.path.join(options["outdir"], maskname)
     if not os.path.exists(path):
         raise Exception("Output directory '%s' does not exist. This " 
@@ -66,7 +63,7 @@ def handle_lambdas(imglist, maskname, options):
         apply_lambda(mfits, fname, maskname, options)
 
 def fit_lambda(mfits, fname, maskname, options):
-    global sol_2d
+    '''Fit the two-dimensional wavelength solution to each science slit'''
     np.seterr(all="ignore")
     
     (header, data, bs) = mfits
@@ -92,106 +89,15 @@ def fit_lambda(mfits, fname, maskname, options):
         fn = os.path.join(path, "lambda_coeffs_{0}.npy".format(
             fname.replace(".fits","")))
 
-        print "Saving: ", fn
         try: os.remove(fn)
         except: pass
         np.save(fn, solutions)
 
     return solutions
 
-
-def apply_lambda_tester():
-    fn = "/users/npk/desktop/c9_reduce/npk_calib3_Q1700_pa_0/m110323_2718.fits"
-    mfits = IO.readmosfits(fn)
-
-    apply_lambda(mfits, "m110323_2718", "npk_calib3_Q1700_pa_0", 
-            Options.wavelength)
-
 def apply_lambda(mfits, fname, maskname, options):
-    '''Perform global fit to the mask'''
+    '''Convert solutions into final output products'''
 
-    def filter_2d_solutions(x):
-        sds = x[1]
-        MAD = x[2]
-        success = x[3]
-
-        return (sds is not None) \
-            and (sds[0] < 2e-5) \
-            and (MAD < 0.1) \
-            and (success)
-
-    def mechanical_to_science_slit():
-        all_pixs = []
-        all_alphas = []
-        all_betas = []
-        all_gammas = []
-        all_deltas = []
-
-        for i in xrange(1,len(bs.ssl)):
-            ss = bs.ssl[i]
-            edges = slitedges[i]
-
-            csuslits = bs.scislit_to_csuslit(i-1)
-            print("Science slit {0} has CSU Slits: {1}".format(i, csuslits))
-
-
-            scislit_pixs = []
-            scislit_alphas = []
-            scislit_betas = []
-            scislit_gammas = []
-            scislit_deltas = []
-            print ss[-2]
-            for csuslit in csuslits:
-                sol = lambdadata[csuslit-1]
-                print sol["slitno"], csuslit
-                ff = filter(filter_2d_solutions, sol["2d"])
-                assert(sol["slitno"] == csuslit)
-                ar = np.array(map(lambda x:x[0], ff))
-
-                pix = ar[:, 5]
-                alpha = ar[:, 0]
-                beta = ar[:, 1]
-                gamma = ar[:, 2]
-                delta = ar[:, 3]
-
-                scislit_pixs.extend(pix)
-                scislit_alphas.extend(alpha)
-                scislit_betas.extend(beta)
-                scislit_gammas.extend(gamma)
-                scislit_deltas.extend(delta)
-
-            (scislit_pixs, scislit_alphas, scislit_betas, scislit_gammas, 
-                    scislit_deltas) = map(np.array, [scislit_pixs, 
-                        scislit_alphas, scislit_betas, scislit_gammas, 
-                        scislit_deltas])
-
-            srt = np.argsort(scislit_pixs)
-            scislit_pixs = scislit_pixs[srt]
-            scislit_alphas = scislit_alphas[srt]
-            scislit_betas = scislit_betas[srt]
-            scislit_gammas = scislit_gammas[srt]
-            scislit_deltas = scislit_deltas[srt]
-
-            all_pixs.append(scislit_pixs)
-            all_alphas.append(scislit_alphas)
-            all_betas.append(scislit_betas)
-            all_gammas.append(scislit_gammas)
-            all_deltas.append(scislit_deltas)
-
-        return [all_pixs, all_alphas, all_betas, all_gammas, all_deltas]
-
-    def fit_mask(pars, ys):
-        pars.extend(np.zeros(len(pixel_set)))
-        pars = np.array(pars)
-
-        parinfo = []
-        for par in pars:
-            parinfo.append({"fixed": 0, "value": par, "limited": [0, 0], 
-                "limits": [0, 0]})
-
-        return Fit.mpfit_do(merit_fun, pixel_set, ys, parinfo)
-
-    ### -- End of convenience functions
     (header, data, bs) = mfits
 
     band = header['filter'].rstrip()
@@ -202,7 +108,6 @@ def apply_lambda(mfits, fname, maskname, options):
     fn = os.path.join(path, "lambda_coeffs_{0}.npy".format(
         fname.replace(".fits","")))
     lambdadata = np.load(fn)
-
     
     slitedges = edgedata[0:-1]
     edgeinfo = edgedata[-1]
@@ -210,90 +115,52 @@ def apply_lambda(mfits, fname, maskname, options):
     # pixel_ and beta_set are lists containing the
     # measured values of beta for each scientific slit
     (pixel_set, alpha_set, beta_set, gamma_set, 
-            delta_set) = mechanical_to_science_slit()
+            delta_set) = mechanical_to_science_slit(bs, slitedges, lambdadata)
 
-    merit_fun = Fit.mpfit_residuals(mask_model)
-
-    # FIT Alphas
-    print "Alpha fit"
-    alpha_lsf = fit_mask([0.99, 0, 0, 1024], np.concatenate(alpha_set))
-
-    # FIT Betas
-    print "Beta fit"
-    beta_lsf = fit_mask([40., 0, 0, 1024], np.concatenate(beta_set))
-
-        # FIT Gammas
-    print "Gamma fit"
-    gamma_lsf = fit_mask([7e-13, 0, 0, 1024], np.concatenate(gamma_set))
-
-        # FIT Deltas
-    print "Delta fit"
-    delta_lsf = fit_mask([1000, 0, 0, 1024.], np.concatenate(delta_set))
+    print("{0}: Fitting across the mask...".format(maskname))
+    print("{0}:\t...alpha ".format(maskname))
+    alpha_lsf = fit_mask([0.99, 0, 0, 1024], pixel_set, 
+            np.concatenate(alpha_set))
+    print("{0}:\t...beta".format(maskname))
+    beta_lsf = fit_mask([40., 0, 0, 1024], pixel_set, 
+            np.concatenate(beta_set))
+    print("{0}:\t...gamma".format(maskname))
+    gamma_lsf = fit_mask([7e-13, 0, 0, 1024], pixel_set, 
+            np.concatenate(gamma_set))
+    print("{0}\t...delta".format(maskname))
+    delta_lsf = fit_mask([1000, 0, 0, 1024.], pixel_set, 
+            np.concatenate(delta_set))
 
     pixels = np.concatenate(pixel_set)
 
-    print alpha_lsf.params
-    print beta_lsf.params
-    print gamma_lsf.params
-    print delta_lsf.params
-
-    pl.ion()
-
+    fn = os.path.join(path, "mask_solution_{0}.npy".format(fname))
+    try: os.remove(fn)
+    except: pass
+    np.save(fn, {"alpha_lsf": alpha_lsf, "beta_lsf": beta_lsf, 
+        "gamma_lsf": gamma_lsf, "delta_lsf": delta_lsf,
+        "pixels": pixel_set, "alphas": alpha_set, "betas": beta_set,
+        "gammas": gamma_set, "deltas": delta_set})
 
     alphas, betas, gammas, deltas = map(np.concatenate, [alpha_set, beta_set,
         gamma_set, delta_set])
-    
-    def plotfun(px, ys, lsf, i):
-        pl.plot(px, ys, '.')
-        params = np.copy(lsf.params[0:5])
-        params[4] = lsf.params[4+i]
-        my = mask_model(params, [px])
-        pl.plot(px, my)
-
-    pl.figure(3)
-    pl.clf()
-    pl.subplot(2,2,1)
-    pl.plot(pixels, alphas, '.')
-    for i in xrange(len(pixel_set)):
-        plotfun(pixel_set[i], alpha_set[i], alpha_lsf, i)
-
-    pl.subplot(2,2,2)
-    for i in xrange(len(pixel_set)):
-        plotfun(pixel_set[i], beta_set[i], beta_lsf, i)
-
-    pl.subplot(2,2,3)
-    pl.plot(pixels, np.concatenate(gamma_set), '.')
-    for i in xrange(len(pixel_set)):
-        plotfun(pixel_set[i], gamma_set[i], gamma_lsf, i)
-
-    pl.subplot(2,2,4)
-    pl.plot(pixels, np.concatenate(delta_set), '.')
-    for i in xrange(len(pixel_set)):
-        plotfun(pixel_set[i], delta_set[i], delta_lsf, i)
-
-
+   
     def convfun(params, px, i):
         pp = np.copy(params[0:5])
         pp[4] = params[4+i]
         return mask_model(pp, [px])
 
     # write lambda
-    lams = np.zeros((2048, 2048), dtype=np.float)
+    lams = np.zeros((2048, 2048), dtype=np.float32)
     xx = np.arange(2048)
     for i in xrange(len(pixel_set)):
-        print "---", i
         edges = slitedges[i]
         top = edges["top"](xx)
         bottom = edges["bottom"](xx)
         px = np.arange(np.min(bottom), np.max(top))
 
-        print "alphas"
         alphas = convfun(alpha_lsf.params, px, i)
-        print "betas"
         betas = convfun(beta_lsf.params, px, i)
-        print "gammas"
         gammas = convfun(gamma_lsf.params, px, i)
-        print "deltas"
         deltas = convfun(delta_lsf.params, px, i)
 
         cnt = 0
@@ -309,14 +176,15 @@ def apply_lambda(mfits, fname, maskname, options):
 
 
 
+    print("{0}: writing lambda".format(maskname))
     hdu = pf.PrimaryHDU(lams*1e4)
-    fn = os.path.join(path, "lambda_solution_{0}".format(fname))
+    fn = os.path.join(path, "lambda_solution_{0}.fits".format(fname))
     try: os.remove(fn)
     except: pass
     hdu.writeto(fn)
 
-    print "rectifying"
-    rectified = np.zeros((2048, 2048), dtype=np.float)
+    print("{0}: rectifying".format(maskname))
+    rectified = np.zeros((2048, 2048), dtype=np.float32)
     ll_fid = lams[1024, :]
     for i in xrange(2048):
         ll = lams[i,:]
@@ -326,7 +194,7 @@ def apply_lambda(mfits, fname, maskname, options):
         rectified[i,:] = f(ll_fid)
 
     hdu = pf.PrimaryHDU(rectified)
-    fn = os.path.join(path, "rectified_{0}".format(fname))
+    fn = os.path.join(path, "rectified_{0}.fits".format(fname))
     try: os.remove(fn)
     except: pass
     hdu.writeto(fn)
@@ -340,7 +208,6 @@ def apply_lambda(mfits, fname, maskname, options):
             1519, 1476, 1433, 1396, 1300, 1073, 1036, 904, 858, 806, 725,
             682, 633, 591, 546, 497, 459, 408, 365, 316, 282, 235, 192]
     for i in poss:
-        print i
         ll = lams[i,:]
         ss = data[i,:]
 
@@ -353,16 +220,97 @@ def apply_lambda(mfits, fname, maskname, options):
         fvs.append(pp.params[1])
 
     pl.ylim([-.1,1.1])
-    print np.std(fvs)
     pl.figure(5)
     pl.clf()
     pl.plot(poss, fvs,'*')
 
+def mechanical_to_science_slit(bs, slitedges, lambdadata):
+    '''Convert mechanical slit fits to fits accross the science slit'''
+    all_pixs = []
+    all_alphas = []
+    all_betas = []
+    all_gammas = []
+    all_deltas = []
 
+    for i in xrange(len(bs.ssl)):
+        ss = bs.ssl[i]
+        edges = slitedges[i]
+
+        csuslits = bs.scislit_to_csuslit(i)
+
+        scislit_pixs = []
+        scislit_alphas = []
+        scislit_betas = []
+        scislit_gammas = []
+        scislit_deltas = []
+        for csuslit in csuslits:
+            sol = lambdadata[csuslit-1]
+            ff = filter(filter_2d_solutions, sol["2d"])
+            assert(sol["slitno"] == csuslit)
+            ar = np.array(map(lambda x:x[0], ff))
+
+            pix = ar[:, 5]
+            alpha = ar[:, 0]
+            beta = ar[:, 1]
+            gamma = ar[:, 2]
+            delta = ar[:, 3]
+
+            scislit_pixs.extend(pix)
+            scislit_alphas.extend(alpha)
+            scislit_betas.extend(beta)
+            scislit_gammas.extend(gamma)
+            scislit_deltas.extend(delta)
+
+        (scislit_pixs, scislit_alphas, scislit_betas, scislit_gammas, 
+                scislit_deltas) = map(np.array, [scislit_pixs, 
+                    scislit_alphas, scislit_betas, scislit_gammas, 
+                    scislit_deltas])
+
+        srt = np.argsort(scislit_pixs)
+        scislit_pixs = scislit_pixs[srt]
+        scislit_alphas = scislit_alphas[srt]
+        scislit_betas = scislit_betas[srt]
+        scislit_gammas = scislit_gammas[srt]
+        scislit_deltas = scislit_deltas[srt]
+
+        all_pixs.append(scislit_pixs)
+        all_alphas.append(scislit_alphas)
+        all_betas.append(scislit_betas)
+        all_gammas.append(scislit_gammas)
+        all_deltas.append(scislit_deltas)
+
+    return [all_pixs, all_alphas, all_betas, all_gammas, all_deltas]
+
+def filter_2d_solutions(x):
+    '''Select quality fits in two dimensional solution'''
+    sds = x[1] # standard deviation of first fit parameter
+    MAD = x[2] # Median absolute deviation of fit to data
+    success = x[3] # Binary success criteria
+
+    return (sds is not None) \
+        and (sds[0] < 2e-5) \
+        and (MAD < 0.1) \
+        and (success)
+
+def tester():
+    handle_lambdas(['m110323_2718.fits'], 
+            'npk_calib3_q1700_pa_0',
+            Options.wavelength)
+
+def apply_lambda_tester():
+    fn = "/users/npk/desktop/c9_reduce/npk_calib3_Q1700_pa_0/m110323_2718.fits"
+    mfits = IO.readmosfits(fn)
+
+    apply_lambda(mfits, "m110323_2718", "npk_calib3_Q1700_pa_0", 
+            Options.wavelength)
+
+#
+# Fitting Methods
+#   
+
+# Physical models for instrument
 def param_guess_functions(band):
-    # The following values are determined through experimentation
-    # with c9 data
-
+    '''Parameters determined from experimentation with cooldown 9 data'''
     alpha_pixel = np.poly1d([-8.412e-16, 3.507e-12, -3.593e-9, 
         6.303e-9, 0.9963])
 
@@ -380,8 +328,47 @@ def param_guess_functions(band):
 
     return [alpha_pixel, sinbeta_position, sinbeta_pixel, 
             gamma_pixel, delta_pixel]
-
     
+def dlambda_model(p):
+    ''' Returns an approximate dlambda/dpixel '''
+    x = 1024
+    order = p[4]
+    y = p[5]
+    (alpha, sinbeta, gamma, delta) = p[0:4]
+    sinbeta = np.radians(sinbeta)
+    d = 1e3/110.5 # Groove spacing in micron
+    pixelsize, focal_length = 18.0, 250e3 # micron
+    scale = pixelsize/focal_length
+
+    costerm = np.cos(scale * (y-1024))
+
+    return scale/(order/d) * sinbeta / costerm
+
+def pick_linelist(header):
+    band = header["filter"]
+    Argon_on = header["pwstata8"] == 1
+    Neon_on = header["pwstata7"] == 1
+
+    assert(header["pwloca7"].rstrip() == "Neon")
+    assert(header["pwloca8"].rstrip() == "Argon")
+
+    lines = []
+    if band == 'H':
+        if Argon_on:
+            lines.extend([1.465435, 1.474317, 1.505062, 1.517684, 1.530607, 
+        1.533334, 1.540685, 1.590403, 1.599386, 1.618444, 1.644107,
+        1.674465, 1.744967, 1.791961])
+        if Neon_on:
+            lines.extend([1.493386, 1.499041, 1.523487, 1.5352384, 
+                    1.5411803, 1.5608478, 1.6027147, 1.6272797, 
+                    1.6409737, 1.6479254, 1.6793378, 1.7166622])
+
+
+    lines = np.array(lines)
+    lines = np.sort(lines)
+
+    return lines
+
 def guess_wavelength_solution(slitno, header, bs):
     '''Given a slit number guess the coefficient values
     return [order, y0, alpha, sinbeta, gamma, delta]
@@ -493,8 +480,6 @@ def fit_model_to_lines(xs, sxs, lines, parguess, options, fixed):
     return [ np.abs((wavelength_model(lsf.params, xs[ok]) - lines[ok]))*1e4,
             lsf.params, lsf.perror]
 
-
-
 def fit_wavelength_solution(data, parguess, lines, options, search_num=45,
         fixed=False):
     '''Tweaks the guessed parameter values and provides 1d lambda solution
@@ -525,10 +510,11 @@ def fit_wavelength_solution(data, parguess, lines, options, search_num=45,
                 pars, options, fixed)
 
         MAD = np.median(deltas)
-        print("MAD: %3.3f A" % MAD)
 
-        if MAD > 0.1: print "  search"
-        else: break
+        if MAD > 0.1: 
+            pass # continue to search
+        else: 
+            break
 
 
     if MAD < 0.1:
@@ -539,10 +525,14 @@ def fit_wavelength_solution(data, parguess, lines, options, search_num=45,
         print("Could not find parameters")
         return [[], parguess, None, []]
 
+#
+# Two dimensional wavelength fitting
+#
 def fit_outwards_xcor(data, sol_1d, lines, options):
     lags = np.arange(-5,5)
     pix = np.arange(2048.)
 
+    print("outwards fitting...")
     def sweep(deltays):
         deltas, params0, perror, sigmas = sol_1d
         params0 = np.array(params0)
@@ -553,10 +543,9 @@ def fit_outwards_xcor(data, sol_1d, lines, options):
         for deltay in deltays:
             params = params0.copy()
             params[5] = y0+deltay
-            print("Fitting at %i" % params[5])
 
             if (params[5] < 0) or (params[5] > 2047):
-                print "%i: Skipping out of bounds %i" % (deltay, params[5])
+                print("%i: Skipping out of bounds %i" % (deltay, params[5]))
                 continue
 
             spec2 = np.median(data[params[5]-1:params[5]+1, :], axis=0)
@@ -568,10 +557,7 @@ def fit_outwards_xcor(data, sol_1d, lines, options):
             fp = Fit.mpfitpeak(lags, np.array(xcs))
             spec = spec2
 
-            print "%i: Shift is %1.2f pix. Beta now: %3.4f" % (params[5], 
-                    fp.params[1], params[1])
             params[1] -= np.degrees(fp.params[1] * 18/250e3)
-            print "%i: Beta --->: %3.4f" % (params[5], params[1])
 
             [deltas, params, perror, sigmas] = fit_wavelength_solution(
                     data, params, lines, options, search_num=5, fixed=False)
@@ -596,43 +582,7 @@ def fit_outwards_xcor(data, sol_1d, lines, options):
 
     return params
 
-
-def fit_outwards(data, sol_1d, lines, options):
-
-    def sweep(DY, N):
-        deltas, params, perror, sigmas = sol_1d
-        ret = []
-        for deltay in range(N):
-            params[5] += DY
-            if (params[5] < 0) or (params[5] > 2047):
-                print "Skipping out of bounds %i" % params[5]
-                continue
-
-            print("Fitting at %i" % params[5])
-            [deltas, params, perror, sigmas] = fit_wavelength_solution(data, 
-                    params, lines, options, search_num=7)
-            success = True
-
-            if (len(deltas) < 2) or (np.median(deltas) > .4):
-                success = False
-
-            ret.append([params, perror, np.median(deltas), success])
-
-        return ret
-    
-    pix = np.arange(2048.)
-
-    params_up = sweep(1, 18) # sweep up
-    params_down = sweep(-1, 18) # sweep down
-
-    params_down.reverse()
-    params_down.extend(params_up)
-
-    return params_down
-
-
 def merge_solutions(lamout, slitno, order, bs, sol_2d, options):
-
     ff = filter(lambda x:
             (x[1] is not None) and
             (x[1][0] < 2e-5) and
@@ -678,22 +628,21 @@ def merge_solutions(lamout, slitno, order, bs, sol_2d, options):
 
     return lamout
 
-    
-def dlambda_model(p):
-    ''' Returns an approximate dlambda/dpixel '''
-    x = 1024
-    order = p[4]
-    y = p[5]
-    (alpha, sinbeta, gamma, delta) = p[0:4]
-    sinbeta = np.radians(sinbeta)
-    d = 1e3/110.5 # Groove spacing in micron
-    pixelsize, focal_length = 18.0, 250e3 # micron
-    scale = pixelsize/focal_length
 
-    costerm = np.cos(scale * (y-1024))
+def fit_mask(pars, pixel_set, ys):
+    '''Fit mask model function to the whole mask'''
+    merit_fun = Fit.mpfit_residuals(mask_model)
+    pars.extend(np.zeros(len(pixel_set)))
+    pars = np.array(pars)
 
-    return scale/(order/d) * sinbeta / costerm
+    parinfo = []
+    for par in pars:
+        parinfo.append({"fixed": 0, "value": par, "limited": [0, 0], 
+            "limits": [0, 0]})
 
+    return Fit.mpfit_do(merit_fun, pixel_set, ys, parinfo)
+
+# Model Functions
 
 def wavelength_model(p, x):
     ''' Returns wavelength as function of pixel (x)
@@ -747,61 +696,37 @@ def mask_model(p, xs):
 
     return np.array(vals).ravel()
 
-def beta_model(p, xs):
-    '''Fits a continuous smooth function to betas in the mask.
-    Parameters:
-        p[0] -- center pixel position
-        p[1] -- center beta position
-        p[2] -- radius in pixel direction
-        p[3] -- radius in beta direction
-        p[4:] -- [N] list of discontinuities
-        
-        xs -- A list of [N] lists. Each list contains the beta values for
-        each slit.
-        '''
+ 
+def plot_mask_fits(fname):
+    def plotfun(px, ys, lsf, i):
+        pl.plot(px, ys, '.')
+        params = np.copy(lsf.params[0:5])
+        params[4] = lsf.params[4+i]
+        my = mask_model(params, [px])
+        pl.plot(px, my)
 
-    cpix = p[0]
-    cbeta = p[1]
-    radius_pix = p[2]
-    radius_beta = p[3]
-    coeffs = p[4:]
+    pl.figure(3)
+    pl.clf()
+    pl.subplot(2,2,1)
+    pl.plot(pixels, alphas, '.')
+    for i in xrange(len(pixel_set)):
+        plotfun(pixel_set[i], alpha_set[i], alpha_lsf, i)
 
-    bs = []
-    for i in xrange(len(coeffs)):
-        x = np.array(xs[i]) - cpix
-        c = coeffs[i]
-        y = np.abs(radius_beta)*np.sqrt(1-(x/radius_pix)**2) + cbeta - c
-        bs.extend(y)
+    pl.subplot(2,2,2)
+    for i in xrange(len(pixel_set)):
+        plotfun(pixel_set[i], beta_set[i], beta_lsf, i)
 
-    return np.array(bs).ravel()
+    pl.subplot(2,2,3)
+    pl.plot(pixels, np.concatenate(gamma_set), '.')
+    for i in xrange(len(pixel_set)):
+        plotfun(pixel_set[i], gamma_set[i], gamma_lsf, i)
 
-
-def pick_linelist(header):
-    band = header["filter"]
-    Argon_on = header["pwstata8"] == 1
-    Neon_on = header["pwstata7"] == 1
-
-    assert(header["pwloca7"].rstrip() == "Neon")
-    assert(header["pwloca8"].rstrip() == "Argon")
-
-    lines = []
-    if band == 'H':
-        if Argon_on:
-            lines.extend([1.465435, 1.474317, 1.505062, 1.517684, 1.530607, 
-        1.533334, 1.540685, 1.590403, 1.599386, 1.618444, 1.644107,
-        1.674465, 1.744967, 1.791961])
-        if Neon_on:
-            lines.extend([1.493386, 1.499041, 1.523487, 1.5352384, 
-                    1.5411803, 1.5608478, 1.6027147, 1.6272797, 
-                    1.6409737, 1.6479254, 1.6793378, 1.7166622])
+    pl.subplot(2,2,4)
+    pl.plot(pixels, np.concatenate(delta_set), '.')
+    for i in xrange(len(pixel_set)):
+        plotfun(pixel_set[i], delta_set[i], delta_lsf, i)
 
 
-    lines = np.array(lines)
-    lines = np.sort(lines)
-
-    return lines
-
-    
 
 def plot_data_quality(fname):
     global solution
