@@ -64,6 +64,12 @@ def tester3(band):
                     "combflat_2d_%s.fits" % band)
     res = np.load(os.path.join(path, "slit-edges_%s.npy" % band))
 
+def tester4():
+    options = Options.flat
+    path = os.path.join('/scr2/mosfire/110326', "m110326_%4.4i.fits")
+    handle_flats([path % 3265, path % 3266, path % 3279], 
+                    "npk_calib4_q1700_pa_0", 'H', options)
+
 
 def handle_flats(flatlist, maskname, band, options):
     '''
@@ -84,6 +90,7 @@ def handle_flats(flatlist, maskname, band, options):
     file {maskname}/edges.np
     '''
 
+    tick = time.time()
     try:
             os.mkdir(os.path.join(options["outdir"], maskname))
     except OSError:
@@ -92,7 +99,7 @@ def handle_flats(flatlist, maskname, band, options):
     # Imcombine
     combine(flatlist, maskname, band, options)
     (header, data, bs) = IO.readmosfits(flatlist[0])
-    path = os.path.join(options["outdir"], "npk_calib3_q1700_pa_0", 
+    path = os.path.join(options["outdir"], header["maskname"],
                     "combflat_2d_%s.fits" % band)
     (header, data) = IO.readfits(path)
 
@@ -101,13 +108,14 @@ def handle_flats(flatlist, maskname, band, options):
     results[-1]["maskname"] = maskname
     results[-1]["band"] = band
     np.save(os.path.join(options["outdir"], maskname, 
-            "slit-edges_%s" % band), results)
+            "slit-edges_{0}".format(band)), results)
     save_ds9_edges(results, options)
 
     # Generate Flat
     out = os.path.join(options["outdir"], maskname, 
                     "pixelflat_2d_%s.fits" % (band))
     make_pixel_flat(data, results, options, out)
+    print "Pixel flat took {0:6.4} s".format(time.time()-tick)
 
 def make_pixel_flat(data, results, options, outfile):
     '''
@@ -123,7 +131,6 @@ def make_pixel_flat(data, results, options, outfile):
 
         return v
 
-    tick = time.clock()
     xs = np.arange(Options.npix)
     flat = np.ones(shape=(Options.npix, Options.npix))
 
@@ -168,7 +175,6 @@ def make_pixel_flat(data, results, options, outfile):
             os.remove(outfile)
     hdu.writeto(outfile)
 
-    print "Pixel flat took %i s" % (time.clock()-tick)
 
 def save_ds9_edges(results, options):
     '''
@@ -278,16 +284,16 @@ def find_edge_pair(data, y, roi_width):
     scatters = []
 
     #1 
-    rng = np.linspace(10, 2040, 100).astype(np.int)
+    rng = np.linspace(10, 2040, 50).astype(np.int)
     for i in rng:
         xp = i
         #2
         v = select_roi(data, roi_width)
         xs = np.arange(len(v))
 
-        # TODO: The number 200 is hardcoded and essentially made up.
+        # TODO: The number below is hardcoded and essentially made up.
         # A smarter piece of code belongs here.
-        if np.median(v) < 200:
+        if np.median(v) < 250:
             xposs_missing.append(xp)
             continue
 
@@ -303,9 +309,22 @@ def find_edge_pair(data, y, roi_width):
 
             between = offset + width/2
             if 0 < between < len(v)-1:
-                scatters.append(np.min(v[between-2:between+2])) # 5
+                start = np.max([0, between-2])
+                stop = np.min([len(v),between+2])
+                scatters.append(np.min(v[start:stop])) # 5
+
+                if False:
+                    pl.figure(2)
+                    pl.clf()
+                    tmppix = np.arange(y-roi_width, y+roi_width)
+                    tmpx = np.arange(len(v))
+                    pl.scatter(tmppix, v)
+                    pl.plot(tmppix, Fit.fit_disjoint_pair(ff[0], tmpx))
+                    pl.draw()
+
             else:
                 scatters.append(np.nan)
+
         else:
             xposs_missing.append(xp)
             print "Skipping: %i" % (xp)
@@ -332,22 +351,30 @@ def fit_edge_poly(xposs, xposs_missing, yposs, widths, order):
     fun = np.poly1d(Fit.polyfit_clip(xposs, yposs, 2))
     wfun = np.poly1d(Fit.polyfit_clip(xposs, widths, 2))
 
+    if False:
+        pl.ion()
+
+        pl.figure(1)
+        pl.clf()
+        pl.scatter(xposs, yposs)
+        pl.scatter(xposs, yposs+widths)
+
     xposs = np.append(xposs, xposs_missing)
     yposs = np.append(yposs, fun(xposs_missing))
     widths = np.append(widths, wfun(xposs_missing))
 
-
     # Remove any fits that deviate wildly from the 2nd order polynomial
-    ok = np.abs(yposs - fun(xposs)) < 5
+    ok = np.abs(yposs - fun(xposs)) < 1
     if not ok.any():
             raise Exception("Flat is not well illuminated? Cannot find edges")
 
-    # Now refit to proper order
+    # Now refit to user requested order
     fun = np.poly1d(Fit.polyfit_clip(xposs[ok], yposs[ok], order))
     wfun = np.poly1d(Fit.polyfit_clip(xposs[ok], widths[ok], order))
     res = fun(xposs[ok]) - yposs[ok]
     sd = np.std(res)
     ok = np.abs(res) < 2*sd
+
 
     return (fun, wfun, res, sd, ok)
 
@@ -398,7 +425,7 @@ def find_and_fit_edges(data, ssl, options):
             fit over
 
     '''
-    y = 2028
+    y = 2029
     toc = 0
     slits = []
     top = [0., np.float(Options.npix)]
@@ -413,7 +440,9 @@ def find_and_fit_edges(data, ssl, options):
     # 1
     result["top"] = np.poly1d([2027])
 
-    for target in range(len(ssl) - 1):
+    for target in xrange(len(ssl) - 1):
+        print target
+
         y -= 44.25 * numslits[target]
         print "-------------==========================-------------"
         print "Finding Slit Edges for %s starting at %4.0i" % (
