@@ -27,13 +27,18 @@ npk   May  4 2011
 '''
 
 import os
+import time
 
 import numpy as np
 import pylab as pl
 import pyfits as pf
+from multiprocessing import Pool
 from scipy.interpolate import interp1d
 
 from MOSFIRE import CSU, Fit, IO, Options
+
+#from IPython.Shell import IPShellEmbed
+#ipshell = IPShellEmbed()
 
 __version__ = "27Apr2011"
 
@@ -47,7 +52,7 @@ reload(Fit)
 #
 
     
-def handle_lambdas(imglist, maskname, options):
+def handle_lambdas(filelist, maskname, options):
     ''' handle_lambdas is the entry point to the Wavelengths module. '''
     
     path = os.path.join(options["outdir"], maskname)
@@ -55,45 +60,65 @@ def handle_lambdas(imglist, maskname, options):
         raise Exception("Output directory '%s' does not exist. This " 
                 "directory should exist." % path)
 
-    for fname in imglist:
+    for fname in filelist:
         fp = os.path.join(path, fname)
 
         mfits = IO.readmosfits(fp)
         fit_lambda(mfits, fname, maskname, options)
         apply_lambda(mfits, fname, maskname, options)
 
+def fit_lambda_helper(slitno):
+    '''This helper function exists for multiprocessing suport'''
+
+    global header, bs, data, linelist, lamout
+    tick = time.time()
+
+    print("-==== Fitting Slit %i" % slitno)
+    parguess = guess_wavelength_solution(slitno, header, bs)
+    sol_1d = fit_wavelength_solution(data, parguess, 
+            linelist, Options.wavelength)
+
+    sol_2d = fit_outwards_xcor(data, sol_1d, linelist, Options.wavelength)
+    lamout = merge_solutions(lamout, slitno, parguess[4], bs, sol_2d, 
+            Options.wavelength)
+
+    sol = {"slitno": slitno, "center_sol": [sol_1d[1], sol_1d[2]], 
+            "sigmas": sol_1d[3], "2d": sol_2d, "lines": linelist,
+            "csupos_mm": parguess[-1]}
+    print "%i] TOOK: %i" % (slitno, time.time()-tick)
+    return sol
+
+
+
 def fit_lambda(mfits, fname, maskname, options):
     '''Fit the two-dimensional wavelength solution to each science slit'''
+    global header, bs, data, linelist, lamout
     np.seterr(all="ignore")
     
+    path = os.path.join(options["outdir"], maskname)
+    fn = os.path.join(path, "lambda_coeffs_{0}.npy".format(
+        fname.replace(".fits","")))
+
     (header, data, bs) = mfits
     linelist = pick_linelist(header)
     solutions = []
     lamout = np.zeros(shape=(2048, 2048), dtype=np.float32)
-    for slitno in range(1, 47):
-        print("-==== Fitting Slit %i" % slitno)
-        parguess = guess_wavelength_solution(slitno, header, bs)
-        sol_1d = fit_wavelength_solution(data, parguess, 
-                linelist, options)
 
-        sol_2d = fit_outwards_xcor(data, sol_1d, linelist, options)
-        lamout = merge_solutions(lamout, slitno, parguess[4], bs, sol_2d, 
-                options)
+    tock = time.time()
+    p = Pool()
+    solutions = p.map(fit_lambda_helper, range(1,47))
+    p.close()
 
-        sol = {"slitno": slitno, "center_sol": [sol_1d[1], sol_1d[2]], 
-                "sigmas": sol_1d[3], "2d": sol_2d, "lines": linelist,
-                "csupos_mm": parguess[-1]}
-        solutions.append(sol)
+    tick = time.time()
 
-        path = os.path.join(options["outdir"], maskname)
-        fn = os.path.join(path, "lambda_coeffs_{0}.npy".format(
-            fname.replace(".fits","")))
+    print "-----> Mask took %i" % (tick-tock)
 
-        try: os.remove(fn)
-        except: pass
-        np.save(fn, solutions)
+    try: os.remove(fn)
+    except: pass
+    np.save(fn, solutions)
 
     return solutions
+
 
 def apply_lambda(mfits, fname, maskname, options):
     '''Convert solutions into final output products'''
@@ -133,7 +158,8 @@ def apply_lambda(mfits, fname, maskname, options):
 
     pixels = np.concatenate(pixel_set)
 
-    fn = os.path.join(path, "mask_solution_{0}.npy".format(fname))
+    fn = os.path.join(path, "mask_solution_{0}.npy".format(
+        fname.replace(".fits", "")))
     try: os.remove(fn)
     except: pass
     np.save(fn, {"alpha_lsf": alpha_lsf, "beta_lsf": beta_lsf, 
@@ -152,6 +178,7 @@ def apply_lambda(mfits, fname, maskname, options):
     # write lambda
     lams = np.zeros((2048, 2048), dtype=np.float32)
     xx = np.arange(2048)
+
     for i in xrange(len(pixel_set)):
         edges = slitedges[i]
         top = edges["top"](xx)
@@ -178,7 +205,7 @@ def apply_lambda(mfits, fname, maskname, options):
 
     print("{0}: writing lambda".format(maskname))
     hdu = pf.PrimaryHDU(lams*1e4)
-    fn = os.path.join(path, "lambda_solution_{0}.fits".format(fname))
+    fn = os.path.join(path, "lambda_solution_{0}".format(fname))
     try: os.remove(fn)
     except: pass
     hdu.writeto(fn)
@@ -194,14 +221,12 @@ def apply_lambda(mfits, fname, maskname, options):
         rectified[i,:] = f(ll_fid)
 
     hdu = pf.PrimaryHDU(rectified)
-    fn = os.path.join(path, "rectified_{0}.fits".format(fname))
+    fn = os.path.join(path, "rectified_{0}".format(fname))
     try: os.remove(fn)
     except: pass
     hdu.writeto(fn)
 
 
-    pl.figure(4)
-    pl.clf()
 
     fvs = []
     poss= [2012, 1955, 1925, 1868, 1824, 1774, 1740, 1700, 1654, 1614, 1575,
@@ -214,15 +239,9 @@ def apply_lambda(mfits, fname, maskname, options):
         roi = np.abs(ll-1.5997)<.001
 
         if not roi.any(): continue
-        pl.plot(ll[roi]*1e4, ss[roi]/np.max(ss[roi]))
 
         pp = Fit.mpfitpeak(ll[roi]*1e4, ss[roi])
         fvs.append(pp.params[1])
-
-    pl.ylim([-.1,1.1])
-    pl.figure(5)
-    pl.clf()
-    pl.plot(poss, fvs,'*')
 
 def mechanical_to_science_slit(bs, slitedges, lambdadata):
     '''Convert mechanical slit fits to fits accross the science slit'''
@@ -232,6 +251,7 @@ def mechanical_to_science_slit(bs, slitedges, lambdadata):
     all_gammas = []
     all_deltas = []
 
+    
     for i in xrange(len(bs.ssl)):
         ss = bs.ssl[i]
         edges = slitedges[i]
@@ -245,7 +265,8 @@ def mechanical_to_science_slit(bs, slitedges, lambdadata):
         scislit_deltas = []
         for csuslit in csuslits:
             sol = lambdadata[csuslit-1]
-            ff = filter(filter_2d_solutions, sol["2d"])
+            ff = filter_2d_solutions(sol["2d"])
+
             assert(sol["slitno"] == csuslit)
             ar = np.array(map(lambda x:x[0], ff))
 
@@ -281,27 +302,40 @@ def mechanical_to_science_slit(bs, slitedges, lambdadata):
 
     return [all_pixs, all_alphas, all_betas, all_gammas, all_deltas]
 
-def filter_2d_solutions(x):
+def filter_2d_solutions(vec):
     '''Select quality fits in two dimensional solution'''
-    sds = x[1] # standard deviation of first fit parameter
-    MAD = x[2] # Median absolute deviation of fit to data
-    success = x[3] # Binary success criteria
 
-    return (sds is not None) \
-        and (sds[0] < 2e-5) \
-        and (MAD < 0.1) \
-        and (success)
+
+    def filter_fun(x):
+        sds = x[1] # standard deviation of first fit parameter
+        MAD = x[2] # Median absolute deviation of fit to data
+        success = x[3] # Binary success criteria
+
+        return (sds is not None) \
+            and (sds[0] < 2e-5) \
+            and (MAD < 0.2) \
+            and (success)
+
+    return filter(filter_fun, vec)
 
 def tester():
-    handle_lambdas(['m110323_2718.fits'], 
-            'npk_calib3_q1700_pa_0',
+    handle_lambdas(['m110323_2737.fits'], 
+            'npk_calib4_q1700_pa_0',
             Options.wavelength)
 
+    if False:
+        handle_lambdas(['m110323_2718.fits'], 
+                'npk_calib3_q1700_pa_0',
+                Options.wavelength)
+
 def apply_lambda_tester():
-    fn = "/users/npk/desktop/c9_reduce/npk_calib3_Q1700_pa_0/m110323_2718.fits"
+    fn = Options.wavelength["outdir"] + \
+            "npk_calib3_q1700_pa_0/m110323_2718.fits"
+    fn = Options.wavelength["outdir"] + \
+            "npk_calib4_q1700_pa_0/m110323_2737.fits"
     mfits = IO.readmosfits(fn)
 
-    apply_lambda(mfits, "m110323_2718", "npk_calib3_Q1700_pa_0", 
+    apply_lambda(mfits, "m110323_2737", "npk_calib4_q1700_pa_0", 
             Options.wavelength)
 
 #
@@ -363,6 +397,17 @@ def pick_linelist(header):
                     1.5411803, 1.5608478, 1.6027147, 1.6272797, 
                     1.6409737, 1.6479254, 1.6793378, 1.7166622])
 
+    elif band == 'K':
+        if Neon_on:
+            lines.extend([2.1047, 2.17141, 2.22534, 2.24343, 2.25366, 2.2688, 
+                2.31068, 2.32667, 2.35718, 2.3643, 2.37081])
+
+        if Argon_on:
+            lines.extend([ 1.982291, 1.995052, 1.997118, 2.003114,2.003557, 
+                2.007441,2.032256, 2.057443, 2.062186, 2.065277,2.072200, 
+                2.073922,2.081672, 2.099184, 2.104157, 2.133871,2.154009, 
+                2.204558,2.208321, 2.211866, 2.253974, 2.297837,2.313952, 
+                2.385154,2.397306, 2.478337, 2.513213, 2.551218,2.566802])
 
     lines = np.array(lines)
     lines = np.sort(lines)
@@ -398,12 +443,26 @@ def guess_wavelength_solution(slitno, header, bs):
             csupos_mm]
 
 def find_known_lines(lines, ll, spec, options):
+    ''' 
+    lines[N]: list of lines in wavelength units
+    ll[2048]: lambda vector
+    spec[2048]: spectrum vector (as function of lambda)
+    options: wavelength options
+    '''
     inf = np.inf
     xs = []
     sxs = []
     sigmas = []
 
     pix = np.arange(2048.)
+
+    DRAW = False
+    if DRAW:
+        pl.ion()
+        pl.clf()
+        pl.figure(3)
+        pl.plot(spec)
+
     for lam in lines:
         f = options["fractional-wavelength-search"]
         roi = (f*lam < ll) & (ll < lam/f)
@@ -441,12 +500,18 @@ def find_known_lines(lines, ll, spec, options):
             xs.append(0.0)
             sxs.append(inf)
             continue
-
-
+        
         xs.append(lsf.params[1])
         sxs.append(lsf.perror[1])
         sigmas.append(lsf.params[2])
 
+        if DRAW:
+            pl.axvline(lsf.params[1], color='red')
+
+    if DRAW:
+        print "draw"
+        pl.xlim([453, 837])
+        pl.draw()
     return map(np.array, [xs, sxs, sigmas])
 
 def fit_model_to_lines(xs, sxs, lines, parguess, options, fixed):
@@ -511,15 +576,15 @@ def fit_wavelength_solution(data, parguess, lines, options, search_num=45,
 
         MAD = np.median(deltas)
 
-        if MAD > 0.1: 
+        if MAD > 0.2: 
             pass # continue to search
         else: 
             break
 
 
-    if MAD < 0.1:
-        print("%3.5f %4.3f %3.3e %4.1f" % (params[0], params[1], params[2], 
-            params[3]))
+    if MAD < 0.2:
+        #print("%3.5f %4.3f %3.3e %4.1f" % (params[0], params[1], params[2], 
+            #params[3]))
         return [deltas, params, perror, sigmas]
     else:
         print("Could not find parameters")
@@ -566,7 +631,8 @@ def fit_outwards_xcor(data, sol_1d, lines, options):
             if (len(deltas) < 2) or (np.median(deltas) > .4):
                 success = False
 
-            print "%i: Success: %i" % (params[5], success)
+            
+            #print "%i: Success: %i" % (params[5], success)
             ret.append([params, perror, np.median(deltas), success])
 
         return ret
@@ -583,19 +649,19 @@ def fit_outwards_xcor(data, sol_1d, lines, options):
     return params
 
 def merge_solutions(lamout, slitno, order, bs, sol_2d, options):
-    ff = filter(lambda x:
-            (x[1] is not None) and
-            (x[1][0] < 2e-5) and
-            (x[2] < .1) and
-            (x[3] == True), sol_2d)
+    ff = filter_2d_solutions(sol_2d)
     ar = np.array(map(lambda x: x[0], ff))
 
-    pixels = ar[:,5]
+    if len(ar) == 0:
+        print "This is bad"
+        return
+
 
     alphas = ar[:,0]
     betas = ar[:,1]
     gammas = ar[:,2]
     deltas = ar[:,3]
+    pixels = ar[:,5]
 
     alphamodel = np.poly1d(np.polyfit(pixels, alphas, 2))
     betamodel  = np.poly1d(np.polyfit(pixels, betas, 2))
@@ -604,10 +670,6 @@ def merge_solutions(lamout, slitno, order, bs, sol_2d, options):
 
     print "Alpha scatter: %3.6f" % np.std(alphas-alphamodel(pixels))
     print " Beta scatter: %3.4f" % np.std(betas-betamodel(pixels))
-    print "Fitting pixels: ", pixels
-
-    print betas
-    print alphas
 
     mn = np.min(pixels)-4
     if mn < 0: mn = 0
@@ -735,7 +797,7 @@ def plot_data_quality(fname):
 
     solutions = np.load(fname)
 
-    pp = PdfPages("/users/npk/desktop/mp.pdf")
+    pp = PdfPages("data_quality.pdf")
     filter_fun = (lambda x:
             (x[1] is not None) and
             (x[1][0] < 2e-5) and
@@ -856,6 +918,9 @@ def plot_data_quality(fname):
 if __name__ == "__main__":
     np.set_printoptions(precision=3)
     global bs, sol_2d, solution
+
+    tester()
+
     if False:
         tester()
 
@@ -863,8 +928,9 @@ if __name__ == "__main__":
                 (x[2] < .1) and (x[3] == True), sol_2d)
 
         ar = np.array(map(lambda x: x[0], ff))
-    else:
-        plot_data_quality("/Users/npk/desktop/c9_reduce/npk_calib3_q1700_pa_0/lambda_coeffs_m110323_2718.npy")
+    elif False:
+        plot_data_quality("/Users/npk/desktop/c9_reduce/"
+        "npk_calib3_q1700_pa_0/lambda_coeffs_m110323_2718.npy")
 
 
 
