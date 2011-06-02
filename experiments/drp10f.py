@@ -3,7 +3,7 @@
 
 Written around 26 May 2011 by npk.
 
-code is used to test B-splines outlier rejection with BIVARIATE Splines
+code is used to test B-splines outlier rejection with UNIVARIATE Splines
 
 
 Created drp10a.py and documented on pg 53 of drp notebook 1
@@ -45,92 +45,98 @@ xroi=slice(0,2048)
 slit = dat[yroi,xroi]
 lslit = lam[yroi,xroi]
 
-med = sp.ndimage.median_filter(slit, size=(11,3))
-deviation = (slit-med)/np.sqrt(np.abs(slit))
-OK = (np.abs(deviation) < 20).flatten()
-print slit.shape
+median_slit = sp.ndimage.median_filter(slit, size=(11,3))
 
 
 ltick = lslit[10,:]
 stick = slit[10,:]
+
+print "Creating transmission function"
+transmission = np.sum(slit,1)
+transmission /= np.median(transmission)
+slitpos = np.arange(len(transmission))
+pp = np.poly1d(np.polyfit(slitpos, transmission, 3))
+print pp
+
+pl.figure(2)
+pl.scatter(slitpos, transmission)
+pl.plot(slitpos, pp(slitpos))
+pl.show()
 
 print "Interpolation"
 xx = np.arange(slit.shape[1]*1.)
 yy = np.arange(slit.shape[0]*1.)
 
 X,Y = np.meshgrid(xx,yy)
-yy = Y.flatten()
+
 ls = lslit.flatten()
-ss = slit.flatten()
+ss = (slit*pp(Y)).flatten()
+
+sort = np.argsort(ls)
+ls = ls[sort]
+ss = ss[sort]
+
+OK = np.diff(ls) > 0.001
+OK = np.append(OK,False)
+
 
 for i in range(5):
     print "meshgrid created"
-    bs = II.bisplrep(yy[OK], ls[OK], ss[OK], kx=4, ky=4, task=-1,
-            tx=np.array([1.,2.,3.,4,5,max(yy)-5,max(yy)-4, max(yy)/2, max(yy)-3,max(yy)-2]),
-            #tx=np.arange(np.min(yy)+3, np.max(yy)-3, 2.),
-            ty=np.arange(np.min(ls), np.max(ls)),
-            nxest=10,
-            nyest=4000)
+
+    knots = np.arange(np.min(ls)+20, np.max(ls)-20, .08)
+    bs = II.splrep(ls[OK], ss[OK], k=3, task=-1, t=knots)
 
 
     print "Constructing background subtracted image"
     output = slit.copy()
     model = slit.copy()
     for i in xrange(output.shape[0]):
-        output[i,:] -= II.bisplev(i,lslit[i,:], bs)
-        model[i,:] = II.bisplev(i,lslit[i,:], bs)
+        output[i,:] -= II.splev(lslit[i,:], bs) * pp(i)
+        model[i,:] = II.splev(lslit[i,:], bs) * pp(i)
 
     std = output/np.sqrt(np.abs(model))
-    OK = OK & (std < 20).flatten()
+    OK = OK & (std < 10).flatten()
     print len(np.where(OK)[0])
+
 
 
 pl.figure(1)
 pl.clf()
 pl.plot(ltick, stick,'x')
-pl.plot(ltick, II.bisplev(10, ltick, bs))
+pl.plot(ltick, II.splev(ltick, bs))
 pl.show()
-
-pl.figure(2)
-pl.clf()
-roi = np.abs(ls-16945) < 1 
-pl.plot(yy[roi], ss[roi], 'x')
-pl.plot(yy[roi], (model.flatten())[roi],'o')
-pl.show()
-
-
 
 if True:
     hdu = pf.PrimaryHDU(np.array([output/np.std(np.abs(slit))]))
-    try: os.remove("e_std.fits")
+    try: os.remove("f_std.fits")
     except: pass
-    hdu.writeto("e_std.fits")
+    hdu.writeto("f_std.fits")
 
     hdu = pf.PrimaryHDU(np.array([output]))
-    try: os.remove("e_resid.fits")
+    try: os.remove("f_resid.fits")
     except: pass
-    hdu.writeto("e_resid.fits")
+    hdu.writeto("f_resid.fits")
 
     hdu = pf.PrimaryHDU(np.array([slit]))
-    try: os.remove("e_raw.fits")
+    try: os.remove("f_raw.fits")
     except: pass
-    hdu.writeto("e_raw.fits")
+    hdu.writeto("f_raw.fits")
 
     hdu = pf.PrimaryHDU(np.array([slit-output]))
-    try: os.remove("e_model.fits")
+    try: os.remove("f_model.fits")
     except: pass
-    hdu.writeto("e_model.fits")
+    hdu.writeto("f_model.fits")
 
     hdu = pf.PrimaryHDU(np.array([lslit]))
-    try: os.remove("e_lambda.fits")
+    try: os.remove("f_lambda.fits")
     except: pass
-    hdu.writeto("e_lambda.fits")
+    hdu.writeto("f_lambda.fits")
 
     mask = np.reshape(OK, slit.shape)
     mask = mask.astype(np.int16)
     hdu = pf.PrimaryHDU(np.array([mask]))
-    try: os.remove("e_mask.fits")
+    try: os.remove("f_mask.fits")
     except: pass
-    hdu.writeto("e_mask.fits")
+    hdu.writeto("f_mask.fits")
 
 
