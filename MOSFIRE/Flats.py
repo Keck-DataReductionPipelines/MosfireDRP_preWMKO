@@ -21,13 +21,19 @@ import scipy, scipy.ndimage
 import pyfits
 
 import MOSFIRE
-from MOSFIRE import Fit, IO, Options
+from MOSFIRE import Fit, IO, Options, CSU, Wavelength, Filters, Detector
 
 __version__ = "19Apr2011"
 
-reload(Fit)
-reload(IO)
-reload(Options)
+try:
+    __IPYTHON__
+    reload(Fit)
+    reload(IO)
+    reload(Options)
+    reload(Wavelength)
+    reload(Detector)
+except:
+    pass
 
 #from IPython.Shell import IPShellEmbed
 #start_shell = IPShellEmbed()
@@ -96,15 +102,28 @@ def handle_flats(flatlist, maskname, band, options):
     except OSError:
             pass
 
+    # Check
+    for fname in flatlist:
+        hdr, dat = IO.readfits(fname)
+        if hdr["filter"] != band:
+            raise Exception("Filter name %s does not match header filter name "
+                    "%s in file %s" % (band, hdr["filter"], fname))
+
     # Imcombine
     combine(flatlist, maskname, band, options)
-    (header, data, bs) = IO.readmosfits(flatlist[0])
+
+    print "Combined '%s' to '%s'" % (flatlist, maskname)
+    (header, data, bs, targs, ssl, msl, asl) = IO.readmosfits(flatlist[0])
+
     path = os.path.join(options["outdir"], header["maskname"],
                     "combflat_2d_%s.fits" % band)
     (header, data) = IO.readfits(path)
 
+    print "Flat written to %s" % path
+
+
     # Edge Trace
-    results = find_and_fit_edges(data, bs.ssl, options)
+    results = find_and_fit_edges(data, header, bs, options)
     results[-1]["maskname"] = maskname
     results[-1]["band"] = band
     np.save(os.path.join(options["outdir"], maskname, 
@@ -131,27 +150,33 @@ def make_pixel_flat(data, results, options, outfile):
 
         return v
 
-    xs = np.arange(Options.npix)
-    flat = np.ones(shape=(Options.npix, Options.npix))
+    flat = np.ones(shape=Detector.npix)
 
     for result in results[0:-1]:
         print result["Target_Name"]
         bf = result["bottom"]
         tf = result["top"]
+        try:
+            hpps = result["hpps"]
+        except:
+            print "No half power points for this slit"
+            hpps = [0, Detector.npix[0]]
+
+        xs = np.arange(hpps[0], hpps[1])
 
         top = pixel_min(tf(xs))
         bottom = pixel_max(bf(xs))
 
         print "Bounding top/bottom: %i/%i" % (bottom, top)
 
-        v = collapse_flat_box(data[bottom:top,:])
-        ok = v > 180
+        v = collapse_flat_box(data[bottom:top,hpps[0]:hpps[1]])
 
-        v = np.poly1d(np.polyfit(xs[ok],v[ok],
-            options['flat-field-order']))(xs).ravel()
+        x2048 = np.arange(Options.npix)
+        v = np.poly1d(np.polyfit(xs,v,
+            options['flat-field-order']))(x2048).ravel()
 
         for i in np.arange(bottom-1, top+1):
-                flat[i,:] = v
+            flat[i,:] = v
 
     for r in range(len(results)-2):
         print r
@@ -200,7 +225,8 @@ def save_ds9_edges(results, options):
 
             sy = top(sx) + 1
             ey = top(ex) + 1
-            ds9 += "line(%f, %f, %f, %f) # fixed=1 edit=0 move=0 rotate=0 delete=0" % (sx, sy, ex, ey)
+            ds9 += "line(%f, %f, %f, %f) # fixed=1 edit=0 move=0 rotate=0 delete=0\n" % (sx, sy, ex, ey)
+            ds9 += "line(%f, %f, %f, %f) # fixed=1 edit=0 move=0 rotate=0 delete=0\n" % (sx, sy, ex, ey)
 
             if i == W/2:
                     ds9 += " # text={S%2.0i (%s)}" % (S, 
@@ -212,6 +238,19 @@ def save_ds9_edges(results, options):
             ey = bottom(ex) + 1
             ds9 += "line(%f, %f, %f, %f) # fixed=1 edit=0 move=0 rotate=0 delete=0 color=blue\n" % (sx, sy, ex, ey)
 
+        # Vertical line indicating half power points
+        try:
+            hpps = res["hpps"]
+            sx = hpps[0] ; ex = hpps[0]
+            sy = bottom(sx) ; ey = top(sx)
+            ds9 += "line(%f, %f, %f, %f) # fixed=1 edit=0 move=0 rotate=0 delete=0\n" % (sx, sy, ex, ey)
+
+            sx = hpps[1] ; ex = hpps[1]
+            sy = bottom(sx) ; ey = top(sx)
+            ds9 += "line(%f, %f, %f, %f) # fixed=1 edit=0 move=0 rotate=0 delete=0\n" % (sx, sy, ex, ey)
+        except:
+            continue
+        
     band = results[-1]["band"]
     fn = os.path.join(options["outdir"], results[-1]["maskname"], 
                     "slit-edges_%s.ds9" % band)
@@ -237,12 +276,13 @@ def combine(flatlist, maskname, band, options):
     IO.imcombine(flatlist, out, reject="sigclip")
 
 
-def find_edge_pair(data, y, roi_width):
+def find_edge_pair(data, y, roi_width, hpps):
     '''
     find_edge_pair finds the edge of a slit pair in a flat
 
     data[2048x2048]: a well illuminated flat field [DN]
     y: guess of slit edge position [pix]
+    hpps[2]: estimate of of spectral half power points [pix]
 
     Moves along the edge of a slit image
             - At each location along the slit edge, determines
@@ -293,7 +333,7 @@ def find_edge_pair(data, y, roi_width):
 
         # TODO: The number below is hardcoded and essentially made up.
         # A smarter piece of code belongs here.
-        if np.median(v) < 250:
+        if (np.median(v) < 450) or (xp < hpps[0]) or (xp > hpps[1]):
             xposs_missing.append(xp)
             continue
 
@@ -351,13 +391,6 @@ def fit_edge_poly(xposs, xposs_missing, yposs, widths, order):
     fun = np.poly1d(Fit.polyfit_clip(xposs, yposs, 2))
     wfun = np.poly1d(Fit.polyfit_clip(xposs, widths, 2))
 
-    if False:
-        pl.ion()
-
-        pl.figure(1)
-        pl.clf()
-        pl.scatter(xposs, yposs)
-        pl.scatter(xposs, yposs+widths)
 
     xposs = np.append(xposs, xposs_missing)
     yposs = np.append(yposs, fun(xposs_missing))
@@ -368,6 +401,18 @@ def fit_edge_poly(xposs, xposs_missing, yposs, widths, order):
     if not ok.any():
             raise Exception("Flat is not well illuminated? Cannot find edges")
 
+    if False:
+        pl.ion()
+
+        pl.figure(1)
+        pl.clf()
+        pl.scatter(xposs, yposs)
+        pl.scatter(xposs, yposs+widths)
+
+        pl.plot(xposs[ok], yposs[ok])
+        pl.plot(xposs[ok], yposs[ok]+widths[ok])
+
+
     # Now refit to user requested order
     fun = np.poly1d(Fit.polyfit_clip(xposs[ok], yposs[ok], order))
     wfun = np.poly1d(Fit.polyfit_clip(xposs[ok], widths[ok], order))
@@ -376,11 +421,19 @@ def fit_edge_poly(xposs, xposs_missing, yposs, widths, order):
     ok = np.abs(res) < 2*sd
 
 
+    # Check to see if the slit edge funciton is sane, 
+    # if it's not, then we fix it.
+    if np.abs(fun(0) - fun(2048)) > 15:
+        print "Forcing a horizontal slit edge"
+        fun = np.poly1d(np.median(yposs[ok]))
+        wfun = np.poly1d(np.median(widths[ok]))
+
+
     return (fun, wfun, res, sd, ok)
 
 
 
-def find_and_fit_edges(data, ssl, options):
+def find_and_fit_edges(data, header, bs, options):
     '''
     Given a flat field image, find_and_fit_edges determines the position
     of all slits.
@@ -425,33 +478,47 @@ def find_and_fit_edges(data, ssl, options):
             fit over
 
     '''
-    y = 2029
+    y = 2034
     toc = 0
+    ssl = bs.ssl
+
     slits = []
     top = [0., np.float(Options.npix)]
     numslits = np.round(np.array(ssl.field("Slit_length"), 
-        dtype=np.float) / 7.02)
+        dtype=np.float) / 7.6)
 
+    # The total numer of CSU slits is 46
 
+    if np.sum(numslits) != CSU.numslits:
+        raise Exception("The number of allocated CSU slits (%i) does not match "
+                " the number of possible slits (%i)." % (np.sum(numslits),
+                    CSU.numslits))
     results = []
     result = {}
     result["Target_Name"] = ssl[0].field("Target_Name")
 
     # 1
-    result["top"] = np.poly1d([2027])
+    result["top"] = np.poly1d([y])
+
+    slitno = 1
+    hpps = Wavelength.estimate_half_power_points(slitno, header, bs)
 
     for target in xrange(len(ssl) - 1):
         print target
 
         y -= 44.25 * numslits[target]
+
+        slitno += numslits[target]
+
         print "-------------==========================-------------"
         print "Finding Slit Edges for %s starting at %4.0i" % (
                         ssl[target].field("Target_Name"), y)
+        print "Science slit is composed of %i CSU slits" % numslits[target]
         tock = time.clock()
 
         (xposs, xposs_missing, yposs, widths, scatters) = \
                         find_edge_pair(data, y, 
-                                        options["edge-fit-width"])
+                                        options["edge-fit-width"], hpps)
 
         (fun, wfun, res, sd, ok) = fit_edge_poly(xposs, 
                         xposs_missing, yposs, widths, 
@@ -477,6 +544,9 @@ def find_and_fit_edges(data, ssl, options):
         result["Target_Name"] = ssl[target].field("Target_Name")
         result["top"] = np.poly1d(top)
 
+        hpps = Wavelength.estimate_half_power_points(slitno, header, bs)
+        result["hpps"] = hpps
+
 
         print fun
         print "Clipped Resid Sigma: %5.3f P2V: %5.3f" % (
@@ -489,6 +559,7 @@ def find_and_fit_edges(data, ssl, options):
 
     #6
     result["bottom"] = np.poly1d([3])
+    result["hpps"] = hpps
     results.append(result)
 
     results.append({"version": options["version"]})

@@ -27,6 +27,7 @@ and temperature scale.
 import Detector, IO
 import numpy as np
 import unittest
+import os
 from pyraf import iraf
 
 
@@ -93,14 +94,22 @@ def csu_mm_to_pix(x_mm, slitno, Please_Use=False):
     x_kfp = (centerx - x_mm) * tempscale
     y_kfp = 5.8*mm * (numslits/2. - slitno + 0.35) * tempscale
 
+    path = os.path.join(os.environ["MOSPATH"], "platescale", 
+            "linear_pix2mm_120k.db") 
     #
-    return  mosfire_geoxytran(x_kfp, y_kfp, database="../platescale/linear_pix2mm_120k.db", transform="linear_pix2mm_120k")
+    return  mosfire_geoxytran(x_kfp, y_kfp,
+            database=path, transform="linear_pix2mm_120k")
 
 
-def mosfire_geoxytran(x_kfp, y_kfp, transform="final.pix2mm.4.972.120k", database="../platescale/10March2011.4.972.db", direction="forward"):
+def mosfire_geoxytran(x_kfp, y_kfp, transform="final.pix2mm.4.972.120k",
+        database="/platescale/10March2011.4.972.db", direction="forward"):
     '''Conveninece wrapper around IRAF geoxytran'''
     iraf.images()
 
+
+    path = os.path.join(os.environ["MOSPATH"], "platescale", 
+            "10March2011.4.972.db")
+    database = path
     pars = iraf.geoxytran.getParList()
     iraf.geoxytran.unlearn()
     t = iraf.geoxytran("STDIN", "STDOUT", Stdin=["%f %f" % (x_kfp, y_kfp)], Stdout=1,
@@ -113,10 +122,12 @@ def mosfire_geoxytran(x_kfp, y_kfp, transform="final.pix2mm.4.972.120k", databas
 
     return (x,y)
 
-def mosfire_geoxytrans(x_kfp, y_kfp, transform="final.pix2mm.4.972.120k", database="../platescale/10March2011.4.972.db", direction="forward"):
+def mosfire_geoxytrans(x_kfp, y_kfp, transform="final.pix2mm.4.972.120k",
+        database="/users/npk/dropbox/mosfire/code/platescale/10March2011.4.972.db", direction="forward"):
     '''Conveninece wrapper around IRAF geoxytran'''
     iraf.images()
-
+    path = os.path.join(os.environ["MOSPATH"], "platescale", 
+            "10March2011.4.972.db")
     pars = iraf.geoxytran.getParList()
     iraf.geoxytran.unlearn()
     ins = []

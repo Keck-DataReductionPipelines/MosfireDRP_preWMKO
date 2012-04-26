@@ -32,19 +32,6 @@ if __name__ == "__main__":
 
 
 
-def find_edges(data, y, roi_width):
-        '''
-        find_edges finds the edge of slits in MOSFIRE spectra
-
-        data[2048x2048]: a well illuminated flat field [DN]
-        y: guess of slit edge position [pix]
-
-        1) Moves along the edge of a slit image
-                - At each location along the slit edge, determines
-                the position of the demarcations between two slits
-        2) Fits a low-order polynomial to the two ridge lines
-
-
         Outputs:
         xposs []: Array of x positions along the slit edge [pix]
         yposs []: The fitted y positions of the "top" edge of the slit [pix]

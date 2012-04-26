@@ -16,7 +16,13 @@ alpha d                                                                       3
 ------- cos(scale pixely)^-1 {sin(scale pixelx) - sin(beta)} + gamma (x-delta)
    m 
 
- where x and y are pixel values, alpha, beta, gamma, and delta are
+ where x and y are pixel values, alpha, beta, gamma, and delta are measured
+ parameters.
+
+-- Helper functions also exist for determining the on-order region of 
+a spectrum --
+
+
 INPUT:
 
 OUTPUT:
@@ -35,17 +41,22 @@ import pyfits as pf
 from multiprocessing import Pool
 from scipy.interpolate import interp1d
 
-from MOSFIRE import CSU, Fit, IO, Options
+from MOSFIRE import CSU, Fit, IO, Options, Filters
 
 #from IPython.Shell import IPShellEmbed
 #ipshell = IPShellEmbed()
 
 __version__ = "27Apr2011"
 
-reload(Options)
-reload(CSU)
-reload(IO)
-reload(Fit)
+try:
+    __IPYTHON__
+    reload(Options)
+    reload(CSU)
+    reload(IO)
+    reload(Fit)
+    reload(Filters)
+except:
+    pass
 
 #
 # Glue code
@@ -76,9 +87,11 @@ def fit_lambda_helper(slitno):
     print("-==== Fitting Slit %i" % slitno)
     parguess = guess_wavelength_solution(slitno, header, bs)
     sol_1d = fit_wavelength_solution(data, parguess, 
-            linelist, Options.wavelength)
+            linelist, Options.wavelength, slitno, search_num=30)
 
-    sol_2d = fit_outwards_xcor(data, sol_1d, linelist, Options.wavelength)
+    sol_2d = fit_outwards_xcor(data, sol_1d, linelist, Options.wavelength,
+            slitno)
+
     lamout = merge_solutions(lamout, slitno, parguess[4], bs, sol_2d, 
             Options.wavelength)
 
@@ -95,19 +108,23 @@ def fit_lambda(mfits, fname, maskname, options):
     global header, bs, data, linelist, lamout
     np.seterr(all="ignore")
     
+    print maskname
     path = os.path.join(options["outdir"], maskname)
     fn = os.path.join(path, "lambda_coeffs_{0}.npy".format(
         fname.replace(".fits","")))
 
-    (header, data, bs) = mfits
+
+    (header, data, bs, target, ssl, msl, asl) = mfits
     linelist = pick_linelist(header)
+    
     solutions = []
     lamout = np.zeros(shape=(2048, 2048), dtype=np.float32)
 
     tock = time.time()
-    p = Pool()
-    solutions = p.map(fit_lambda_helper, range(1,47))
-    p.close()
+    if True:
+        p = Pool()
+        solutions = p.map(fit_lambda_helper, range(1,47))
+        p.close()
 
     tick = time.time()
 
@@ -123,7 +140,7 @@ def fit_lambda(mfits, fname, maskname, options):
 def apply_lambda(mfits, fname, maskname, options):
     '''Convert solutions into final output products'''
 
-    (header, data, bs) = mfits
+    (header, data, bs, targs, ssl, msl, asl) = mfits
 
     band = header['filter'].rstrip()
     path = os.path.join(options["outdir"], maskname)
@@ -226,8 +243,6 @@ def apply_lambda(mfits, fname, maskname, options):
     except: pass
     hdu.writeto(fn)
 
-
-
     fvs = []
     poss= [2012, 1955, 1925, 1868, 1824, 1774, 1740, 1700, 1654, 1614, 1575,
             1519, 1476, 1433, 1396, 1300, 1073, 1036, 904, 858, 806, 725,
@@ -313,7 +328,7 @@ def filter_2d_solutions(vec):
 
         return (sds is not None) \
             and (sds[0] < 2e-5) \
-            and (MAD < 0.2) \
+            and (MAD < 0.3) \
             and (success)
 
     return filter(filter_fun, vec)
@@ -380,6 +395,20 @@ def dlambda_model(p):
 
 def pick_linelist(header):
     band = header["filter"]
+    
+    lines = []
+
+    if band == 'H':
+        lines.extend([1.5056, 1.5833, 1.6692, 1.7653, 1.7880, 1.7994])
+        return np.array(lines)
+    if band == 'J':
+        lines.extend([1.153879, 1.15917, 1.203083, 1.212249, 1.222931, 1.23516,
+            1.242335, 1.268577, 1.284502, 1.29211, 1.268577, 1.278239, 1.29211,
+            1.302164, 1.308528, 1.323654, 1.342156])
+
+        lines = np.array(lines)
+        return np.sort(lines)
+
     Argon_on = header["pwstata8"] == 1
     Neon_on = header["pwstata7"] == 1
 
@@ -441,6 +470,22 @@ def guess_wavelength_solution(slitno, header, bs):
             order,
             y0, 
             csupos_mm]
+
+def estimate_half_power_points(slitno, header, bs):
+    ''' This helper function is used to determine the filter half-power points.
+    This function is primarily used by the flat-field code to determine the 
+    on order regions of an image.  '''
+
+    band = header['filter'].rstrip()
+    parguess = guess_wavelength_solution(slitno, header, bs)
+    pix = np.arange(2048.)
+    ll = wavelength_model(parguess, pix)
+
+
+    hpp = Filters.hpp[band]
+    return [ np.argmin(np.abs(ll-hpp[0])), np.argmin(np.abs(ll-hpp[1])) ]
+
+
 
 def find_known_lines(lines, ll, spec, options):
     ''' 
@@ -509,14 +554,14 @@ def find_known_lines(lines, ll, spec, options):
             pl.axvline(lsf.params[1], color='red')
 
     if DRAW:
-        print "draw"
-        pl.xlim([453, 837])
+        #pl.xlim([500, 550])
         pl.draw()
     return map(np.array, [xs, sxs, sigmas])
 
 def fit_model_to_lines(xs, sxs, lines, parguess, options, fixed):
 
     ok = np.isfinite(sxs)
+
 
     if len(np.where(ok)[0]) < 3:
         return [[np.inf], parguess, None]
@@ -529,40 +574,47 @@ def fit_model_to_lines(xs, sxs, lines, parguess, options, fixed):
         {'fixed': 0, 'value': parguess[1], 'parname': 'sinbeta', 
             'step': 1e-7, 'limited': [0,0], 'limits': [0, 0]},
         {'fixed': fixed, 'value': parguess[2], 'parname': 'gamma','step': 1e-13,
-            'limited': [1,1], 'limits': [0,20e-13]},
+            'limited': [1,1], 'limits': [0, 20e-13]},
         {'fixed': fixed, 'value': parguess[3], 'parname': 'delta', 'step': 1e-1,
-            'limited': [1,1], 'limits': [0,2048]},
+            'limited': [1,1], 'limits': [0, 2048]},
         {'fixed': 1, 'value': parguess[4], 'parname': 'order', 
-            'limited': [0,0], 'limits': [3,7]},
+            'limited': [0,0], 'limits': [3, 7]},
         {'fixed': 1, 'value': parguess[5], 'parname': 'Y',
-            'limited': [0,0], 'limits': [0,2048]}
+            'limited': [0,0], 'limits': [0, 2048]}
     ]
 
     merit_function = Fit.mpfit_residuals(wavelength_model)
+
+    
     lsf = Fit.mpfit_do(merit_function, xs[ok], lines[ok], 
             parinfo, error=slambda[ok])
+
+
 
     return [ np.abs((wavelength_model(lsf.params, xs[ok]) - lines[ok]))*1e4,
             lsf.params, lsf.perror]
 
-def fit_wavelength_solution(data, parguess, lines, options, search_num=45,
-        fixed=False):
+def fit_wavelength_solution(data, parguess, lines, options, 
+        slitno, search_num=145, fixed=False):
     '''Tweaks the guessed parameter values and provides 1d lambda solution
     
     '''
 
     pix = np.arange(2048.)
-
     MAD = np.inf
 
     y0 = parguess[5]
     spec = np.median(data[y0-1:y0+1, :], 
         axis=0) # axis = 0 is spatial direction
 
-    d = search_num*0.003
+    d = search_num*0.0007
     dsinbetas = np.sort(np.abs(np.linspace(-d/2., d/2., search_num)))
 
     sinbetadirection = 1.0
+
+    iteration = 0
+
+    #print "iter  dsb      MAD"
     for dsinbeta in dsinbetas:
         dsinbeta *= sinbetadirection
         sinbetadirection *= -1
@@ -575,29 +627,32 @@ def fit_wavelength_solution(data, parguess, lines, options, search_num=45,
                 pars, options, fixed)
 
         MAD = np.median(deltas)
+        #print "%3i %+1.5f %3.6f" % (iteration, dsinbeta, MAD)
+        iteration += 1
 
-        if MAD > 0.2: 
-            pass # continue to search
+        if MAD > 0.3: 
+            continue
         else: 
+            #print "breaking after %i" % iteration
             break
 
 
-    if MAD < 0.2:
-        #print("%3.5f %4.3f %3.3e %4.1f" % (params[0], params[1], params[2], 
-            #params[3]))
+    if MAD < 0.3:
+        #print("%3i: %3.5f %4.3f %3.3e %4.1f" % (slitno, params[0], params[1],
+            #params[2], params[3]))
+
         return [deltas, params, perror, sigmas]
     else:
-        print("Could not find parameters")
+        print("%3i: Could not find parameters" % slitno)
         return [[], parguess, None, []]
 
 #
 # Two dimensional wavelength fitting
 #
-def fit_outwards_xcor(data, sol_1d, lines, options):
+def fit_outwards_xcor(data, sol_1d, lines, options, slitno):
     lags = np.arange(-5,5)
     pix = np.arange(2048.)
 
-    print("outwards fitting...")
     def sweep(deltays):
         deltas, params0, perror, sigmas = sol_1d
         params0 = np.array(params0)
@@ -624,23 +679,26 @@ def fit_outwards_xcor(data, sol_1d, lines, options):
 
             params[1] -= np.degrees(fp.params[1] * 18/250e3)
 
-            [deltas, params, perror, sigmas] = fit_wavelength_solution(
-                    data, params, lines, options, search_num=5, fixed=False)
+            [deltas, params, perror, sigmas] = fit_wavelength_solution( data,
+                    params, lines, options, slitno, search_num=25, 
+                    fixed=False)
 
             success = True
             if (len(deltas) < 2) or (np.median(deltas) > .4):
                 success = False
 
             
-            #print "%i: Success: %i" % (params[5], success)
+            print ("%2i @ %4i: Success: %i - %3.5f %4.3f %3.3e %2.5f" % (slitno, 
+                params[5], success, params[0], params[1], params[2], 
+                params[3]))
             ret.append([params, perror, np.median(deltas), success])
 
         return ret
 
     pix = np.arange(2048.)
 
-    params_up = sweep(range(0,20,2))
-    params_down = sweep(range(-1,-20,-2))
+    params_up = sweep(range(0,20,3))
+    params_down = sweep(range(-1,-20,-3))
     params = params_down
 
     params.reverse()
@@ -707,7 +765,7 @@ def fit_mask(pars, pixel_set, ys):
 # Model Functions
 
 def wavelength_model(p, x):
-    ''' Returns wavelength as function of pixel (x)
+    ''' Returns wavelength [um] as function of pixel (x)
     
     The parameter list, p, contains
     p[0:3] -- alpha, beta, gamma, delta, model parameters

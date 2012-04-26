@@ -17,8 +17,8 @@ __version__ = "19_04_2011"
 
 npix = 2048
 
-flat = {"outdir": "/scr2/mosfire/c9_npk/",
-        "indir": "/scr2/mosfire/c9_npk/npk_calib3_q1700_pa_0",
+flat = {"outdir": "/scr2/mosfire/firstlight/",
+        "indir": "/scr2/mosfire/firstlight/",
         "version": 1, 
         "edge-order": 5, # Polynomial order for edge of slit 
         "edge-fit-width": 20,

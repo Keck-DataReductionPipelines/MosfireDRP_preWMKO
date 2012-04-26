@@ -1,4 +1,4 @@
-#!/bin/csh
+#!/bin/csh -f
 
 #
 # Example mospy startup script.
@@ -6,22 +6,28 @@
 #  Unless you're at caltech you will need to change the environmental variables
 #
 
-setenv MOSPATH /scr2/npk/mosfire/
-setenv PYTHONPATH ${PYTHONPATH}:/home/phobos/npk/local/lib/python2.5/site-packages/:/scr8/npk/python/lib/python2.4/:${MOSPATH}
+source /usr/stsci/envconfig.mac/cshrc
+iraf
+
+setenv MOSPATH /Users/npk/dropbox/mosfire/code/
+setenv PYTHONPATH ${PYTHONPATH}:${MOSPATH}
 
 if ($#argv == 0) then
 	echo "Starting MOSFIRE Python"
-	\ipython -pylab -colors LightBG
+	\ipython -pylab -colors Linux
+else
+	switch ( $argv[1] )
+		case "libs":
+			python -c "import sys; print sys.path"
+			breaksw
+		case "what":
+			\python ${MOSPATH}/apps/what.py $*
+			breaksw
+		default:
+			\python $*
+			breaksw
+	endsw
 endif
 
-switch ( $argv[1] )
-	case "libs":
-		python -c "import sys; print sys.path"
-		breaksw
-	case "what":
-		\python ${MOSPATH}/apps/what.py $*
-		breaksw
-	default:
-		\python $*
-		breaksw
-endsw
+onintr int
+echo "Int"

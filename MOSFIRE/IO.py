@@ -21,10 +21,12 @@ def readfits(path):
 
     return (header, data)
 
+
 def readheader(path):
     '''Reads a header (only) from a fits file'''
 
     return pf.getheader(path)
+
 
 def readmosfits(path):
     '''Read a fits file written by MOSFIRE from path and return a tuple of 
@@ -34,10 +36,13 @@ def readmosfits(path):
     hdulist = pf.open(path)
     header = hdulist[0].header
     data = hdulist[0].data
-    targs = hdulist[1].data
-    ssl = hdulist[2].data
-    msl = hdulist[3].data
-    asl = hdulist[4].data
+    try:
+        targs = hdulist[1].data
+        ssl = hdulist[2].data
+        msl = hdulist[3].data
+        asl = hdulist[4].data
+    except:
+        print "Improper MOSFIRE FITS File: %s" % path
 
     ssl = ssl[ssl.field("Slit_Number") != ' ']
     msl = msl[msl.field("Slit_Number") != ' ']
@@ -45,7 +50,7 @@ def readmosfits(path):
 
     bs = CSU.Barset()
     bs.set_header(header, ssl=ssl, msl=msl, asl=asl)
-    return (header, data, bs)
+    return (header, data, bs, targs, ssl, msl, asl)
 
 def parse_header_for_bars(header):
     '''Parse {header} and convert to an array of CSU bar positions in mm. If 
