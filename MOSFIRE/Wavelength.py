@@ -19,6 +19,8 @@ alpha d                                                                       3
  where x and y are pixel values, alpha, beta, gamma, and delta are measured
  parameters.
 
+ scale is (pixel size) / (camera focal length)
+
 -- Helper functions also exist for determining the on-order region of 
 a spectrum --
 
@@ -27,6 +29,7 @@ INPUT:
 
 OUTPUT:
 
+npk Apr/May  2012 - Significant enhancements w/ first light data
 npk April 26 2011
 npk   May  4 2011
 
@@ -46,7 +49,9 @@ from MOSFIRE import CSU, Fit, IO, Options, Filters
 #from IPython.Shell import IPShellEmbed
 #ipshell = IPShellEmbed()
 
-__version__ = "27Apr2011"
+import pdb
+
+__version__ = "1May2012"
 
 try:
     __IPYTHON__
@@ -95,12 +100,14 @@ def fit_lambda_helper(slitno):
     lamout = merge_solutions(lamout, slitno, parguess[4], bs, sol_2d, 
             Options.wavelength)
 
+    if lamout == None:
+        pdb.set_trace()
+
     sol = {"slitno": slitno, "center_sol": [sol_1d[1], sol_1d[2]], 
             "sigmas": sol_1d[3], "2d": sol_2d, "lines": linelist,
             "csupos_mm": parguess[-1]}
     print "%i] TOOK: %i" % (slitno, time.time()-tick)
     return sol
-
 
 
 def fit_lambda(mfits, fname, maskname, options):
@@ -113,8 +120,9 @@ def fit_lambda(mfits, fname, maskname, options):
     fn = os.path.join(path, "lambda_coeffs_{0}.npy".format(
         fname.replace(".fits","")))
 
+    print "Writing to: ", fn
 
-    (header, data, bs, target, ssl, msl, asl) = mfits
+    (header, data, bs) = mfits
     linelist = pick_linelist(header)
     
     solutions = []
@@ -140,9 +148,12 @@ def fit_lambda(mfits, fname, maskname, options):
 def apply_lambda(mfits, fname, maskname, options):
     '''Convert solutions into final output products'''
 
-    (header, data, bs, targs, ssl, msl, asl) = mfits
+    (header, data, bs) = mfits
 
     band = header['filter'].rstrip()
+    bmap = {"Y": 6, "J": 5, "H": 4, "K": 3}
+    order = bmap[band]
+
     path = os.path.join(options["outdir"], maskname)
     fn = os.path.join(path, "slit-edges_{0}.npy".format(band))
     edgedata = np.load(fn)
@@ -179,10 +190,12 @@ def apply_lambda(mfits, fname, maskname, options):
         fname.replace(".fits", "")))
     try: os.remove(fn)
     except: pass
-    np.save(fn, {"alpha_lsf": alpha_lsf, "beta_lsf": beta_lsf, 
+
+    mask_fit_pars = [{"alpha_lsf": alpha_lsf, "beta_lsf": beta_lsf, 
         "gamma_lsf": gamma_lsf, "delta_lsf": delta_lsf,
         "pixels": pixel_set, "alphas": alpha_set, "betas": beta_set,
-        "gammas": gamma_set, "deltas": delta_set})
+        "gammas": gamma_set, "deltas": delta_set}]
+    np.save(fn, mask_fit_pars)
 
     alphas, betas, gammas, deltas = map(np.concatenate, [alpha_set, beta_set,
         gamma_set, delta_set])
@@ -214,7 +227,7 @@ def apply_lambda(mfits, fname, maskname, options):
                         betas[cnt],
                         gammas[cnt],
                         deltas[cnt],
-                        4,
+                        order,
                         j], xx)
             cnt += 1
 
@@ -228,8 +241,13 @@ def apply_lambda(mfits, fname, maskname, options):
     hdu.writeto(fn)
 
     print("{0}: rectifying".format(maskname))
-    rectified = np.zeros((2048, 2048), dtype=np.float32)
-    ll_fid = lams[1024, :]
+    dlam = np.median(np.diff(lams[1024,:]))
+    hpp = Filters.hpp[band] 
+    ll_fid = np.arange(hpp[0], hpp[1], dlam)
+    nspec = len(ll_fid)
+
+    rectified = np.zeros((2048, nspec), dtype=np.float32)
+
     for i in xrange(2048):
         ll = lams[i,:]
         ss = data[i,:]
@@ -270,6 +288,8 @@ def mechanical_to_science_slit(bs, slitedges, lambdadata):
     for i in xrange(len(bs.ssl)):
         ss = bs.ssl[i]
         edges = slitedges[i]
+        
+        print "SS#: %i, edges: %f" % (i, edges['top'](1024))
 
         csuslits = bs.scislit_to_csuslit(i)
 
@@ -285,11 +305,16 @@ def mechanical_to_science_slit(bs, slitedges, lambdadata):
             assert(sol["slitno"] == csuslit)
             ar = np.array(map(lambda x:x[0], ff))
 
-            pix = ar[:, 5]
-            alpha = ar[:, 0]
-            beta = ar[:, 1]
-            gamma = ar[:, 2]
-            delta = ar[:, 3]
+
+            try: 
+                pix = ar[:, 5]
+                alpha = ar[:, 0]
+                beta = ar[:, 1]
+                gamma = ar[:, 2]
+                delta = ar[:, 3]
+            except:
+                #print "Skipping %i" % csuslit
+                continue
 
             scislit_pixs.extend(pix)
             scislit_alphas.extend(alpha)
@@ -360,11 +385,17 @@ def apply_lambda_tester():
 # Physical models for instrument
 def param_guess_functions(band):
     '''Parameters determined from experimentation with cooldown 9 data'''
-    alpha_pixel = np.poly1d([-8.412e-16, 3.507e-12, -3.593e-9, 
-        6.303e-9, 0.9963])
 
+    fudge_npk = 1.00100452
+    alpha_pixel = np.poly1d([-8.412e-16, 3.507e-12, -3.593e-9, 
+        6.303e-9, 0.9963]) * fudge_npk
+
+    # Note that these numbers were tweaked by hand by npk on 28 apr
+    # they are not reliable. The fudge_* factors will need to change
+    # or dissapear
+    fudge_npk = 0.00
     if band == 'Y' or band == 'J':
-        sinbeta_position = np.poly1d([0.0239, 36.2])
+        sinbeta_position = np.poly1d([0.0239, 36.2 + fudge_npk])
         sinbeta_pixel = np.poly1d([-2.578e-7, 0.00054, -0.2365])
         gamma_pixel = np.poly1d([1.023e-25, -4.313e-22, 7.668e-17, 6.48e-13])
     elif band == 'H' or band == 'K':
@@ -373,7 +404,8 @@ def param_guess_functions(band):
         gamma_pixel = np.poly1d([1.033e-25, -4.36e-22, 4.902e-19, -8.021e-17,
             6.654e-13])
 
-    delta_pixel = np.poly1d([-1.462e-11, 6.186e-8, -5.152e-5, -0.0396, 1193])
+    delta_pixel = np.poly1d([-1.462e-11, 6.186e-8, -5.152e-5, -0.0396,
+        1193]) - 50
 
     return [alpha_pixel, sinbeta_position, sinbeta_pixel, 
             gamma_pixel, delta_pixel]
@@ -402,12 +434,67 @@ def pick_linelist(header):
         lines.extend([1.5056, 1.5833, 1.6692, 1.7653, 1.7880, 1.7994])
         return np.array(lines)
     if band == 'J':
-        lines.extend([1.153879, 1.15917, 1.203083, 1.212249, 1.222931, 1.23516,
-            1.242335, 1.268577, 1.284502, 1.29211, 1.268577, 1.278239, 1.29211,
-            1.302164, 1.308528, 1.323654, 1.342156])
+        # From ccs oh_lines_j.txt
+        lines.extend([
+            1.153879,
+            1.159170,
+            1.162787,
+            1.165077,
+            1.169636,
+            1.171614,
+            1.177090,
+            1.178800,
+            1.185148,
+            1.186653,
+            1.171614,
+            1.177066,
+            1.178801,
+            1.198849,
+            1.200705,
+            1.203083,
+            1.205592,
+            1.212249,
+            1.213586,
+            1.215499,
+            1.217992,
+            1.219640,
+            1.222931,
+            1.225773,
+            1.228698,
+            1.255800,
+            1.258961,
+            1.268577,
+
+            1.284502,
+
+            1.302164,
+            1.305273,
+            1.308528,
+            1.312783,
+            1.315682,
+            1.321085,
+            1.323654,
+            1.330196,
+            1.332464,
+            1.342156,
+            1.350939
+
+
+            ])
+
+
+
+        #lines.extend([1.153879, 1.15917, #1.203083, 1.212249, 
+            #1.222931, 1.23516,
+            #1.242335, 1.268577, 1.284502, 1.29211, 1.268577, 1.278239, 1.29211,
+            #1.302164, 1.308528, 1.323654, 
+            #1.342156])
 
         lines = np.array(lines)
         return np.sort(lines)
+
+
+    ''' The following code is old but may be useful '''
 
     Argon_on = header["pwstata8"] == 1
     Neon_on = header["pwstata7"] == 1
@@ -415,7 +502,8 @@ def pick_linelist(header):
     assert(header["pwloca7"].rstrip() == "Neon")
     assert(header["pwloca8"].rstrip() == "Argon")
 
-    lines = []
+
+    
     if band == 'H':
         if Argon_on:
             lines.extend([1.465435, 1.474317, 1.505062, 1.517684, 1.530607, 
@@ -471,6 +559,62 @@ def guess_wavelength_solution(slitno, header, bs):
             y0, 
             csupos_mm]
 
+def plot_mask_solution_ds9(fname, maskname, options):
+    '''makes a ds9 region file guessing the wavelength solution'''
+
+
+    path = os.path.join(options["outdir"], maskname)
+    if not os.path.exists(path):
+        raise Exception("Output directory '%s' does not exist. This " 
+                "directory should exist." % path)
+
+    fn = os.path.join(path, fname)
+    (header, data, bs) = IO.readmosfits(fn)
+
+    linelist = pick_linelist(header)
+    ds9 = '''# Region file format: DS9 version 4.1
+global color=red 
+'''
+    pix = np.arange(2048)
+    colors = ["red", "blue"]
+    cidx = 0
+
+
+    for i in xrange(len(bs.ssl)):
+        slits = bs.scislit_to_csuslit(i)
+
+        print "Guessing: ", slits
+        
+        cidx = (cidx + 1) % 2
+        color = colors[cidx]
+        for slitno in slits:
+            guess = guess_wavelength_solution(slitno, header, bs)
+            ll = wavelength_model(guess, pix)
+
+            if bs.is_alignment_slitno(slitno): color = 'green'
+            
+            for line in linelist:
+                x = np.argmin(np.abs(ll - line))
+
+                ds9 += "circle(%f, %f, 1) # color=%s\n" % (x, guess[5],
+                        color)
+
+    path = Options.wavelength['outdir']
+
+
+    fname = fname.rstrip(".fits")
+    fn = os.path.join(path, maskname, ("guess_waves_%s.reg" % fname))
+    try: os.remove(fn)
+    except: pass
+
+    try:
+        f = open(fn, 'w')
+        f.write(ds9)
+        f.close()
+    except:
+        print "Could not write %s" % fn
+
+
 def estimate_half_power_points(slitno, header, bs):
     ''' This helper function is used to determine the filter half-power points.
     This function is primarily used by the flat-field code to determine the 
@@ -484,7 +628,6 @@ def estimate_half_power_points(slitno, header, bs):
 
     hpp = Filters.hpp[band]
     return [ np.argmin(np.abs(ll-hpp[0])), np.argmin(np.abs(ll-hpp[1])) ]
-
 
 
 def find_known_lines(lines, ll, spec, options):
@@ -505,7 +648,7 @@ def find_known_lines(lines, ll, spec, options):
     if DRAW:
         pl.ion()
         pl.clf()
-        pl.figure(3)
+        pl.figure(3, figsize=(16,3))
         pl.plot(spec)
 
     for lam in lines:
@@ -643,7 +786,7 @@ def fit_wavelength_solution(data, parguess, lines, options,
 
         return [deltas, params, perror, sigmas]
     else:
-        print("%3i: Could not find parameters" % slitno)
+        #print("%3i: Could not find parameters" % slitno)
         return [[], parguess, None, []]
 
 #
@@ -688,31 +831,32 @@ def fit_outwards_xcor(data, sol_1d, lines, options, slitno):
                 success = False
 
             
-            print ("%2i @ %4i: Success: %i - %3.5f %4.3f %3.3e %2.5f" % (slitno, 
-                params[5], success, params[0], params[1], params[2], 
-                params[3]))
+            #print ("%2i @ %4i: Success: %i - %3.5f %4.3f %3.3e %2.5f" % (slitno, 
+                #params[5], success, params[0], params[1], params[2], 
+                #params[3]))
             ret.append([params, perror, np.median(deltas), success])
 
         return ret
 
     pix = np.arange(2048.)
 
-    params_up = sweep(range(0,20,3))
-    params_down = sweep(range(-1,-20,-3))
-    params = params_down
+    params = sweep(xrange(0,13,4))
+    params_down = sweep(xrange(1,-13,-4))
 
-    params.reverse()
-    params.extend(params_up)
 
+    params.extend(params_down)
     return params
 
 def merge_solutions(lamout, slitno, order, bs, sol_2d, options):
     ff = filter_2d_solutions(sol_2d)
     ar = np.array(map(lambda x: x[0], ff))
 
+    if lamout == None:
+        pdb.set_trace()
+
     if len(ar) == 0:
-        print "This is bad"
-        return
+        print("%3i: no slit level solution has been found." % slitno)
+        return lamout
 
 
     alphas = ar[:,0]
@@ -726,8 +870,8 @@ def merge_solutions(lamout, slitno, order, bs, sol_2d, options):
     gammamodel = np.poly1d(np.polyfit(pixels, gammas, 2))
     deltamodel = np.poly1d(np.polyfit(pixels, deltas, 2))
 
-    print "Alpha scatter: %3.6f" % np.std(alphas-alphamodel(pixels))
-    print " Beta scatter: %3.4f" % np.std(betas-betamodel(pixels))
+    print "Alpha scatter: %3.3e" % np.std(alphas-alphamodel(pixels))
+    print " Beta scatter: %3.3e" % np.std(betas-betamodel(pixels))
 
     mn = np.min(pixels)-4
     if mn < 0: mn = 0
@@ -735,6 +879,7 @@ def merge_solutions(lamout, slitno, order, bs, sol_2d, options):
     if mx > 2047: mx = 2047
 
     pixs = np.arange(2048.)
+
     for y in np.arange(np.int(mn), np.int(mx)+1):
         pars = [alphamodel(y),
                 betamodel(y),
@@ -744,7 +889,6 @@ def merge_solutions(lamout, slitno, order, bs, sol_2d, options):
                 y]
         ll = wavelength_model(pars, pixs)
         lamout[y,:] = ll
-
 
     return lamout
 
@@ -816,8 +960,27 @@ def mask_model(p, xs):
 
     return np.array(vals).ravel()
 
- 
-def plot_mask_fits(fname):
+def plot_mask_fits(maskname, fname, options):
+
+    from matplotlib.backends.backend_pdf import PdfPages
+    path = os.path.join(options["outdir"], maskname)
+    if not os.path.exists(path):
+        raise Exception("Output directory '%s' does not exist. This " 
+            "directory should exist." % path)
+
+    fp = os.path.join(path, fname)
+    mfits = IO.readmosfits(fp)
+    header, data, bs = mfits
+
+    fname = fname.rstrip(".fits")
+    solname = os.path.join(path, "mask_solution_%s.npy" % fname)
+    maskfit = np.load(solname)[0]
+
+    outname = os.path.join(path, "mask_fit_%s.pdf" % fname)
+    print outname
+    pp = PdfPages(outname)
+
+
     def plotfun(px, ys, lsf, i):
         pl.plot(px, ys, '.')
         params = np.copy(lsf.params[0:5])
@@ -825,41 +988,137 @@ def plot_mask_fits(fname):
         my = mask_model(params, [px])
         pl.plot(px, my)
 
-    pl.figure(3)
+    alpha_lsf = maskfit["alpha_lsf"]
+    beta_lsf = maskfit["beta_lsf"]
+    gamma_lsf = maskfit["gamma_lsf"]
+    delta_lsf = maskfit["delta_lsf"]
+
+    pixel_set = maskfit["pixels"]
+    alpha_set = maskfit["alphas"]
+    beta_set = maskfit["betas"]
+    gamma_set = maskfit["gammas"]
+    delta_set = maskfit["deltas"]
+
+    pixels, alphas, betas, gammas, deltas = map(np.concatenate, [pixel_set,
+        alpha_set, beta_set, gamma_set, delta_set])
+
     pl.clf()
-    pl.subplot(2,2,1)
     pl.plot(pixels, alphas, '.')
     for i in xrange(len(pixel_set)):
         plotfun(pixel_set[i], alpha_set[i], alpha_lsf, i)
+        print pixel_set[i]
+        print alpha_set[i]
+        print
+    pp.savefig()
 
-    pl.subplot(2,2,2)
+    pl.clf()
     for i in xrange(len(pixel_set)):
         plotfun(pixel_set[i], beta_set[i], beta_lsf, i)
+    pp.savefig()
 
-    pl.subplot(2,2,3)
+    pl.clf()
     pl.plot(pixels, np.concatenate(gamma_set), '.')
     for i in xrange(len(pixel_set)):
         plotfun(pixel_set[i], gamma_set[i], gamma_lsf, i)
+    pp.savefig()
 
-    pl.subplot(2,2,4)
+    pl.clf()
     pl.plot(pixels, np.concatenate(delta_set), '.')
     for i in xrange(len(pixel_set)):
         plotfun(pixel_set[i], delta_set[i], delta_lsf, i)
+    pp.savefig()
+
+    pp.close()
 
 
+def plot_sky_spectra(maskname, fname, options):
 
-def plot_data_quality(fname):
-    global solution
     from matplotlib.backends.backend_pdf import PdfPages
+    path = os.path.join(options["outdir"], maskname)
+    if not os.path.exists(path):
+        raise Exception("Output directory '%s' does not exist. This " 
+            "directory should exist." % path)
+
+    fp = os.path.join(path, fname)
+    mfits = IO.readmosfits(fp)
+    header, data, bs = mfits
+
+    
+    fname = fname.rstrip(".fits")
+    solname = os.path.join(path, "lambda_coeffs_%s.npy" % fname)
+    solutions = np.load(solname)
+
+    outname = os.path.join(path, "sky_spectra_%s.pdf" % fname)
+    print outname
+
+    pp = PdfPages(outname)
+    band = header['filter'].rstrip()
+
+    # determine region to cutoff spectra for xlims
+    linelist = pick_linelist(header)
+    hpps = Filters.hpp[band]
+
+    # Pick top 95% of flux for ylims
+    sdata = np.sort(data, None)
+    ymax = sdata[-15000]
 
 
-    solutions = np.load(fname)
+    pix = np.arange(2048)
+    for solution in solutions:
+        slitno = solution["slitno"]
+        parameters = solution["center_sol"][0]
+        print "Slit: {0}".format(slitno)
 
-    pp = PdfPages("data_quality.pdf")
+        parguess = guess_wavelength_solution(slitno, header, bs)
+        y0 = parguess[-2]
+
+        ll = wavelength_model(parameters, pix)
+        measured = data[y0, :]
+
+        pl.clf()
+        pl.title("Slit {0}".format(solution["slitno"]))
+        pl.plot(ll, measured, linewidth=.2)
+        pl.xlim(hpps)
+        pl.ylim(-30, ymax)
+
+        for line in linelist:
+            pl.axvline(line, color='red', linewidth=.1)
+
+        pp.savefig()
+
+    pp.close()
+
+
+
+def plot_data_quality(maskname, fname, options):
+
+    from matplotlib.backends.backend_pdf import PdfPages
+    path = os.path.join(options["outdir"], maskname)
+    if not os.path.exists(path):
+        raise Exception("Output directory '%s' does not exist. This " 
+            "directory should exist." % path)
+
+    fp = os.path.join(path, fname)
+    mfits = IO.readmosfits(fp)
+    header, data, bs = mfits
+
+    
+    fname = fname.rstrip(".fits")
+    solname = os.path.join(path, "lambda_coeffs_%s.npy" % fname)
+    solutions = np.load(solname)
+    solname = os.path.join(path, "mask_solution_%s.npy" % fname)
+    masksol = np.load(solname)[0]
+
+
+    outname = os.path.join(path, "wavelength_fits_%s.pdf" % fname)
+    print outname
+
+    pp = PdfPages(outname)
+
     filter_fun = (lambda x:
             (x[1] is not None) and
-            (x[1][0] < 2e-5) and
-            (x[2] < .1) and
+            (x[1][0] < 1e-5) and
+            (x[2] < .2) and
             (x[3] == True))
 
     all_pix = []
@@ -873,13 +1132,16 @@ def plot_data_quality(fname):
         ff = filter(filter_fun, sol_2d)
         ar = np.array(map(lambda x: x[0], ff))
 
+        if len(ar) == 0: continue
+
         pixels = ar[:,5]
 
         alphas = ar[:,0]
         betas = ar[:,1]
         gammas = ar[:,2]
         deltas = ar[:,3]
-                
+        sds = ar[:,4]
+
 
         all_pix.extend(pixels)
         all_alphas.extend(alphas)
@@ -904,29 +1166,35 @@ def plot_data_quality(fname):
         pl.title("Slit {0}".format(solution["slitno"]))
         pl.scatter(pixels, alphas)
         pl.plot(pixels, alphamodel(pixels))
+        
+        pl.ylim([.993,1/.993])
+        pl.xticks(rotation=90)
         pl.ylabel(r'$\alpha$')
 
         pl.subplot(2,2,2)
         pl.scatter(pixels, betas)
         pl.plot(pixels, betamodel(pixels))
+        pl.xticks(rotation=90)
         pl.ylabel(r'$\beta$')
 
         pl.subplot(2,2,3)
         pl.scatter(pixels, gammas)
         pl.plot(pixels, gammamodel(pixels))
         pl.ylim([0,1e-12])
+        pl.xticks(rotation=90)
         pl.ylabel(r'$\gamma$')
 
         pl.subplot(2,2,4)
         pl.scatter(pixels, deltas)
         pl.plot(pixels, deltamodel(pixels))
+        pl.xticks(rotation=90)
         pl.ylabel(r'$\delta$')
 
 
         pp.savefig()
 
     [alpha_pixel, sinbeta_position, sinbeta_pixel, gamma_pixel, 
-            delta_pixel] = param_guess_functions('H')
+            delta_pixel] = param_guess_functions('J')
     pl.clf()
     pl.subplot(1,1,1)
     pl.scatter(all_pix, all_alphas, c=all_deltas)
