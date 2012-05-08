@@ -53,6 +53,8 @@ import pdb
 
 __version__ = "1May2012"
 
+
+MADLIMIT = 1.0
 try:
     __IPYTHON__
     reload(Options)
@@ -92,7 +94,7 @@ def fit_lambda_helper(slitno):
     print("-==== Fitting Slit %i" % slitno)
     parguess = guess_wavelength_solution(slitno, header, bs)
     sol_1d = fit_wavelength_solution(data, parguess, 
-            linelist, Options.wavelength, slitno, search_num=30)
+            linelist, Options.wavelength, slitno, search_num=25)
 
     sol_2d = fit_outwards_xcor(data, sol_1d, linelist, Options.wavelength,
             slitno)
@@ -133,6 +135,9 @@ def fit_lambda(mfits, fname, maskname, options):
         p = Pool()
         solutions = p.map(fit_lambda_helper, range(1,47))
         p.close()
+    else:
+        fit_lambda_helper(1)
+
 
     tick = time.time()
 
@@ -154,13 +159,11 @@ def apply_lambda(mfits, fname, maskname, options):
     bmap = {"Y": 6, "J": 5, "H": 4, "K": 3}
     order = bmap[band]
 
-    path = os.path.join(options["outdir"], maskname)
-    fn = os.path.join(path, "slit-edges_{0}.npy".format(band))
-    edgedata = np.load(fn)
+    fnum = fname.rstrip(".fits")
 
-    fn = os.path.join(path, "lambda_coeffs_{0}.npy".format(
-        fname.replace(".fits","")))
-    lambdadata = np.load(fn)
+    path = os.path.join(options["outdir"], maskname)
+    edgedata = IO.load_edges(maskname, band, options)
+    lambdadata = IO.load_lambdadata(fnum, maskname, band, options)
     
     slitedges = edgedata[0:-1]
     edgeinfo = edgedata[-1]
@@ -353,7 +356,7 @@ def filter_2d_solutions(vec):
 
         return (sds is not None) \
             and (sds[0] < 2e-5) \
-            and (MAD < 0.3) \
+            and (MAD < MADLIMIT) \
             and (success)
 
     return filter(filter_fun, vec)
@@ -387,25 +390,29 @@ def param_guess_functions(band):
     '''Parameters determined from experimentation with cooldown 9 data'''
 
     fudge_npk = 1.00100452
+    fudge_npk = 1.0
     alpha_pixel = np.poly1d([-8.412e-16, 3.507e-12, -3.593e-9, 
         6.303e-9, 0.9963]) * fudge_npk
 
     # Note that these numbers were tweaked by hand by npk on 28 apr
     # they are not reliable. The fudge_* factors will need to change
     # or dissapear
-    fudge_npk = 0.00
     if band == 'Y' or band == 'J':
+        fudge_npk = 0.008
         sinbeta_position = np.poly1d([0.0239, 36.2 + fudge_npk])
         sinbeta_pixel = np.poly1d([-2.578e-7, 0.00054, -0.2365])
         gamma_pixel = np.poly1d([1.023e-25, -4.313e-22, 7.668e-17, 6.48e-13])
     elif band == 'H' or band == 'K':
-        sinbeta_position = np.poly1d([2.331e-2, 38.24])
+        fudge_npk = -0.05
+        sinbeta_position = np.poly1d([2.331e-2, 38.24]) + fudge_npk
         sinbeta_pixel = np.poly1d([-2.664e-7, 5.534e-4, -1.992e-1])
+
+        fudge_npk = 0
         gamma_pixel = np.poly1d([1.033e-25, -4.36e-22, 4.902e-19, -8.021e-17,
-            6.654e-13])
+            6.654e-13]) * fudge_npk
 
     delta_pixel = np.poly1d([-1.462e-11, 6.186e-8, -5.152e-5, -0.0396,
-        1193]) - 50
+        1193])  - 50
 
     return [alpha_pixel, sinbeta_position, sinbeta_pixel, 
             gamma_pixel, delta_pixel]
@@ -482,6 +489,77 @@ def pick_linelist(header):
 
             ])
 
+    if band == 'K':
+        # from ccs oh_lines_K.txt
+        lines = np.array([#19250.4,
+            #19350.12,
+            #19399.43,
+            #19518.51,
+            #19560.42,
+            #19560.52,
+            #19593.22,
+            #19618.72,
+            #19642.48,
+            #19677.97,
+            #19701.83,
+            #19736.1,
+            #19751.57,
+            #19771.85,
+            #19839.71,
+            #19891.9,
+            20007.94,
+            20037.,
+            20068.94,
+            20116.16,
+            20174.46,
+            #20193.21,
+            #20275.88,
+            20339.57,
+            20412.68,
+            20499.43,
+            20563.64,
+            #20672.54,
+            20729.02,
+            20729.04,
+            20860.25,
+            20909.59,
+            #21033.25,
+            #21066.29,
+            #21115.79,
+            #21156.12,
+            21176.57,
+            #21232.38,
+            #21249.61,
+            21279.07,
+            #21324.87,
+            21507.12,
+            21537.56,
+            21580.69,
+            #21637.02,
+            21710.99,
+            21802.3,
+            21873.54,
+            21873.52,
+            21955.64,
+            22052.35,
+            22125.51,
+            #22253.02,
+            22312.75,
+            22460.33,
+            22517.99,
+            #22689.14,
+            22742.11,
+            #22829.28,
+            #22898.2,
+            22986.,
+            #23286.22,
+            #23559.76,
+            #23675.23,
+            #23767.28,
+            23914.55,
+            23968.14,
+            24042.62] )/1e4
+
 
 
         #lines.extend([1.153879, 1.15917, #1.203083, 1.212249, 
@@ -490,46 +568,9 @@ def pick_linelist(header):
             #1.302164, 1.308528, 1.323654, 
             #1.342156])
 
-        lines = np.array(lines)
-        return np.sort(lines)
-
-
-    ''' The following code is old but may be useful '''
-
-    Argon_on = header["pwstata8"] == 1
-    Neon_on = header["pwstata7"] == 1
-
-    assert(header["pwloca7"].rstrip() == "Neon")
-    assert(header["pwloca8"].rstrip() == "Argon")
-
-
-    
-    if band == 'H':
-        if Argon_on:
-            lines.extend([1.465435, 1.474317, 1.505062, 1.517684, 1.530607, 
-        1.533334, 1.540685, 1.590403, 1.599386, 1.618444, 1.644107,
-        1.674465, 1.744967, 1.791961])
-        if Neon_on:
-            lines.extend([1.493386, 1.499041, 1.523487, 1.5352384, 
-                    1.5411803, 1.5608478, 1.6027147, 1.6272797, 
-                    1.6409737, 1.6479254, 1.6793378, 1.7166622])
-
-    elif band == 'K':
-        if Neon_on:
-            lines.extend([2.1047, 2.17141, 2.22534, 2.24343, 2.25366, 2.2688, 
-                2.31068, 2.32667, 2.35718, 2.3643, 2.37081])
-
-        if Argon_on:
-            lines.extend([ 1.982291, 1.995052, 1.997118, 2.003114,2.003557, 
-                2.007441,2.032256, 2.057443, 2.062186, 2.065277,2.072200, 
-                2.073922,2.081672, 2.099184, 2.104157, 2.133871,2.154009, 
-                2.204558,2.208321, 2.211866, 2.253974, 2.297837,2.313952, 
-                2.385154,2.397306, 2.478337, 2.513213, 2.551218,2.566802])
-
     lines = np.array(lines)
-    lines = np.sort(lines)
+    return np.sort(lines)
 
-    return lines
 
 def guess_wavelength_solution(slitno, header, bs):
     '''Given a slit number guess the coefficient values
@@ -563,15 +604,17 @@ def plot_mask_solution_ds9(fname, maskname, options):
     '''makes a ds9 region file guessing the wavelength solution'''
 
 
+    inpath = options["indir"]
     path = os.path.join(options["outdir"], maskname)
     if not os.path.exists(path):
         raise Exception("Output directory '%s' does not exist. This " 
                 "directory should exist." % path)
 
-    fn = os.path.join(path, fname)
+    fn = os.path.join(inpath, fname)
     (header, data, bs) = IO.readmosfits(fn)
 
     linelist = pick_linelist(header)
+
     ds9 = '''# Region file format: DS9 version 4.1
 global color=red 
 '''
@@ -596,7 +639,7 @@ global color=red
             for line in linelist:
                 x = np.argmin(np.abs(ll - line))
 
-                ds9 += "circle(%f, %f, 1) # color=%s\n" % (x, guess[5],
+                ds9 += "circle(%f, %f, 1) # color=%s text={}\n" % (x, guess[5],
                         color)
 
     path = Options.wavelength['outdir']
@@ -650,6 +693,8 @@ def find_known_lines(lines, ll, spec, options):
         pl.clf()
         pl.figure(3, figsize=(16,3))
         pl.plot(spec)
+        pl.xlim([0,500])
+        pl.ylim([-50,2000])
 
     for lam in lines:
         f = options["fractional-wavelength-search"]
@@ -695,16 +740,18 @@ def find_known_lines(lines, ll, spec, options):
 
         if DRAW:
             pl.axvline(lsf.params[1], color='red')
+            pl.text(lsf.params[1], 1200, "%s,  %s" % (lam, lsf.params[1]),
+                    fontsize=10,rotation=90)
 
     if DRAW:
         #pl.xlim([500, 550])
         pl.draw()
+
     return map(np.array, [xs, sxs, sigmas])
 
 def fit_model_to_lines(xs, sxs, lines, parguess, options, fixed):
 
     ok = np.isfinite(sxs)
-
 
     if len(np.where(ok)[0]) < 3:
         return [[np.inf], parguess, None]
@@ -732,10 +779,15 @@ def fit_model_to_lines(xs, sxs, lines, parguess, options, fixed):
     lsf = Fit.mpfit_do(merit_function, xs[ok], lines[ok], 
             parinfo, error=slambda[ok])
 
+    delt = np.abs(wavelength_model(lsf.params, xs[ok]) - lines[ok])*1e4
 
+    xsOK = xs[ok]
+    linesOK = lines[ok]
 
-    return [ np.abs((wavelength_model(lsf.params, xs[ok]) - lines[ok]))*1e4,
-            lsf.params, lsf.perror]
+    #for i in xrange(len(xsOK)):
+        #print linesOK[i], delt[i]
+
+    return [ delt, lsf.params, lsf.perror]
 
 def fit_wavelength_solution(data, parguess, lines, options, 
         slitno, search_num=145, fixed=False):
@@ -750,43 +802,61 @@ def fit_wavelength_solution(data, parguess, lines, options,
     spec = np.median(data[y0-1:y0+1, :], 
         axis=0) # axis = 0 is spatial direction
 
-    d = search_num*0.0007
+    d = 0.1
     dsinbetas = np.sort(np.abs(np.linspace(-d/2., d/2., search_num)))
 
     sinbetadirection = 1.0
 
     iteration = 0
 
+    DRAW = False
+    if DRAW:
+        pl.ion()
+        pl.figure(2, figsize=(16,3))
+        pl.xlim([2.03,2.3])
+
     #print "iter  dsb      MAD"
     for dsinbeta in dsinbetas:
         dsinbeta *= sinbetadirection
         sinbetadirection *= -1
 
+
         pars = parguess
         pars[1] = parguess[1] + dsinbeta
         ll = wavelength_model(parguess, pix)
+
         [xs, sxs, sigmas] = find_known_lines(lines, ll, spec, options)
         [deltas, params, perror] = fit_model_to_lines(xs, sxs, lines, 
                 pars, options, fixed)
 
-        MAD = np.median(deltas)
-        #print "%3i %+1.5f %3.6f" % (iteration, dsinbeta, MAD)
-        iteration += 1
+        if DRAW:
+            pl.figure(2)
+            pl.xlim([1.94,2.1])
+            ll2 = wavelength_model(params, pix)
+            pl.plot(ll2, spec)
+            for line in lines:
+                pl.axvline(line ,color='red')
+            pl.draw()
 
-        if MAD > 0.3: 
+        MAD = np.median(deltas)
+        iteration += 1
+        #print "%2.2i] %3.0i %1.4f %1.4f" % (slitno, iteration, dsinbeta, MAD)
+
+
+        if MAD > MADLIMIT:
             continue
         else: 
-            #print "breaking after %i" % iteration
+            #print "%i] found: %3i %+1.5f %3.6f" % (slitno, iteration, dsinbeta, MAD)
             break
 
 
-    if MAD < 0.3:
-        #print("%3i: %3.5f %4.3f %3.3e %4.1f" % (slitno, params[0], params[1],
-            #params[2], params[3]))
+    if MAD <= MADLIMIT:
+        print("%3i: %3.5f %4.3f %3.3e %4.1f %1.4f" % (slitno, params[0], params[1],
+            params[2], params[3], MAD))
 
         return [deltas, params, perror, sigmas]
     else:
-        #print("%3i: Could not find parameters" % slitno)
+        print("%3i: Could not find parameters" % slitno)
         return [[], parguess, None, []]
 
 #
@@ -831,17 +901,17 @@ def fit_outwards_xcor(data, sol_1d, lines, options, slitno):
                 success = False
 
             
-            #print ("%2i @ %4i: Success: %i - %3.5f %4.3f %3.3e %2.5f" % (slitno, 
-                #params[5], success, params[0], params[1], params[2], 
-                #params[3]))
+            print ("%2i @ %4i: Success: %i - %3.5f %4.3f %3.3e %2.5f" % (slitno, 
+                params[5], success, params[0], params[1], params[2], 
+                params[3]))
             ret.append([params, perror, np.median(deltas), success])
 
         return ret
 
     pix = np.arange(2048.)
 
-    params = sweep(xrange(0,13,4))
-    params_down = sweep(xrange(1,-13,-4))
+    params = sweep(xrange(0,10,4))
+    params_down = sweep(xrange(1,-10,-4))
 
 
     params.extend(params_down)
@@ -1193,8 +1263,9 @@ def plot_data_quality(maskname, fname, options):
 
         pp.savefig()
 
+    band = header['filter'].rstrip()
     [alpha_pixel, sinbeta_position, sinbeta_pixel, gamma_pixel, 
-            delta_pixel] = param_guess_functions('J')
+            delta_pixel] = param_guess_functions(band)
     pl.clf()
     pl.subplot(1,1,1)
     pl.scatter(all_pix, all_alphas, c=all_deltas)
