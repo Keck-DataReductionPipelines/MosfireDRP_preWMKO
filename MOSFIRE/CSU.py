@@ -30,6 +30,8 @@ import unittest
 import os
 from pyraf import iraf
 
+import pdb
+
 
 class MismatchError(Exception):
     '''The code expected a CSU with 46 slits, but found something else.'''
@@ -178,21 +180,24 @@ class Barset:
 
     pos = [] 
     pos_pix = []
-    targs = []
 
     header = None
     # Science slit list, mechanical slit list, & alignment slit list.
     ssl = None
     msl = None
     asl = None
+    targs = None
+
+    long_slit = False
 
     scislit_to_slit = []
+    alignment_slits = []
 
 
     def __init__(self):
         pass
 
-    def set_header(self, header, ssl=None, msl=None, asl=None):
+    def set_header(self, header, ssl=None, msl=None, asl=None, targs=None):
         '''Passed "header" a FITS header dictionary and converts to a Barset'''
         self.pos = np.array(IO.parse_header_for_bars(header))
         self.set_pos_pix()
@@ -200,23 +205,62 @@ class Barset:
         self.ssl = ssl
         self.msl = msl
         self.asl = asl
+        self.targs = targs
+
+        def is_alignment_slit(slit):
+            return (np.float(slit["Target_Priority"]) < 0)
+
+        # if a long slit, convert the mechanical slit list into a science
+        # slit list. The code in the following if statement is essentially a
+        # HACK to populate a field.
+        if len(ssl) == 0:
+            self.long_slit = True
+
+            start = np.int(msl[0]["Slit_Number"])
+            stop = np.int(msl[-1]["Slit_Number"])
+
+            print "Long slit has %i elements" % (stop-start)
+
+            for mech_slit in msl:
+                mech_slit["Target_in_Slit"] = "long"
+
+            if (stop-start) == numslits:
+                self.ssl = np.array([("long", (stop-start)*7.6)],
+                    dtype=[("Target_Name", "S10"), ("Slit_length", "S10")])
+                self.scislit_to_slit = [ np.arange(start,stop) ]
+            else:
+                self.ssl = np.array([
+                    ("none", start * 7.6),
+                    ("long", (stop-start)*7.6),
+                    ("none", (numslits-stop)*7.6)],
+                    dtype=[("Target_Name", "S10"), ("Slit_length", "S10")])
+
+                self.scislit_to_slit = [ np.arange(1,start),
+                    np.arange(start,stop),
+                    np.arange(stop, numslits+1) ]
+
+            ssl = None
 
         # Create a map between scislit number and mechanical slit
+        # recall that slits count from 1
         if ssl is not None:
             prev = self.msl[0]["Target_in_Slit"]
-            barnum = 1
+
             v = []
-            for slit in self.msl:
-                if prev != slit["Target_in_Slit"]:
-                    self.scislit_to_slit.append(v)
-                    v = []
-                    
-                prev = slit["Target_in_Slit"]
-                v.append(barnum)
-                barnum += 1
 
-            self.scislit_to_slit.append(v)
+            for science_slit in ssl:
+                targ = science_slit["Target_Name"]
+                v.append(np.where(self.msl.Target_in_Slit == targ)[0]+1)
 
+            self.scislit_to_slit = v
+
+            if (len(self.scislit_to_slit) != len(ssl)) and not (self.long_slit
+                    and len(self.scislit_to_slit) == 1):
+                raise Exception("SSL should match targets in slit")
+
+
+    def is_alignment_slitno(self, slitno):
+        return (slitno in self.alignment_slits)
 
     def csu_slit_center(self, slitno):
         '''Returns the mechanical (middle) position of a csu slit in mm'''
