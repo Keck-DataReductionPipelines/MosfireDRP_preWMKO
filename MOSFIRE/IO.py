@@ -9,7 +9,55 @@ import pyfits as pf
 import numpy as np
 import unittest
 
+
+import os
+import pdb
+
 import CSU
+
+def load_edges(maskname, band, options):
+    ''' Load the slit edge functions '''
+    path = os.path.join(options["outdir"], maskname)
+    fn = os.path.join(path, "slit-edges_{0}.npy".format(band))
+
+    return np.load(fn)
+
+def load_lambdacenter(fnum, maskname, options):
+    ''' Load the wavelength coefficient functions '''
+    path = os.path.join(options["outdir"], maskname)
+    fn = os.path.join(path, "lambda_center_coeffs_{0}.npy".format(fnum))
+
+    ld = np.load(fn)
+
+    for i in xrange(1,47):
+        assert(ld[i-1]['slitno'] == i)
+
+    return ld
+
+def load_lambdadata(fnum, maskname, band, options):
+    ''' Load the wavelength coefficient functions '''
+    path = os.path.join(options["outdir"], maskname)
+    fn = os.path.join(path, "lambda_coeffs_{0}.npy".format(fnum))
+
+    print fn
+    ld = np.load(fn)
+    print ld[0]['slitno']
+
+    for i in xrange(1,47):
+        assert(ld[i-1]['slitno'] == i)
+
+    return ld
+
+def load_lambdaslit(fnum, maskname, band, options):
+    ''' Load the wavelength coefficient functions '''
+    path = os.path.join(options["outdir"], maskname)
+    fn = os.path.join(path, "lambda_solution_{0}.fits".format(fnum))
+
+    print fn
+
+    return readfits(fn)
+
+
 
 def readfits(path):
     '''Read a fits file from path and return a tuple of (header, data, 
@@ -22,20 +70,31 @@ def readfits(path):
     return (header, data)
 
 
+
 def readheader(path):
     '''Reads a header (only) from a fits file'''
 
     return pf.getheader(path)
 
 
-def readmosfits(path):
+def readmosfits(path, extension=None):
     '''Read a fits file written by MOSFIRE from path and return a tuple of 
     (header, data, Target List, Science Slit List (SSL), Mechanical Slit 
-    List (MSL), Alignment Slit List (ASL)).'''
+    List (MSL), Alignment Slit List (ASL)).
+    
+    Note, the extension is typically not used, only used if the detector server
+    does not append slit extension.
+    '''
+
+    print path
 
     hdulist = pf.open(path)
     header = hdulist[0].header
     data = hdulist[0].data
+
+    if extension is not None:
+        hdulist = pf.open(extension)
+
     try:
         targs = hdulist[1].data
         ssl = hdulist[2].data
@@ -49,8 +108,26 @@ def readmosfits(path):
     asl = asl[asl.field("Slit_Number") != ' ']
 
     bs = CSU.Barset()
-    bs.set_header(header, ssl=ssl, msl=msl, asl=asl)
-    return (header, data, bs, targs, ssl, msl, asl)
+    bs.set_header(header, ssl=ssl, msl=msl, asl=asl, targs=targs)
+
+    return (header, data, bs)
+
+def readscitbl(path):
+
+    print path
+
+    hdulist = pf.open(path)
+    header = hdulist[0].header
+    try:
+        targs = hdulist[1].data
+        ssl = hdulist[2].data
+        msl = hdulist[3].data
+        asl = hdulist[4].data
+    except:
+        print "Improper MOSFIRE FITS File: %s" % path
+
+    return header, targs, ssl, msl, asl
+
 
 def parse_header_for_bars(header):
     '''Parse {header} and convert to an array of CSU bar positions in mm. If 
@@ -74,7 +151,8 @@ def parse_header_for_bars(header):
 
     return np.array(poss)
 
-def imcombine(filelist, out, bpmask=None, reject="none"):
+
+def imcombine(filelist, out, bpmask=None, reject="none", nlow=None, nhigh=None):
     '''Convenience wrapper around IRAF task imcombine
     
     reject: none, minmax, sigclip, avsigclip, pclip'''
@@ -90,10 +168,15 @@ def imcombine(filelist, out, bpmask=None, reject="none"):
 
     s = ("%s," * len(filelist))[0:-1]
     s = s % tuple(filelist)
-
-    t = iraf.imcombine(s, out, Stdin=filelist, Stdout=1,
-            reject=reject)
-
+    if reject == 'minmax':
+        iraf.imcombine.nlow = 1
+        iraf.imcombine.nhigh = 1
+        t = iraf.imcombine(s, out, Stdin=filelist, Stdout=1,
+            reject=reject, masktype='badvalue', maskvalue=1, nlow=nlow,
+            nhigh=nhigh)
+    else:
+        t = iraf.imcombine(s, out, Stdin=filelist, Stdout=1,
+            reject=reject, masktype='badvalue', maskvalue=1)
 
     iraf.imcombine.setParList(pars)
 
