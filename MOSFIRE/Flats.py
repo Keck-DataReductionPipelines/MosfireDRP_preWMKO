@@ -20,10 +20,12 @@ import pylab as pl
 import scipy, scipy.ndimage
 import pyfits
 
+import pdb
+
 import MOSFIRE
 from MOSFIRE import Fit, IO, Options, CSU, Wavelength, Filters, Detector
 
-__version__ = "19Apr2011"
+__version__ = "5may2012"
 
 try:
     __IPYTHON__
@@ -77,7 +79,7 @@ def tester4():
                     "npk_calib4_q1700_pa_0", 'H', options)
 
 
-def handle_flats(flatlist, maskname, band, options):
+def handle_flats(flatlist, maskname, band, options, extension=None):
     '''
     handle_flats is the primary entry point to the Flats module.
 
@@ -104,6 +106,7 @@ def handle_flats(flatlist, maskname, band, options):
 
     # Check
     for fname in flatlist:
+
         hdr, dat = IO.readfits(fname)
         if hdr["filter"] != band:
             raise Exception("Filter name %s does not match header filter name "
@@ -113,9 +116,9 @@ def handle_flats(flatlist, maskname, band, options):
     combine(flatlist, maskname, band, options)
 
     print "Combined '%s' to '%s'" % (flatlist, maskname)
-    (header, data, bs, targs, ssl, msl, asl) = IO.readmosfits(flatlist[0])
+    (header, data, bs) = IO.readmosfits(flatlist[0],extension=extension)
 
-    path = os.path.join(options["outdir"], header["maskname"],
+    path = os.path.join(options["outdir"], maskname,
                     "combflat_2d_%s.fits" % band)
     (header, data) = IO.readfits(path)
 
@@ -133,10 +136,10 @@ def handle_flats(flatlist, maskname, band, options):
     # Generate Flat
     out = os.path.join(options["outdir"], maskname, 
                     "pixelflat_2d_%s.fits" % (band))
-    make_pixel_flat(data, results, options, out)
+    make_pixel_flat(data, results, options, out, flatlist)
     print "Pixel flat took {0:6.4} s".format(time.time()-tick)
 
-def make_pixel_flat(data, results, options, outfile):
+def make_pixel_flat(data, results, options, outfile, inputs):
     '''
     Convert a flat image into a flat field
     '''
@@ -152,8 +155,21 @@ def make_pixel_flat(data, results, options, outfile):
 
     flat = np.ones(shape=Detector.npix)
 
+    hdu = pyfits.PrimaryHDU((data/flat).astype(np.float32))
+    hdu.header.update("version", __version__, "DRP version")
+    i = 0
+    for flatname in inputs:
+        nm = flatname.split("/")[-1]
+        hdu.header.update("infile%2.2i" % i, nm)
+        i += 1
+
+    slitno = 0
     for result in results[0:-1]:
+        slitno += 1
         print result["Target_Name"]
+
+        hdu.header.update("targ%2.2i" % slitno, result["Target_Name"])
+
         bf = result["bottom"]
         tf = result["top"]
         try:
@@ -166,6 +182,9 @@ def make_pixel_flat(data, results, options, outfile):
 
         top = pixel_min(tf(xs))
         bottom = pixel_max(bf(xs))
+
+        hdu.header.update("top%2.2i" % slitno, top)
+        hdu.header.update("bottom%2.2i" % slitno, bottom)
 
         print "Bounding top/bottom: %i/%i" % (bottom, top)
 
@@ -194,8 +213,7 @@ def make_pixel_flat(data, results, options, outfile):
 
     lowsn = data<225
     flat[lowsn] = data[lowsn]
-
-    hdu = pyfits.PrimaryHDU((data/flat).astype(np.float32))
+    hdu.data = (data/flat).astype(np.float32)
     if os.path.exists(outfile):
             os.remove(outfile)
     hdu.writeto(outfile)
@@ -203,7 +221,7 @@ def make_pixel_flat(data, results, options, outfile):
 
 def save_ds9_edges(results, options):
     '''
-    Create a .ds9 file that saves the fit slit edge positions determined
+    Create a ds9 file that saves the fit slit edge positions determined
     by find_and_fit_edges
     '''
 
@@ -225,7 +243,10 @@ def save_ds9_edges(results, options):
 
             sy = top(sx) + 1
             ey = top(ex) + 1
-            ds9 += "line(%f, %f, %f, %f) # fixed=1 edit=0 move=0 rotate=0 delete=0\n" % (sx, sy, ex, ey)
+            if i == 10: txt=res["Target_Name"]
+            else: txt=""
+
+            ds9 += "line(%f, %f, %f, %f) # fixed=1 edit=0 move=0 rotate=0 delete=0 text={%s}\n" % (sx, sy, ex, ey, txt)
             ds9 += "line(%f, %f, %f, %f) # fixed=1 edit=0 move=0 rotate=0 delete=0\n" % (sx, sy, ex, ey)
 
             if i == W/2:
@@ -253,7 +274,7 @@ def save_ds9_edges(results, options):
         
     band = results[-1]["band"]
     fn = os.path.join(options["outdir"], results[-1]["maskname"], 
-                    "slit-edges_%s.ds9" % band)
+                    "slit-edges_%s.reg" % band)
     try:
             f = open(fn,'w')
             f.write(ds9)
@@ -273,7 +294,7 @@ def combine(flatlist, maskname, band, options):
     if os.path.exists(out):
             os.remove(out)
 
-    IO.imcombine(flatlist, out, reject="sigclip")
+    IO.imcombine(flatlist, out, reject="minmax", nlow=1, nhigh=1)
 
 
 def find_edge_pair(data, y, roi_width, hpps):
@@ -331,7 +352,7 @@ def find_edge_pair(data, y, roi_width, hpps):
         v = select_roi(data, roi_width)
         xs = np.arange(len(v))
 
-        # TODO: The number below is hardcoded and essentially made up.
+        # HACK: The number 450 below is hardcoded and essentially made up.
         # A smarter piece of code belongs here.
         if (np.median(v) < 450) or (xp < hpps[0]) or (xp > hpps[1]):
             xposs_missing.append(xp)
@@ -478,16 +499,20 @@ def find_and_fit_edges(data, header, bs, options):
             fit over
 
     '''
+
+    # y is the location to start
     y = 2034
+    DY = 44.25
+
     toc = 0
     ssl = bs.ssl
 
     slits = []
+
     top = [0., np.float(Options.npix)]
-    numslits = np.round(np.array(ssl.field("Slit_length"), 
+    numslits = np.round(np.array(ssl["Slit_length"], 
         dtype=np.float) / 7.6)
 
-    # The total numer of CSU slits is 46
 
     if np.sum(numslits) != CSU.numslits:
         raise Exception("The number of allocated CSU slits (%i) does not match "
@@ -495,7 +520,8 @@ def find_and_fit_edges(data, header, bs, options):
                     CSU.numslits))
     results = []
     result = {}
-    result["Target_Name"] = ssl[0].field("Target_Name")
+
+    result["Target_Name"] = ssl[0]["Target_Name"]
 
     # 1
     result["top"] = np.poly1d([y])
@@ -506,13 +532,13 @@ def find_and_fit_edges(data, header, bs, options):
     for target in xrange(len(ssl) - 1):
         print target
 
-        y -= 44.25 * numslits[target]
+        y -= DY * numslits[target]
 
         slitno += numslits[target]
 
         print "-------------==========================-------------"
         print "Finding Slit Edges for %s starting at %4.0i" % (
-                        ssl[target].field("Target_Name"), y)
+                        ssl[target]["Target_Name"], y)
         print "Science slit is composed of %i CSU slits" % numslits[target]
         tock = time.clock()
 
@@ -541,12 +567,11 @@ def find_and_fit_edges(data, header, bs, options):
 
         #5
         result = {}
-        result["Target_Name"] = ssl[target].field("Target_Name")
+        result["Target_Name"] = ssl[target]["Target_Name"]
         result["top"] = np.poly1d(top)
 
         hpps = Wavelength.estimate_half_power_points(slitno, header, bs)
         result["hpps"] = hpps
-
 
         print fun
         print "Clipped Resid Sigma: %5.3f P2V: %5.3f" % (
@@ -577,12 +602,12 @@ class TestFlatsFunctions(unittest.TestCase):
                             IO.readfits_all("/users/npk/desktop/c9/m110326_3242.fits")
             data = data1
 
-            ssl = ssl[ssl.field("Slit_Number") != ' ']
+            ssl = ssl[ssl["Slit_Number"] != ' ']
             numslits = np.round(np.array(ssl["Slit_length"], 
                     dtype=np.float) / 7.02)
 
             for i in range(len(ssl)):
-                    print ssl[i].field("Target_Name"), numslits[i]
+                    print ssl[i]["Target_Name"], numslits[i]
 
 if __name__ == '__main__':
     unittest.main()
