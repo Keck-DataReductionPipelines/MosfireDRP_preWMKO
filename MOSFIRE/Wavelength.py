@@ -1366,6 +1366,7 @@ def plot_sky_spectra(maskname, fname, options):
     header, data, bs = mfits
 
     
+    band = header["filter"].rstrip()
     fname = fname.rstrip(".fits")
     solutions = IO.load_lambdadata(fname, maskname, band, options)
 
