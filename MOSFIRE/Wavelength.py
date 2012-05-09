@@ -43,6 +43,7 @@ import pylab as pl
 import pyfits as pf
 from multiprocessing import Pool
 from scipy.interpolate import interp1d
+from matplotlib.widgets import Button
 
 from MOSFIRE import CSU, Fit, IO, Options, Filters
 
@@ -54,7 +55,7 @@ import pdb
 __version__ = "1May2012"
 
 
-MADLIMIT = 1.0
+MADLIMIT = 0.1
 try:
     __IPYTHON__
     reload(Options)
@@ -85,47 +86,22 @@ def handle_lambdas(filelist, maskname, options):
         fit_lambda(mfits, fname, maskname, options)
         apply_lambda(mfits, fname, maskname, options)
 
-def fit_lambda_helper(slitno):
-    '''This helper function exists for multiprocessing suport'''
-
-    global header, bs, data, linelist, lamout
-    tick = time.time()
-
-    print("-==== Fitting Slit %i" % slitno)
-    parguess = guess_wavelength_solution(slitno, header, bs)
-    sol_1d = fit_wavelength_solution(data, parguess, 
-            linelist, Options.wavelength, slitno, search_num=25)
-
-    sol_2d = fit_outwards_xcor(data, sol_1d, linelist, Options.wavelength,
-            slitno)
-
-    lamout = merge_solutions(lamout, slitno, parguess[4], bs, sol_2d, 
-            Options.wavelength)
-
-    if lamout == None:
-        pdb.set_trace()
-
-    sol = {"slitno": slitno, "center_sol": [sol_1d[1], sol_1d[2]], 
-            "sigmas": sol_1d[3], "2d": sol_2d, "lines": linelist,
-            "csupos_mm": parguess[-1]}
-    print "%i] TOOK: %i" % (slitno, time.time()-tick)
-    return sol
-
-
 def fit_lambda(mfits, fname, maskname, options):
     '''Fit the two-dimensional wavelength solution to each science slit'''
-    global header, bs, data, linelist, lamout
+    global bs, data, lamout, center_solutions
     np.seterr(all="ignore")
+    
+    fnum = fname.rstrip(".fits")
     
     print maskname
     path = os.path.join(options["outdir"], maskname)
-    fn = os.path.join(path, "lambda_coeffs_{0}.npy".format(
-        fname.replace(".fits","")))
+    fn = os.path.join(path, "lambda_coeffs_{0}.npy".format(fnum))
 
     print "Writing to: ", fn
 
     (header, data, bs) = mfits
-    linelist = pick_linelist(header)
+    band = header['filter'].rstrip()
+    center_solutions = IO.load_lambdacenter(fnum, maskname, options)
     
     solutions = []
     lamout = np.zeros(shape=(2048, 2048), dtype=np.float32)
@@ -135,8 +111,6 @@ def fit_lambda(mfits, fname, maskname, options):
         p = Pool()
         solutions = p.map(fit_lambda_helper, range(1,47))
         p.close()
-    else:
-        fit_lambda_helper(1)
 
 
     tick = time.time()
@@ -149,6 +123,68 @@ def fit_lambda(mfits, fname, maskname, options):
 
     return solutions
 
+
+def fit_lambda_helper(slitno):
+    '''This helper function exists for multiprocessing suport'''
+    
+    global bs, data, lamout, center_solutions
+
+    slitidx = slitno-1
+
+    tick = time.time()
+
+    print("-==== Fitting Slit %i" % slitno)
+
+    assert(center_solutions[slitidx]['slitno'] == slitno)
+    sol_1d = center_solutions[slitidx]["sol_1d"]
+    linelist = center_solutions[slitidx]["linelist"]
+
+
+    sol_2d = fit_outwards_xcor(data, sol_1d, linelist, Options.wavelength,
+            slitno)
+
+    lamout = merge_solutions(lamout, slitno, sol_1d[1][4], bs, sol_2d, 
+            Options.wavelength)
+
+
+    sol = {"slitno": slitno, "center_sol": [sol_1d[1], sol_1d[2]], 
+            "sigmas": sol_1d[3], "2d": sol_2d, "lines": linelist,
+            "csupos_mm": sol_1d[-1]}
+    print "%i] TOOK: %i" % (slitno, time.time()-tick)
+    return sol
+
+
+def fit_lambda_interactively(mfits, fname, maskname, options):
+    '''Fit the two-dimensional wavelength solution to each science slit'''
+    np.seterr(all="ignore")
+    
+    print maskname
+    path = os.path.join(options["outdir"], maskname)
+    fn = os.path.join(path, "lambda_center_coeffs_{0}.npy".format(
+        fname.replace(".fits","")))
+
+    print "Writing to: ", fn
+
+    (header, data, bs) = mfits
+    linelist = pick_linelist(header)
+    
+    try: solutions = np.load(fn)
+    except: solutions = None
+
+    lamout = np.zeros(shape=(2048, 2048), dtype=np.float32)
+
+    tock = time.time()
+    
+    fig = pl.figure(1,figsize=(16,8))
+    pl.ion()
+    II = InteractiveSolution(fig, mfits, linelist, options, 1,
+            solutions=solutions)
+    pl.show()
+
+    print len(II.solutions)
+
+    print "save to: ", fn
+    np.save(fn, np.array(II.solutions))
 
 def apply_lambda(mfits, fname, maskname, options):
     '''Convert solutions into final output products'''
@@ -164,6 +200,7 @@ def apply_lambda(mfits, fname, maskname, options):
     path = os.path.join(options["outdir"], maskname)
     edgedata = IO.load_edges(maskname, band, options)
     lambdadata = IO.load_lambdadata(fnum, maskname, band, options)
+    print len(lambdadata)
     
     slitedges = edgedata[0:-1]
     edgeinfo = edgedata[-1]
@@ -308,7 +345,6 @@ def mechanical_to_science_slit(bs, slitedges, lambdadata):
             assert(sol["slitno"] == csuslit)
             ar = np.array(map(lambda x:x[0], ff))
 
-
             try: 
                 pix = ar[:, 5]
                 alpha = ar[:, 0]
@@ -318,6 +354,8 @@ def mechanical_to_science_slit(bs, slitedges, lambdadata):
             except:
                 #print "Skipping %i" % csuslit
                 continue
+
+            print alpha
 
             scislit_pixs.extend(pix)
             scislit_alphas.extend(alpha)
@@ -361,25 +399,6 @@ def filter_2d_solutions(vec):
 
     return filter(filter_fun, vec)
 
-def tester():
-    handle_lambdas(['m110323_2737.fits'], 
-            'npk_calib4_q1700_pa_0',
-            Options.wavelength)
-
-    if False:
-        handle_lambdas(['m110323_2718.fits'], 
-                'npk_calib3_q1700_pa_0',
-                Options.wavelength)
-
-def apply_lambda_tester():
-    fn = Options.wavelength["outdir"] + \
-            "npk_calib3_q1700_pa_0/m110323_2718.fits"
-    fn = Options.wavelength["outdir"] + \
-            "npk_calib4_q1700_pa_0/m110323_2737.fits"
-    mfits = IO.readmosfits(fn)
-
-    apply_lambda(mfits, "m110323_2737", "npk_calib4_q1700_pa_0", 
-            Options.wavelength)
 
 #
 # Fitting Methods
@@ -407,7 +426,7 @@ def param_guess_functions(band):
         sinbeta_position = np.poly1d([2.331e-2, 38.24]) + fudge_npk
         sinbeta_pixel = np.poly1d([-2.664e-7, 5.534e-4, -1.992e-1])
 
-        fudge_npk = 0
+        fudge_npk = 1
         gamma_pixel = np.poly1d([1.033e-25, -4.36e-22, 4.902e-19, -8.021e-17,
             6.654e-13]) * fudge_npk
 
@@ -442,125 +461,94 @@ def pick_linelist(header):
         return np.array(lines)
     if band == 'J':
         # From ccs oh_lines_j.txt
-        lines.extend([
-            1.153879,
-            1.159170,
-            1.162787,
-            1.165077,
-            1.169636,
-            1.171614,
-            1.177090,
-            1.178800,
-            1.185148,
-            1.186653,
-            1.171614,
-            1.177066,
-            1.178801,
-            1.198849,
-            1.200705,
-            1.203083,
-            1.205592,
-            1.212249,
-            1.213586,
-            1.215499,
-            1.217992,
-            1.219640,
-            1.222931,
-            1.225773,
-            1.228698,
-            1.255800,
-            1.258961,
-            1.268577,
-
-            1.284502,
-
-            1.302164,
-            1.305273,
-            1.308528,
-            1.312783,
-            1.315682,
-            1.321085,
-            1.323654,
-            1.330196,
-            1.332464,
-            1.342156,
-            1.350939
-
-
-            ])
+        lines = np.array([
+            11538.7582 ,
+            11591.7013 ,
+            11627.8446 ,
+            11650.7735 ,
+            11696.3379 ,
+            11716.2294 ,
+            #11771.2773 ,
+            11788.0779 ,
+            11866.4924 ,
+            11988.5382 ,
+            12007.0419 ,
+            12030.7863 ,
+            12122.4957 ,
+            12135.8356 ,
+            12154.9582 ,
+            12196.3557 ,
+            12229.2777 ,
+            12257.7632 ,
+             12286.964 ,
+            12325.9549 ,
+            12351.5321 ,
+            12400.8893 ,
+             12423.349 ,
+            12482.8503 ,
+              12502.43 ,
+            12589.2998 ,
+            12782.9052 ,
+            12834.5202 ,
+            12905.5773 ,
+            12921.1364 ,
+            12943.1311 ,
+            12985.5595 ,
+            13021.6447 ,
+             13052.818 ,
+            13085.2604 ,
+            13127.8037 ,
+            13156.9911 ,
+            13210.6977 ,
+            13236.5414 ,
+            13301.9624 ,
+            13324.3509 ,
+             13421.579])/1e4
 
     if band == 'K':
         # from ccs oh_lines_K.txt
-        lines = np.array([#19250.4,
-            #19350.12,
-            #19399.43,
-            #19518.51,
-            #19560.42,
-            #19560.52,
-            #19593.22,
-            #19618.72,
-            #19642.48,
-            #19677.97,
-            #19701.83,
-            #19736.1,
-            #19751.57,
-            #19771.85,
-            #19839.71,
-            #19891.9,
-            20007.94,
-            20037.,
-            20068.94,
-            20116.16,
-            20174.46,
-            #20193.21,
-            #20275.88,
-            20339.57,
-            20412.68,
-            20499.43,
-            20563.64,
-            #20672.54,
-            20729.02,
-            20729.04,
-            20860.25,
-            20909.59,
-            #21033.25,
-            #21066.29,
-            #21115.79,
-            #21156.12,
-            21176.57,
-            #21232.38,
-            #21249.61,
-            21279.07,
-            #21324.87,
-            21507.12,
-            21537.56,
-            21580.69,
-            #21637.02,
-            21710.99,
-            21802.3,
-            21873.54,
-            21873.52,
-            21955.64,
-            22052.35,
-            22125.51,
-            #22253.02,
-            22312.75,
-            22460.33,
-            22517.99,
-            #22689.14,
-            22742.11,
-            #22829.28,
-            #22898.2,
-            22986.,
-            #23286.22,
-            #23559.76,
-            #23675.23,
-            #23767.28,
-            23914.55,
-            23968.14,
-            24042.62] )/1e4
-
-
+        lines = np.array([
+        19518.4784 ,
+        19593.2626 ,
+        19618.5719 ,
+        19642.4493 ,
+         19678.046 ,
+        19701.6455 ,
+        19736.4099 ,
+        19751.3895 ,
+        19771.9063 ,
+        19839.7764 ,
+        20008.0235 ,
+        20193.1799 ,
+        20275.9409 ,
+         20339.697 ,
+        20412.7192 ,
+         20499.237 ,
+        20563.6072 ,
+         20729.032 ,
+        20860.2122 ,
+        20909.5976 ,
+         #21033.062 ,
+         #21115.889 ,
+          #21156.24 ,
+        21176.5323 ,
+        #21232.4797 ,
+        21249.5368 ,
+        21279.1406 ,
+        21507.1875 ,
+        21537.4185 ,
+        21580.5093 ,
+        21711.1235 ,
+        21802.2757 ,
+         21873.507 ,
+        21955.6857 ,
+        22125.4484 ,
+        22312.8204 ,
+        22460.4183 ,
+        22517.9267 ,
+        22690.1765 ,
+        22742.1907 ,
+        22985.9156 ])/1e4
 
         #lines.extend([1.153879, 1.15917, #1.203083, 1.212249, 
             #1.222931, 1.23516,
@@ -691,7 +679,7 @@ def find_known_lines(lines, ll, spec, options):
     if DRAW:
         pl.ion()
         pl.clf()
-        pl.figure(3, figsize=(16,3))
+        pl.figure(3, figsize=(23,4))
         pl.plot(spec)
         pl.xlim([0,500])
         pl.ylim([-50,2000])
@@ -763,9 +751,9 @@ def fit_model_to_lines(xs, sxs, lines, parguess, options, fixed):
             'limited': [0,0], 'limits': [0,0]},
         {'fixed': 0, 'value': parguess[1], 'parname': 'sinbeta', 
             'step': 1e-7, 'limited': [0,0], 'limits': [0, 0]},
-        {'fixed': fixed, 'value': parguess[2], 'parname': 'gamma','step': 1e-13,
-            'limited': [1,1], 'limits': [0, 20e-13]},
-        {'fixed': fixed, 'value': parguess[3], 'parname': 'delta', 'step': 1e-1,
+        {'fixed': fixed, 'value': parguess[2], 'parname': 'gamma','step': 1e-12,
+            'limited': [1,1], 'limits': [-50e-13, 50e-13]},
+        {'fixed': fixed, 'value': parguess[3], 'parname': 'delta', 'step': 1,
             'limited': [1,1], 'limits': [0, 2048]},
         {'fixed': 1, 'value': parguess[4], 'parname': 'order', 
             'limited': [0,0], 'limits': [3, 7]},
@@ -774,7 +762,6 @@ def fit_model_to_lines(xs, sxs, lines, parguess, options, fixed):
     ]
 
     merit_function = Fit.mpfit_residuals(wavelength_model)
-
     
     lsf = Fit.mpfit_do(merit_function, xs[ok], lines[ok], 
             parinfo, error=slambda[ok])
@@ -784,10 +771,276 @@ def fit_model_to_lines(xs, sxs, lines, parguess, options, fixed):
     xsOK = xs[ok]
     linesOK = lines[ok]
 
-    #for i in xrange(len(xsOK)):
-        #print linesOK[i], delt[i]
 
     return [ delt, lsf.params, lsf.perror]
+
+def guesslims(spec):
+    ''' Guess the spectral limits'''
+    f = 1.1
+
+    s = spec.copy()
+    s.sort()
+    return [-500, s[-10]*f]
+
+class InteractiveSolution:
+
+    header = None
+    data = None
+    bs = None
+    parguess = None
+    linelist0 = None
+    foundlines = None
+    options = None
+    slitno = None
+    spec = None
+    good_solution = False
+
+    ll = None
+    pix = None
+    xlim = None
+    ylim = None
+    MAD = None
+    STD = None
+
+    first_time = True
+
+
+    def __init__(self, fig, mfits, linelist, options, slitno, solutions=None):
+        self.header = mfits[0]
+        self.data = mfits[1]
+        self.bs = mfits[2]
+        self.options = options
+        self.linelist0 = linelist
+        self.slitno = slitno
+        self.fig = fig
+
+        self.pix = np.arange(2048)
+
+        if solutions is None:
+            self.solutions = range(46)
+        else:
+            print solutions
+            self.solutions = solutions
+        self.cid = self.fig.canvas.mpl_connect('key_press_event', self)
+
+        self.setup()
+
+    
+    def setup(self):
+        self.parguess = guess_wavelength_solution(self.slitno, self.header,
+                self.bs)
+        self.linelist = self.linelist0
+        y0 = self.parguess[5]
+
+        S = self.solutions[self.slitno-1]
+        if type(S) is not int: # previously setup
+            self.MAD = S["MAD"]
+            self.STD = S["STD"]
+            self.parguess = S["params"]
+            self.linelist = S["linelist"]
+            self.foundlines = S["foundlines"]
+            self.foundlinesig = S["foundlinesig"]
+            self.y0 = self.parguess[5]
+        else:
+            self.MAD = self.STD = self.foundlines = self.linesig = None
+
+        self.spec = np.median(self.data[y0-1:y0+1, :], axis=0) 
+            # axis = 0 is spatial direction
+        self.ll = wavelength_model(self.parguess, self.pix)
+        self.xrng = [min(self.ll) * .99, max(self.ll)*1/.99]
+        self.xlim = self.xrng
+        self.redraw()
+
+    def draw_found_lines(self):
+        pl.subplot(2,1,1)
+
+        pl.grid(True)
+        xmin, xmax, ymin, ymax = pl.axis()
+        if self.foundlines is not None:
+            foundlams = wavelength_model(self.parguess, self.foundlines)
+            ok = np.isfinite(self.foundlinesig) 
+
+            for i in xrange(len(self.linelist)):
+                if not ok[i]: continue
+                D = (foundlams[i] - self.linelist[i])*1e4
+                pl.axvline(foundlams[i], color='yellow', ymax=.75)
+                pl.text(foundlams[i], 1500, "%1.2f" % D, rotation='vertical',
+                        size=12)
+
+            pl.subplot(2,1,2)
+            pl.grid(True)
+
+            pl.plot(self.linelist[ok], (foundlams[ok] - self.linelist[ok])*1e4, 
+                    'o')
+
+
+    def draw_residuals(self):
+        pl.subplot(2,1,2)
+
+        pl.xlabel(u"$\\lambda$ [$\\mu$ m]")
+        pl.ylabel(u"$\\Delta$$\\lambda$ [$\\AA$]")
+        gamma = self.parguess[2]
+        delta = self.parguess[3]
+
+        x = np.arange(2048)
+        pl.plot(self.ll, gamma * (x - delta)**3)
+
+        pl.xlim(self.xlim)
+
+    def draw_vertical_line_marks(self):
+        pl.subplot(2,1,1)
+        xmin, xmax, ymin, ymax = pl.axis()
+        i = 0
+        for line in self.linelist:
+            pl.axvline(line, color='red', linewidth=.5)
+
+            pl.text(line, ymax*.75, "%5.1f" % (line*1e4), 
+                    rotation='vertical', color='black')
+
+            i = i+1
+            fwl = self.options['fractional-wavelength-search']
+            pl.plot([line*fwl,line/fwl], [0,0], linewidth=2)
+
+    def redraw(self):
+        pl.clf()
+
+        pl.subplot(2,1,1)
+        pl.subplots_adjust(left=.1,right=.95,bottom=.1,top=.90)
+        pl.plot(self.ll, self.spec)
+
+        if self.MAD is None:
+            pl.title("[%i] Press 'f' to fit" % self.slitno)
+        else:
+            a,b,g,d = self.parguess[0:4]
+            pl.title(u"[%i] Best fit STD: %0.2f $\AA$, MAD: %0.2f $\AA$: $\\alpha$%0.6f $\\beta$%3.1f $\\gamma$%1.4e $\\delta$%4.1f" % (self.slitno, self.STD, self.MAD, a, b, g, d))
+
+
+        self.draw_vertical_line_marks()
+        self.draw_found_lines()
+        self.draw_residuals()
+
+        pl.subplot(2,1,1)
+        xmin, xmax, ymin, ymax = pl.axis()
+        pl.xlim(self.xlim)
+        pl.ylim([-1000, ymax*.8])
+
+
+
+    def shift(self, x):
+        theline = np.argmin(np.abs(x - self.linelist))
+
+        delt = x - self.linelist[theline] 
+        self.parguess[1] -= delt*10
+        self.ll = wavelength_model(self.parguess, self.pix)
+        self.redraw()
+
+    def drop_point(self, x):
+        theline = np.argmin(np.abs(x - self.linelist))
+        self.linelist = np.delete(self.linelist, theline)
+        if self.foundlines is not None:
+            self.foundlines = np.delete(self.foundlines, theline)
+            self.foundlinesig = np.delete(self.foundlinesig, theline)
+        
+    def __call__(self, event):
+        kp = event.key
+        x = event.xdata
+        y = event.ydata
+
+        if x is None: return
+        if y is None: return
+
+        if kp == 'x':
+            self.xlim = [x*.985,x/.985]
+
+            pl.ion()
+            pl.subplot(2,1,1) ; pl.xlim(self.xlim)
+            pl.subplot(2,1,2) ; pl.xlim(self.xlim)
+
+        if kp == 'X':
+            self.xlim = self.xrng
+            pl.ion()
+            pl.subplot(2,1,1) ; pl.xlim(self.xlim)
+            pl.subplot(2,1,2) ; pl.xlim(self.xlim)
+
+        if kp == '>':
+            ''' Fast forward to next uncalib obj '''
+            for i in xrange(self.slitno+1, len(self.solutions)):
+                if type(self.solutions[i]) is int:
+                    self.slitno = i
+                    self.setup()
+                    break
+
+
+        if kp == 'G':
+            self.slitno += 1
+            if self.slitno > 46: 
+                print "end limit"
+                self.slitno = 46
+
+            self.setup()
+
+        if kp == 'B':
+            self.slitno -= 1
+            if self.slitno < 1: 
+                print "first limit"
+                self.slitno = 1
+            self.setup()
+
+
+        if kp == 'Q':
+            pl.ioff()
+            pl.close(self.fig)
+
+        if kp == 't':
+            self.parguess[3] *= 1.05
+            self.redraw()
+
+
+        if kp == 'R':
+            self.MAD = None
+            self.solutions[self.slitno-1] = self.slitno
+            self.setup()
+
+
+        if kp == 'z':
+            self.shift(x)
+
+        if kp == 'd':
+            self.drop_point(x)
+            self.redraw()
+
+        if kp == 'f':
+            [xs, sxs, sigmas] = find_known_lines(self.linelist, self.ll,
+                    self.spec, self.options)
+
+            [deltas, params, perror] = fit_model_to_lines(xs, sxs,
+                    self.linelist, self.parguess, self.options, False)
+
+            self.ll = wavelength_model(self.parguess, self.pix)
+            self.foundlines = xs
+            self.foundlinesig = sxs
+
+            ok = np.isfinite(deltas)
+            self.STD = np.std(deltas[ok])
+            self.MAD = np.median(np.abs(deltas[ok]))
+
+            print "STD: %1.2f MAD: %1.2f" % (self.STD, self.MAD)
+
+            self.parguess = params
+
+            self.solutions[self.slitno-1] = {"params": params, "linelist":
+                    self.linelist, "MAD": self.MAD, "foundlines":
+                    self.foundlines, "foundlinesig": self.foundlinesig,
+                    "sol_1d": [deltas, params, perror, sigmas], "STD":
+                    self.STD, "slitno": self.slitno}
+
+            print 'Stored: ', self.solutions[self.slitno-1]['slitno']
+
+            self.redraw()
+
+
+
+
 
 def fit_wavelength_solution(data, parguess, lines, options, 
         slitno, search_num=145, fixed=False):
@@ -812,7 +1065,7 @@ def fit_wavelength_solution(data, parguess, lines, options,
     DRAW = False
     if DRAW:
         pl.ion()
-        pl.figure(2, figsize=(16,3))
+        pl.figure(2, figsize=(16,5))
         pl.xlim([2.03,2.3])
 
     #print "iter  dsb      MAD"
@@ -824,7 +1077,6 @@ def fit_wavelength_solution(data, parguess, lines, options,
         pars = parguess
         pars[1] = parguess[1] + dsinbeta
         ll = wavelength_model(parguess, pix)
-
         [xs, sxs, sigmas] = find_known_lines(lines, ll, spec, options)
         [deltas, params, perror] = fit_model_to_lines(xs, sxs, lines, 
                 pars, options, fixed)
@@ -851,8 +1103,8 @@ def fit_wavelength_solution(data, parguess, lines, options,
 
 
     if MAD <= MADLIMIT:
-        print("%3i: %3.5f %4.3f %3.3e %4.1f %1.4f" % (slitno, params[0], params[1],
-            params[2], params[3], MAD))
+        #print("%3i: %3.5f %4.3f %3.3e %4.1f %1.4f" % (slitno, params[0], params[1],
+            #params[2], params[3], MAD))
 
         return [deltas, params, perror, sigmas]
     else:
@@ -901,20 +1153,22 @@ def fit_outwards_xcor(data, sol_1d, lines, options, slitno):
                 success = False
 
             
-            print ("%2i @ %4i: Success: %i - %3.5f %4.3f %3.3e %2.5f" % (slitno, 
-                params[5], success, params[0], params[1], params[2], 
-                params[3]))
+            if True:
+                print ("%2i @ %4i: Success: %i - %3.5f %4.3f %3.3e %2.5f = %2.2f" %
+                        (slitno, params[5], success, params[0], params[1],
+                            params[2], params[3], np.median(np.abs(deltas))))
+
             ret.append([params, perror, np.median(deltas), success])
 
         return ret
 
     pix = np.arange(2048.)
 
-    params = sweep(xrange(0,10,4))
-    params_down = sweep(xrange(1,-10,-4))
-
+    params = sweep(xrange(0,10,1))
+    params_down = sweep(xrange(-1,-10,-1))
 
     params.extend(params_down)
+
     return params
 
 def merge_solutions(lamout, slitno, order, bs, sol_2d, options):
@@ -1034,11 +1288,12 @@ def plot_mask_fits(maskname, fname, options):
 
     from matplotlib.backends.backend_pdf import PdfPages
     path = os.path.join(options["outdir"], maskname)
+    print path
     if not os.path.exists(path):
         raise Exception("Output directory '%s' does not exist. This " 
             "directory should exist." % path)
 
-    fp = os.path.join(path, fname)
+    fp = os.path.join(options['indir'], fname)
     mfits = IO.readmosfits(fp)
     header, data, bs = mfits
 
@@ -1047,7 +1302,6 @@ def plot_mask_fits(maskname, fname, options):
     maskfit = np.load(solname)[0]
 
     outname = os.path.join(path, "mask_fit_%s.pdf" % fname)
-    print outname
     pp = PdfPages(outname)
 
 
@@ -1074,11 +1328,9 @@ def plot_mask_fits(maskname, fname, options):
 
     pl.clf()
     pl.plot(pixels, alphas, '.')
+    pl.ylim([0.9955, 0.9980])
     for i in xrange(len(pixel_set)):
         plotfun(pixel_set[i], alpha_set[i], alpha_lsf, i)
-        print pixel_set[i]
-        print alpha_set[i]
-        print
     pp.savefig()
 
     pl.clf()
@@ -1109,17 +1361,15 @@ def plot_sky_spectra(maskname, fname, options):
         raise Exception("Output directory '%s' does not exist. This " 
             "directory should exist." % path)
 
-    fp = os.path.join(path, fname)
+    fp = os.path.join(options['indir'], fname)
     mfits = IO.readmosfits(fp)
     header, data, bs = mfits
 
     
     fname = fname.rstrip(".fits")
-    solname = os.path.join(path, "lambda_coeffs_%s.npy" % fname)
-    solutions = np.load(solname)
+    solutions = IO.load_lambdadata(fname, maskname, band, options)
 
     outname = os.path.join(path, "sky_spectra_%s.pdf" % fname)
-    print outname
 
     pp = PdfPages(outname)
     band = header['filter'].rstrip()
@@ -1163,7 +1413,7 @@ def plot_sky_spectra(maskname, fname, options):
 def plot_data_quality(maskname, fname, options):
 
     from matplotlib.backends.backend_pdf import PdfPages
-    path = os.path.join(options["outdir"], maskname)
+    path = os.path.join(options["indir"])
     if not os.path.exists(path):
         raise Exception("Output directory '%s' does not exist. This " 
             "directory should exist." % path)
@@ -1174,6 +1424,7 @@ def plot_data_quality(maskname, fname, options):
 
     
     fname = fname.rstrip(".fits")
+    path = os.path.join(options["outdir"],maskname)
     solname = os.path.join(path, "lambda_coeffs_%s.npy" % fname)
     solutions = np.load(solname)
     solname = os.path.join(path, "mask_solution_%s.npy" % fname)
@@ -1181,7 +1432,6 @@ def plot_data_quality(maskname, fname, options):
 
 
     outname = os.path.join(path, "wavelength_fits_%s.pdf" % fname)
-    print outname
 
     pp = PdfPages(outname)
 
