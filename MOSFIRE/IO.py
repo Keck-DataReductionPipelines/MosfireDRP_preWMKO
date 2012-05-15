@@ -15,6 +15,20 @@ import pdb
 
 import CSU
 
+theBPM = None # the Bad pixel mask
+
+def badpixelmask():
+    global theBPM
+    path = "/users/npk/desktop/8may/badpix_08may2012.fits"
+
+    if theBPM is None:
+        hdulist = pf.open(path)
+        header = hdulist[0].header
+        theBPM = hdulist[0].data
+
+    return theBPM
+
+
 def load_edges(maskname, band, options):
     ''' Load the slit edge functions '''
     path = os.path.join(options["outdir"], maskname)
@@ -67,6 +81,10 @@ def readfits(path):
     header = hdulist[0].header
     data = hdulist[0].data
 
+    theBPM = badpixelmask()
+    data = np.ma.masked_array(data, theBPM, fill_value=0)
+
+
     return (header, data)
 
 
@@ -91,6 +109,9 @@ def readmosfits(path, extension=None):
     hdulist = pf.open(path)
     header = hdulist[0].header
     data = hdulist[0].data
+
+    theBPM = badpixelmask()
+    data = np.ma.masked_array(data, theBPM)
 
     if extension is not None:
         hdulist = pf.open(extension)

@@ -32,5 +32,6 @@ wavelength = {"outdir": flat["outdir"],
         "version": 1,
         #"fractional-wavelength-search": 0.9988, # used in determining oned wavelength solutions
         "fractional-wavelength-search": 0.99935, # used in determining oned wavelength solutions
+        "chebyshev-degree": 5, # polynomial order for fitting wavelengths
 
 }

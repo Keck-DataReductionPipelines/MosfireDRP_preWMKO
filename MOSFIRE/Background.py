@@ -234,7 +234,7 @@ def background_subtract_helper(slitno):
         OK = OK & tOK[sort]
 
     return {"ok": True, "slitno": slitno, "bottom": bottom, "top": top,
-            "output": output, "model": model}
+            "output": output, "model": model, "bspline": bspline}
 
 
 if __name__ == "__main__":

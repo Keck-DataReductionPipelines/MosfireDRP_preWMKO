@@ -271,9 +271,9 @@ def do_fit(data, residual_fun=residual_single):
         width = 5
         p0 = [0.5, 
                 np.argmin(data), 
-                -np.median(data[0:3]), 
-                -np.median(data[-4:-1]), 
-                np.median(data), 
+                -np.ma.median(data[0:3]), 
+                -np.ma.median(data[-4:-1]), 
+                np.ma.median(data), 
                 width]
     else:
         raise Exception("residual_fun not specified")

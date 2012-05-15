@@ -79,9 +79,9 @@ if True:
         header, data, bs = mfits
 
         #Wavelength.plot_mask_solution_ds9(fname, maskname, options)
-        #Wavelength.fit_lambda_interactively(mfits, fname, maskname, options)
-        Wavelength.fit_lambda(mfits, fname, maskname, options)
-        Wavelength.apply_lambda(mfits, fname, maskname, options)
+        Wavelength.fit_lambda_interactively(mfits, fname, maskname, options)
+        #Wavelength.fit_lambda(mfits, fname, maskname, options)
+        #Wavelength.apply_lambda(mfits, fname, maskname, options)
         #Wavelength.plot_data_quality(maskname, fname, options)
         #Wavelength.plot_sky_spectra(maskname, fname, options)
         #Wavelength.plot_mask_fits(maskname, fname, options)

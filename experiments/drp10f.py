@@ -1,12 +1,11 @@
 
 '''
 
-Written around 26 May 2011 by npk.
+Written around 5 May 2012 by npk.
 
 code is used to test B-splines outlier rejection with UNIVARIATE Splines
 
-
-Created drp10a.py and documented on pg 53 of drp notebook 1
+use first light data
 
 '''
 
@@ -30,10 +29,11 @@ pl.ion()
 
 path = "/users/npk/desktop/c9_reduce/npk_calib3_q1700_pa_0/"
 path = "/scr2/mosfire/c9_npk/npk_calib3_q1700_pa_0/"
+path = "/scr2/mosfire/firstlight/NGC5053"
 
-mdat = IO.readmosfits(path + "m110323_2718.fits")
-fdat = IO.readfits(path + "pixelflat_2d_H.fits")
-ldat = IO.readfits(path + "lambda_solution_m110323_2718.fits")
+mdat = IO.readmosfits(path + "m120406_0291.fits")
+fdat = IO.readfits(path + "pixelflat_2d_J.fits")
+ldat = IO.readfits(path + "lambda_solution_m120406_0291.fits")
 
 gain = 2.15
 
