@@ -44,6 +44,8 @@ import pyfits as pf
 from multiprocessing import Pool
 from scipy.interpolate import interp1d
 from matplotlib.widgets import Button
+from numpy.polynomial import chebyshev as CV
+
 
 from MOSFIRE import CSU, Fit, IO, Options, Filters
 
@@ -93,11 +95,10 @@ def fit_lambda(mfits, fname, maskname, options):
     
     fnum = fname.rstrip(".fits")
     
-    print maskname
     path = os.path.join(options["outdir"], maskname)
     fn = os.path.join(path, "lambda_coeffs_{0}.npy".format(fnum))
 
-    print "Writing to: ", fn
+    print "%s] Writing to: " % (maskname, fn)
 
     (header, data, bs) = mfits
     band = header['filter'].rstrip()
@@ -158,12 +159,9 @@ def fit_lambda_interactively(mfits, fname, maskname, options):
     '''Fit the two-dimensional wavelength solution to each science slit'''
     np.seterr(all="ignore")
     
-    print maskname
     path = os.path.join(options["outdir"], maskname)
     fn = os.path.join(path, "lambda_center_coeffs_{0}.npy".format(
         fname.replace(".fits","")))
-
-    print "Writing to: ", fn
 
     (header, data, bs) = mfits
     linelist = pick_linelist(header)
@@ -180,8 +178,6 @@ def fit_lambda_interactively(mfits, fname, maskname, options):
     II = InteractiveSolution(fig, mfits, linelist, options, 1,
             solutions=solutions)
     pl.show()
-
-    print len(II.solutions)
 
     print "save to: ", fn
     np.save(fn, np.array(II.solutions))
@@ -200,7 +196,6 @@ def apply_lambda(mfits, fname, maskname, options):
     path = os.path.join(options["outdir"], maskname)
     edgedata = IO.load_edges(maskname, band, options)
     lambdadata = IO.load_lambdadata(fnum, maskname, band, options)
-    print len(lambdadata)
     
     slitedges = edgedata[0:-1]
     edgeinfo = edgedata[-1]
@@ -281,7 +276,7 @@ def apply_lambda(mfits, fname, maskname, options):
     hdu.writeto(fn)
 
     print("{0}: rectifying".format(maskname))
-    dlam = np.median(np.diff(lams[1024,:]))
+    dlam = np.ma.median(np.diff(lams[1024,:]))
     hpp = Filters.hpp[band] 
     ll_fid = np.arange(hpp[0], hpp[1], dlam)
     nspec = len(ll_fid)
@@ -675,15 +670,6 @@ def find_known_lines(lines, ll, spec, options):
 
     pix = np.arange(2048.)
 
-    DRAW = False
-    if DRAW:
-        pl.ion()
-        pl.clf()
-        pl.figure(3, figsize=(23,4))
-        pl.plot(spec)
-        pl.xlim([0,500])
-        pl.ylim([-50,2000])
-
     for lam in lines:
         f = options["fractional-wavelength-search"]
         roi = (f*lam < ll) & (ll < lam/f)
@@ -693,15 +679,17 @@ def find_known_lines(lines, ll, spec, options):
             sxs.append(inf)
             continue
 
-        
-        lsf = Fit.mpfitpeak(pix[roi], spec[roi],
-                error=1/np.sqrt(np.abs(spec[roi])))
+
+        istd = 1/np.sqrt(np.abs(spec[roi].data))
+        istd[spec[roi].mask] = 0
+
+        lsf = Fit.mpfitpeak(pix[roi], spec[roi].data,
+                error=istd)
 
         if (lsf.perror is None) or (lsf.status < 0):
             xs.append(0.0)
             sxs.append(inf)
             continue
-
 
         mnpix = np.min(pix[roi])
         mxpix = np.max(pix[roi])
@@ -710,7 +698,6 @@ def find_known_lines(lines, ll, spec, options):
             xs.append(0.)
             sxs.append(inf)
             continue
-
 
         if mnpix < 7:
             xs.append(0.0)
@@ -726,16 +713,24 @@ def find_known_lines(lines, ll, spec, options):
         sxs.append(lsf.perror[1])
         sigmas.append(lsf.params[2])
 
-        if DRAW:
-            pl.axvline(lsf.params[1], color='red')
-            pl.text(lsf.params[1], 1200, "%s,  %s" % (lam, lsf.params[1]),
-                    fontsize=10,rotation=90)
-
-    if DRAW:
-        #pl.xlim([500, 550])
-        pl.draw()
-
     return map(np.array, [xs, sxs, sigmas])
+
+def fit_chebyshev_to_lines(xs, sxs, lines, options):
+    ''' Fit a chebyshev function to the best fit determined lines.
+    Note the best fits may fail and the first part of this function culls
+    bad fits, while the second part of the function has all the chebyshev
+    action.  For reference the numpy.polynomial.chebyshev package is imported
+    as CV '''
+
+    ok = np.isfinite(sxs)
+    if len(np.where(ok)[0]) < 3: return [[np.inf], None, None]
+
+    cfit = CV.chebfit(xs[ok], lines[ok], options["chebyshev-degree"])
+    delt = CV.chebval(xs[ok], cfit) - lines[ok]
+
+    return [delt, cfit, lines[ok]]
+
+
 
 def fit_model_to_lines(xs, sxs, lines, parguess, options, fixed):
 
@@ -819,7 +814,6 @@ class InteractiveSolution:
         if solutions is None:
             self.solutions = range(46)
         else:
-            print solutions
             self.solutions = solutions
         self.cid = self.fig.canvas.mpl_connect('key_press_event', self)
 
@@ -844,8 +838,9 @@ class InteractiveSolution:
         else:
             self.MAD = self.STD = self.foundlines = self.linesig = None
 
-        self.spec = np.median(self.data[y0-1:y0+1, :], axis=0) 
+        self.spec = np.ma.median(self.data[y0-1:y0+1, :], axis=0) 
             # axis = 0 is spatial direction
+
         self.ll = wavelength_model(self.parguess, self.pix)
         self.xrng = [min(self.ll) * .99, max(self.ll)*1/.99]
         self.xlim = self.xrng
@@ -863,7 +858,8 @@ class InteractiveSolution:
             for i in xrange(len(self.linelist)):
                 if not ok[i]: continue
                 D = (foundlams[i] - self.linelist[i])*1e4
-                pl.axvline(foundlams[i], color='yellow', ymax=.75)
+                pl.axvline(foundlams[i], color='orange', ymax=.75, ymin=.25,
+                        linewidth=1.5)
                 pl.text(foundlams[i], 1500, "%1.2f" % D, rotation='vertical',
                         size=12)
 
@@ -872,6 +868,113 @@ class InteractiveSolution:
 
             pl.plot(self.linelist[ok], (foundlams[ok] - self.linelist[ok])*1e4, 
                     'o')
+
+            [xs, sxs, sigmas] = find_known_lines(self.linelist, self.ll,
+                    self.spec, self.options)
+
+            [cdelt, cpars, clines] = fit_chebyshev_to_lines(xs, sxs,
+                    self.linelist, self.options)
+
+            self.cdelt = cdelt
+            self.cpars = cpars
+            self.clines = clines
+
+            pl.plot(clines, cdelt*1e4, 'ro')
+            print "CSTD: %1.2f" % (np.std(cdelt)*1e4)
+
+    def sweep(self):
+        '''
+
+        plan: 
+        1. Xcor outwards to figure out the curvature of the sepctra and guess
+        where to pull out lines from.
+        2. pull out lines at xcor'd positions
+        3. refit w/ 2d chebyshev
+
+        '''
+
+        pl.figure(2)
+        pl.clf()
+        y0 = self.parguess[5]
+        IMG = self.data
+        spec0 = np.ma.median(self.data[y0-1:y0+1,:], axis=0)
+        cpars0 = self.cpars
+        pix = np.arange(2048)
+        ll0 = CV.chebval(pix, cpars0)
+
+        shiftamounts = np.arange(-7,7)
+        lags = np.array([-2,-1,0,1,2,])
+        shifts = np.zeros((len(shiftamounts)))
+
+        ll_here = CV.chebval(pix, cpars0)
+        [xs0, sxs, sigmas] = find_known_lines(self.linelist, ll_here,
+                spec0, self.options)
+
+        cfits = []
+        for i in xrange(len(shiftamounts)):
+            shift = shiftamounts[i]
+            yhere = y0 + shift
+
+            spec_here = np.ma.median(self.data[yhere-1:yhere+1,:], axis=0)
+            peak_shift = np.argmax(Fit.xcor(spec_here, spec0, lags))
+            print "At %i peaks are shifted by %i" % (yhere, lags[peak_shift])
+            shifts[i] = lags[peak_shift]
+
+            ll_here = CV.chebval(pix-shifts[i], cpars0)
+
+            [xs, sxs, sigmas] = find_known_lines(self.linelist, ll_here,
+                    spec_here, self.options)
+
+            [delt, cfit, lines] = fit_chebyshev_to_lines(xs, sxs,
+                    self.linelist, self.options)
+
+            ll_plot = CV.chebval(pix, cfit)
+            
+            pl.figure(1)
+            pl.subplot(2,1,1)
+
+            devs = np.abs(ll_plot - self.ll)
+
+            if np.any(devs > 0.5):
+                print "bad fit: %1.3f" % np.ma.median(devs)
+            else:
+                pl.plot(ll_plot, self.spec)
+                cfits.append(cfit)
+
+        cfits = np.array(cfits)
+        cfit_funs = []
+
+        cfit_funs.append(np.poly1d(Fit.polyfit_clip(shiftamounts, cfits[:,0],2)))
+        for i in xrange(1,cfits.shape[1]):
+            cfit_funs.append(np.poly1d(Fit.polyfit_clip(cfits[:,0],cfits[:,i],2)))
+
+        for i in xrange(len(shiftamounts)):
+            shift = shiftamounts[i]
+            yhere = y0 + shift
+            c0 = cfit_funs[0](shift)
+            cs = [c0]
+            cs.extend([f(c0) for f in cfit_funs[1:]])
+            cs = np.array(cs)
+
+            ll_here = CV.chebval(pix, cs)
+            spec_here = np.ma.median(self.data[yhere-1:yhere+1,:], axis=0)
+
+            [xs, sxs, sigmas] = find_known_lines(self.linelist, ll_here,
+                    spec_here, self.options)
+
+            [delt, cfit, lines] = fit_chebyshev_to_lines(xs, sxs,
+                    self.linelist, self.options)
+
+            mad = np.median(np.abs(delt))
+            print "%i] %1.3f %1.3f" % (shift, np.std(delt)*1e4, mad*1e4)
+
+
+
+
+        np.save("cfits.npy", cfits)
+        pdb.set_trace()
+
+
 
 
     def draw_residuals(self):
@@ -1009,9 +1112,13 @@ class InteractiveSolution:
             self.drop_point(x)
             self.redraw()
 
+        if kp == 'o':
+            self.sweep()
+
         if kp == 'f':
             [xs, sxs, sigmas] = find_known_lines(self.linelist, self.ll,
                     self.spec, self.options)
+
 
             [deltas, params, perror] = fit_model_to_lines(xs, sxs,
                     self.linelist, self.parguess, self.options, False)
@@ -1022,7 +1129,7 @@ class InteractiveSolution:
 
             ok = np.isfinite(deltas)
             self.STD = np.std(deltas[ok])
-            self.MAD = np.median(np.abs(deltas[ok]))
+            self.MAD = np.ma.median(np.abs(deltas[ok]))
 
             print "STD: %1.2f MAD: %1.2f" % (self.STD, self.MAD)
 
@@ -1052,7 +1159,7 @@ def fit_wavelength_solution(data, parguess, lines, options,
     MAD = np.inf
 
     y0 = parguess[5]
-    spec = np.median(data[y0-1:y0+1, :], 
+    spec = np.ma.median(data[y0-1:y0+1, :], 
         axis=0) # axis = 0 is spatial direction
 
     d = 0.1
@@ -1090,7 +1197,7 @@ def fit_wavelength_solution(data, parguess, lines, options,
                 pl.axvline(line ,color='red')
             pl.draw()
 
-        MAD = np.median(deltas)
+        MAD = np.ma.median(deltas)
         iteration += 1
         #print "%2.2i] %3.0i %1.4f %1.4f" % (slitno, iteration, dsinbeta, MAD)
 
@@ -1123,7 +1230,7 @@ def fit_outwards_xcor(data, sol_1d, lines, options, slitno):
         params0 = np.array(params0)
         y0 = params0[5]
         ret = []
-        spec = np.median(data[y0-1:y0+1, :], axis=0)
+        spec = np.ma.median(data[y0-1:y0+1, :], axis=0)
 
         for deltay in deltays:
             params = params0.copy()
@@ -1133,7 +1240,7 @@ def fit_outwards_xcor(data, sol_1d, lines, options, slitno):
                 print("%i: Skipping out of bounds %i" % (deltay, params[5]))
                 continue
 
-            spec2 = np.median(data[params[5]-1:params[5]+1, :], axis=0)
+            spec2 = np.ma.median(data[params[5]-1:params[5]+1, :], axis=0)
             xcs = []
             for lag in lags:
                 xc = np.sum(spec * np.roll(spec2, lag))
@@ -1149,16 +1256,16 @@ def fit_outwards_xcor(data, sol_1d, lines, options, slitno):
                     fixed=False)
 
             success = True
-            if (len(deltas) < 2) or (np.median(deltas) > .4):
+            if (len(deltas) < 2) or (np.ma.median(deltas) > .4):
                 success = False
 
             
             if True:
                 print ("%2i @ %4i: Success: %i - %3.5f %4.3f %3.3e %2.5f = %2.2f" %
                         (slitno, params[5], success, params[0], params[1],
-                            params[2], params[3], np.median(np.abs(deltas))))
+                            params[2], params[3], np.ma.median(np.abs(deltas))))
 
-            ret.append([params, perror, np.median(deltas), success])
+            ret.append([params, perror, np.ma.median(deltas), success])
 
         return ret
 
