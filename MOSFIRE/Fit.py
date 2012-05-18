@@ -31,6 +31,15 @@ def xcor(a,b,lags):
 
     return cors
 
+def xcor_peak(a, b, lags):
+    '''Return the peak position in units of lags'''
+
+    N = len(lags)
+    xcs = xcor(a, b, lags)
+
+    return lags[np.argmax(xcs)]
+
+
 
 
 # TODO: Document mpfit_* functions
@@ -300,6 +309,19 @@ def polyfit_clip(xs, ys, order, nsig=2.5):
 
     r = np.abs(ys - ff(xs))
     ok = r < (sd * nsig)
+    return np.polyfit(xs[ok], ys[ok], order)
+
+def polyfit_sigclip(xs, ys, order, nmad=4):
+
+    ok = np.ones(len(xs))>0.5
+
+    for i in range(5):
+        ff = np.poly1d(np.polyfit(xs[ok], ys[ok], order))
+        sd = np.median(np.abs(ys[ok] - ff(xs[ok])))
+
+        r = np.abs(ys - ff(xs))
+        ok = r < (sd * nmad)
+
     return np.polyfit(xs[ok], ys[ok], order)
 
 class TestFitFunctions(unittest.TestCase):
