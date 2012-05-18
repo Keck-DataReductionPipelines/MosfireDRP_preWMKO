@@ -43,9 +43,6 @@ def load_lambdacenter(fnum, maskname, options):
 
     ld = np.load(fn)
 
-    for i in xrange(1,47):
-        assert(ld[i-1]['slitno'] == i)
-
     return ld
 
 def load_lambdadata(fnum, maskname, band, options):
@@ -53,13 +50,25 @@ def load_lambdadata(fnum, maskname, band, options):
     path = os.path.join(options["outdir"], maskname)
     fn = os.path.join(path, "lambda_coeffs_{0}.npy".format(fnum))
 
-    print fn
     ld = np.load(fn)
-    print ld[0]['slitno']
 
-    for i in xrange(1,47):
-        assert(ld[i-1]['slitno'] == i)
+    return ld
 
+def load_lambdaoutwards(fnum, maskname, band, options):
+    ''' Load the wavelength coefficient functions '''
+    path = os.path.join(options["outdir"], maskname)
+    fn = os.path.join(path, "lambda_outwards_coeffs_{0}.npy".format(fnum))
+
+    ld = np.load(fn)
+
+    return ld
+
+def load_lambdamodel(fnum, maskname, band, options):
+    ''' Load the wavelength coefficient functions '''
+    path = os.path.join(options["outdir"], maskname)
+    fn = os.path.join(path, "lambda_mask_coeffs_{0}.npy".format(fnum))
+
+    ld = np.load(fn)
     return ld
 
 def load_lambdaslit(fnum, maskname, band, options):
