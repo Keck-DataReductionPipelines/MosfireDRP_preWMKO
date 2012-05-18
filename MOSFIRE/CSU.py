@@ -276,11 +276,15 @@ class Barset:
         
     def scislit_to_csuslit(self, scislit):
         '''Convert a science slit number to a mechanical slit list'''
-        return self.scislit_to_slit[scislit]
+        if (scislit < 1) or (scislit > len(self.ssl)+1):
+            raise Exception("The requested slit number (%i) does not exist" %
+                    scislit)
+
+        return self.scislit_to_slit[scislit-1]
     
     def csu_slit_to_pixel(self, slit):
         '''Convert a CSU slit number to spatial pixel'''
-        y0 = 2004.9
+        y0 = 2013
 
         if (slit < 1) or (slit > 46):
             raise Exception("The requested slit number (%i) does not exist" %
@@ -296,7 +300,7 @@ class Barset:
             raise Exception("The requested science slit number %i does not exist" \
                     % scislit)
 
-        slits = self.scislit_to_slit[scislit]
+        slits = self.scislit_to_csuslit(scislit)
         return self.csu_slit_to_pixel(np.median(slits))
 
     def set_pos_pix(self):
