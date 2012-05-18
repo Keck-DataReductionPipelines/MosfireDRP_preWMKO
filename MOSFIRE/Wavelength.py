@@ -1,4 +1,4 @@
-'''
+"""
 ==================================
 MOSFIRE Wavelength Calibrations
 
@@ -25,6 +25,26 @@ alpha d                                                                       3
 a spectrum --
 
 
+control flow
+
+    1. fit a spatially central pixel on a spectrum interactively. Goal is to
+    achieve RMS of 0.1 Angstrom or better. The entry point is a class called
+    InteractiveSolution called from a wrapper called fit_lambda_interactively.
+    Interactive solution is a visual wrapper around the functions
+    find_known_lines & fit_chebyshev_to_lines. Currently an old optical model
+    is used to guestimate the wavelength solution but this could be updated in
+    the future. 
+        -> Produces lambda_center_coeffs_maskname.npy
+
+    2. based on interactive fits, perform automated fits "outwards" from the
+    central pixel in the spectrum. These fits are performed using the final
+    linelist from the interactive fit. The entry point is a function called
+    fit_lambda that iteratively calls fit_outwards_refit.
+
+        -> Produces lambda_2d_coeffs_maskname.npy
+
+    3. Apply these lambda fits to produce a full wavelength solution
+
 INPUT:
 
 OUTPUT:
@@ -33,15 +53,17 @@ npk Apr/May  2012 - Significant enhancements w/ first light data
 npk April 26 2011
 npk   May  4 2011
 
-'''
+"""
 
+import logging
+from multiprocessing import Pool
 import os
 import time
 
 import numpy as np
-import pylab as pl
 import pyfits as pf
-from multiprocessing import Pool
+import pylab as pl
+
 from scipy.interpolate import interp1d
 from matplotlib.widgets import Button
 from numpy.polynomial import chebyshev as CV
@@ -55,6 +77,26 @@ from MOSFIRE import CSU, Fit, IO, Options, Filters
 import pdb
 
 __version__ = "1May2012"
+
+
+class bcolors:
+    """from
+    http://stackoverflow.com/questions/287871/print-in-terminal-with-colors-using-python"""
+
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+
+    def disable(self):
+        self.HEADER = ''
+        self.OKBLUE = ''
+        self.OKGREEN = ''
+        self.WARNING = ''
+        self.FAIL = ''
+        self.ENDC = ''
 
 
 MADLIMIT = 0.1
@@ -74,7 +116,7 @@ except:
 
     
 def handle_lambdas(filelist, maskname, options):
-    ''' handle_lambdas is the entry point to the Wavelengths module. '''
+    """handle_lambdas is the entry point to the Wavelengths module. """
     
     path = os.path.join(options["outdir"], maskname)
     if not os.path.exists(path):
@@ -89,30 +131,29 @@ def handle_lambdas(filelist, maskname, options):
         apply_lambda(mfits, fname, maskname, options)
 
 def fit_lambda(mfits, fname, maskname, options):
-    '''Fit the two-dimensional wavelength solution to each science slit'''
-    global bs, data, lamout, center_solutions
+    """Fit the two-dimensional wavelength solution to each science slit"""
+    global bs, data, lamout, center_solutions, edgedata
     np.seterr(all="ignore")
     
     fnum = fname.rstrip(".fits")
-    
     path = os.path.join(options["outdir"], maskname)
     fn = os.path.join(path, "lambda_coeffs_{0}.npy".format(fnum))
 
-    print "%s] Writing to: " % (maskname, fn)
+    print "%s] Writing to: %s" % (maskname, fn)
 
     (header, data, bs) = mfits
     band = header['filter'].rstrip()
     center_solutions = IO.load_lambdacenter(fnum, maskname, options)
+    edgedata = IO.load_edges(maskname, band, options)
     
     solutions = []
     lamout = np.zeros(shape=(2048, 2048), dtype=np.float32)
 
     tock = time.time()
-    if True:
-        p = Pool()
-        solutions = p.map(fit_lambda_helper, range(1,47))
-        p.close()
 
+    p = Pool()
+    solutions = p.map(fit_lambda_helper, range(1,len(bs.ssl)))
+    p.close()
 
     tick = time.time()
 
@@ -126,37 +167,81 @@ def fit_lambda(mfits, fname, maskname, options):
 
 
 def fit_lambda_helper(slitno):
-    '''This helper function exists for multiprocessing suport'''
+    """This helper function exists for multiprocessing suport"""
     
-    global bs, data, lamout, center_solutions
+    global bs, data, lamout, center_solutions, edgedata
 
     slitidx = slitno-1
 
     tick = time.time()
 
-    print("-==== Fitting Slit %i" % slitno)
 
-    assert(center_solutions[slitidx]['slitno'] == slitno)
     sol_1d = center_solutions[slitidx]["sol_1d"]
+    edge = edgedata[slitidx]
     linelist = center_solutions[slitidx]["linelist"]
 
+    start  = center_solutions[slitidx]["extract_pos"]
+    bottom = np.ceil(edge["bottom"](1024))+5
+    top    = np.ceil(edge["top"](1024))-5
 
-    sol_2d = fit_outwards_xcor(data, sol_1d, linelist, Options.wavelength,
-            slitno)
-
-    lamout = merge_solutions(lamout, slitno, sol_1d[1][4], bs, sol_2d, 
-            Options.wavelength)
+    print("* Fitting Slit %s from %i to %i" % (bs.ssl[slitno]["Target_Name"],
+        bottom, top))
 
 
-    sol = {"slitno": slitno, "center_sol": [sol_1d[1], sol_1d[2]], 
-            "sigmas": sol_1d[3], "2d": sol_2d, "lines": linelist,
-            "csupos_mm": sol_1d[-1]}
+    sol_2d = fit_outwards_refit(data, bs, sol_1d, linelist, Options.wavelength,
+            start, bottom, top, slitno)
+
+    sol = {"slitno": slitno, "center_sol": np.array(sol_1d[1]), "2d":
+        sol_2d, "lines": np.array(linelist)}
+    
     print "%i] TOOK: %i" % (slitno, time.time()-tick)
+
     return sol
+
+def fit_slit_interactively(mfits, fname, maskname, options):
+    """fit the two-dimensional wavelength solution to each science slit"""
+
+    path = os.path.join(options["outdir"], maskname)
+    fn = os.path.join(path, "lambda_outwards_coeffs_{0}.npy".format(
+        fname.replace(".fits","")))
+
+    (header, data, bs) = mfits
+    fnum = fname.rstrip(".fits")
+    band = header['Filter'].rstrip()
+    Ld = IO.load_lambdadata(fnum, maskname, band, options)
+    
+    try: solutions = np.load(fn)
+    except IOError: solutions = None
+
+    fig = pl.figure(1,figsize=(11,8))
+    pl.ion()
+    II = InteractiveOutwardSolution(fig, mfits, Ld, options, 1,
+            solutions=solutions)
+    pl.show()
+
+    print "save to: ", fn
+    np.save(fn, np.array(II.solutions))
+
+
+def produce_2d_solution(mfits, fname, maskname, options):
+    path = os.path.join(options["outdir"], maskname)
+    outname = os.path.join(path, "lambda_2d_coeffs_{0}.npy".format(
+        fname.replace(".fits","")))
+    inname = os.path.join(path, "lambda_center_coeffs_{0}.npy".format(
+        fname.replace(".fits","")))
+
+    (header, data, bs) = mfits
+    
+    try: solutions = np.load(inname)
+    except: solutions = None
+
+
+    
+    lamout = np.zeros(shape=(2048, 2048), dtype=np.float32)
 
 
 def fit_lambda_interactively(mfits, fname, maskname, options):
-    '''Fit the two-dimensional wavelength solution to each science slit'''
+    """Fit the one-dimensional wavelength solution to each science slit"""
     np.seterr(all="ignore")
     
     path = os.path.join(options["outdir"], maskname)
@@ -167,7 +252,7 @@ def fit_lambda_interactively(mfits, fname, maskname, options):
     linelist = pick_linelist(header)
     
     try: solutions = np.load(fn)
-    except: solutions = None
+    except IOError: solutions = None
 
     lamout = np.zeros(shape=(2048, 2048), dtype=np.float32)
 
@@ -182,10 +267,28 @@ def fit_lambda_interactively(mfits, fname, maskname, options):
     print "save to: ", fn
     np.save(fn, np.array(II.solutions))
 
-def apply_lambda(mfits, fname, maskname, options):
-    '''Convert solutions into final output products'''
+def produce_2d_solution(mfits, fname, maskname, options):
+    path = os.path.join(options["outdir"], maskname)
+    outname = os.path.join(path, "lambda_2d_coeffs_{0}.npy".format(
+        fname.replace(".fits","")))
+    inname = os.path.join(path, "lambda_center_coeffs_{0}.npy".format(
+        fname.replace(".fits","")))
 
     (header, data, bs) = mfits
+    
+    try: solutions = np.load(inname)
+    except: solutions = None
+
+
+    
+    lamout = np.zeros(shape=(2048, 2048), dtype=np.float32)
+
+def apply_lambda_simple(mfits, fname, maskname, options):
+    """Convert solutions into final output products"""
+
+    (header, data, bs) = mfits
+
+    data = data.filled(np.median(data))
 
     band = header['filter'].rstrip()
     bmap = {"Y": 6, "J": 5, "H": 4, "K": 3}
@@ -195,81 +298,30 @@ def apply_lambda(mfits, fname, maskname, options):
 
     path = os.path.join(options["outdir"], maskname)
     edgedata = IO.load_edges(maskname, band, options)
-    lambdadata = IO.load_lambdadata(fnum, maskname, band, options)
-    
+    #lambdadata = IO.load_lambdamodel(fnum, maskname, band, options)
+    lambdadata = IO.load_lambdaoutwards(fnum, maskname, band, options)
+    Ld = IO.load_lambdadata(fnum, maskname, band, options)
+
+
     slitedges = edgedata[0:-1]
     edgeinfo = edgedata[-1]
-
-    # pixel_ and beta_set are lists containing the
-    # measured values of beta for each scientific slit
-    (pixel_set, alpha_set, beta_set, gamma_set, 
-            delta_set) = mechanical_to_science_slit(bs, slitedges, lambdadata)
-
-    print("{0}: Fitting across the mask...".format(maskname))
-    print("{0}:\t...alpha ".format(maskname))
-    alpha_lsf = fit_mask([0.99, 0, 0, 1024], pixel_set, 
-            np.concatenate(alpha_set))
-    print("{0}:\t...beta".format(maskname))
-    beta_lsf = fit_mask([40., 0, 0, 1024], pixel_set, 
-            np.concatenate(beta_set))
-    print("{0}:\t...gamma".format(maskname))
-    gamma_lsf = fit_mask([7e-13, 0, 0, 1024], pixel_set, 
-            np.concatenate(gamma_set))
-    print("{0}\t...delta".format(maskname))
-    delta_lsf = fit_mask([1000, 0, 0, 1024.], pixel_set, 
-            np.concatenate(delta_set))
-
-    pixels = np.concatenate(pixel_set)
-
-    fn = os.path.join(path, "mask_solution_{0}.npy".format(
-        fname.replace(".fits", "")))
-    try: os.remove(fn)
-    except: pass
-
-    mask_fit_pars = [{"alpha_lsf": alpha_lsf, "beta_lsf": beta_lsf, 
-        "gamma_lsf": gamma_lsf, "delta_lsf": delta_lsf,
-        "pixels": pixel_set, "alphas": alpha_set, "betas": beta_set,
-        "gammas": gamma_set, "deltas": delta_set}]
-    np.save(fn, mask_fit_pars)
-
-    alphas, betas, gammas, deltas = map(np.concatenate, [alpha_set, beta_set,
-        gamma_set, delta_set])
-   
-    def convfun(params, px, i):
-        pp = np.copy(params[0:5])
-        pp[4] = params[4+i]
-        return mask_model(pp, [px])
 
     # write lambda
     lams = np.zeros((2048, 2048), dtype=np.float32)
     xx = np.arange(2048)
 
-    for i in xrange(len(pixel_set)):
-        edges = slitedges[i]
-        top = edges["top"](xx)
-        bottom = edges["bottom"](xx)
-        px = np.arange(np.min(bottom), np.max(top))
+    
+    for i in xrange(len(Ld)):
+        lp = Ld[i]["2d"]["positions"]
+        lc = Ld[i]["2d"]["coeffs"]
 
-        alphas = convfun(alpha_lsf.params, px, i)
-        betas = convfun(beta_lsf.params, px, i)
-        gammas = convfun(gamma_lsf.params, px, i)
-        deltas = convfun(delta_lsf.params, px, i)
-
-        cnt = 0
-        for j in px:
-            lams[j,:] = wavelength_model(
-                    [alphas[cnt],
-                        betas[cnt],
-                        gammas[cnt],
-                        deltas[cnt],
-                        order,
-                        j], xx)
-            cnt += 1
+        for j in xrange(len(lp)):
+            lams[lp[j],:] = CV.chebval(xx, lc[j])
 
 
 
     print("{0}: writing lambda".format(maskname))
-    hdu = pf.PrimaryHDU(lams*1e4)
+    hdu = pf.PrimaryHDU(lams)
     fn = os.path.join(path, "lambda_solution_{0}".format(fname))
     try: os.remove(fn)
     except: pass
@@ -277,9 +329,11 @@ def apply_lambda(mfits, fname, maskname, options):
 
     print("{0}: rectifying".format(maskname))
     dlam = np.ma.median(np.diff(lams[1024,:]))
+    print dlam
     hpp = Filters.hpp[band] 
     ll_fid = np.arange(hpp[0], hpp[1], dlam)
     nspec = len(ll_fid)
+    print nspec
 
     rectified = np.zeros((2048, nspec), dtype=np.float32)
 
@@ -290,29 +344,87 @@ def apply_lambda(mfits, fname, maskname, options):
         f = interp1d(ll, ss, bounds_error=False)
         rectified[i,:] = f(ll_fid)
 
+
     hdu = pf.PrimaryHDU(rectified)
     fn = os.path.join(path, "rectified_{0}".format(fname))
     try: os.remove(fn)
     except: pass
     hdu.writeto(fn)
+    
+def apply_lambda(mfits, fname, maskname, options):
+    """Convert solutions into final output products"""
 
-    fvs = []
-    poss= [2012, 1955, 1925, 1868, 1824, 1774, 1740, 1700, 1654, 1614, 1575,
-            1519, 1476, 1433, 1396, 1300, 1073, 1036, 904, 858, 806, 725,
-            682, 633, 591, 546, 497, 459, 408, 365, 316, 282, 235, 192]
-    for i in poss:
+    (header, data, bs) = mfits
+
+    data = data.filled(np.median(data))
+
+    band = header['filter'].rstrip()
+    bmap = {"Y": 6, "J": 5, "H": 4, "K": 3}
+    order = bmap[band]
+
+    fnum = fname.rstrip(".fits")
+
+    path = os.path.join(options["outdir"], maskname)
+    edgedata = IO.load_edges(maskname, band, options)
+    #lambdadata = IO.load_lambdamodel(fnum, maskname, band, options)
+    lambdadata = IO.load_lambdaoutwards(fnum, maskname, band, options)
+    Ld = IO.load_lambdadata(fnum, maskname, band, options)
+
+
+    pdb.set_trace()
+    slitedges = edgedata[0:-1]
+    edgeinfo = edgedata[-1]
+
+    # write lambda
+    lams = np.zeros((2048, 2048), dtype=np.float32)
+    xx = np.arange(2048)
+
+    for i in xrange(len(bs.ssl)):
+        edges = slitedges[i]
+        top = edges["top"](xx)
+        bottom = edges["bottom"](xx)
+        px = np.arange(np.min(bottom), np.max(top))
+
+        for j in px:
+            try:
+                lams[j,:] = fit_to_lambda(lambdadata, xx, j)
+            except NoSuchFit:
+                continue
+
+    print("{0}: writing lambda".format(maskname))
+    hdu = pf.PrimaryHDU(lams)
+    fn = os.path.join(path, "lambda_solution_{0}".format(fname))
+    try: os.remove(fn)
+    except: pass
+    hdu.writeto(fn)
+
+    print("{0}: rectifying".format(maskname))
+    dlam = np.ma.median(np.diff(lams[1024,:]))
+    hpp = Filters.hpp[band] 
+    ll_fid = np.arange(hpp[0]*1e4, hpp[1]*1e4, dlam)
+    nspec = len(ll_fid)
+
+    rectified = np.zeros((2048, nspec), dtype=np.float32)
+
+    for i in xrange(2048):
         ll = lams[i,:]
         ss = data[i,:]
 
-        roi = np.abs(ll-1.5997)<.001
+        f = interp1d(ll, ss, bounds_error=False)
 
-        if not roi.any(): continue
+        rectified[i,:] = f(ll_fid)
 
-        pp = Fit.mpfitpeak(ll[roi]*1e4, ss[roi])
-        fvs.append(pp.params[1])
+
+    hdu = pf.PrimaryHDU(rectified)
+    fn = os.path.join(path, "rectified_{0}".format(fname))
+    try: os.remove(fn)
+    except: pass
+    hdu.writeto(fn)
+    
+
 
 def mechanical_to_science_slit(bs, slitedges, lambdadata):
-    '''Convert mechanical slit fits to fits accross the science slit'''
+    """Convert mechanical slit fits to fits accross the science slit"""
     all_pixs = []
     all_alphas = []
     all_betas = []
@@ -379,7 +491,7 @@ def mechanical_to_science_slit(bs, slitedges, lambdadata):
     return [all_pixs, all_alphas, all_betas, all_gammas, all_deltas]
 
 def filter_2d_solutions(vec):
-    '''Select quality fits in two dimensional solution'''
+    """Select quality fits in two dimensional solution"""
 
 
     def filter_fun(x):
@@ -401,7 +513,7 @@ def filter_2d_solutions(vec):
 
 # Physical models for instrument
 def param_guess_functions(band):
-    '''Parameters determined from experimentation with cooldown 9 data'''
+    """Parameters determined from experimentation with cooldown 9 data"""
 
     fudge_npk = 1.00100452
     fudge_npk = 1.0
@@ -412,7 +524,7 @@ def param_guess_functions(band):
     # they are not reliable. The fudge_* factors will need to change
     # or dissapear
     if band == 'Y' or band == 'J':
-        fudge_npk = 0.008
+        fudge_npk = 0.000
         sinbeta_position = np.poly1d([0.0239, 36.2 + fudge_npk])
         sinbeta_pixel = np.poly1d([-2.578e-7, 0.00054, -0.2365])
         gamma_pixel = np.poly1d([1.023e-25, -4.313e-22, 7.668e-17, 6.48e-13])
@@ -432,7 +544,7 @@ def param_guess_functions(band):
             gamma_pixel, delta_pixel]
     
 def dlambda_model(p):
-    ''' Returns an approximate dlambda/dpixel '''
+    """Returns an approximate dlambda/dpixel """
     x = 1024
     order = p[4]
     y = p[5]
@@ -556,9 +668,9 @@ def pick_linelist(header):
 
 
 def guess_wavelength_solution(slitno, header, bs):
-    '''Given a slit number guess the coefficient values
+    """Given a slit number guess the coefficient values
     return [order, y0, alpha, sinbeta, gamma, delta]
-    '''
+    """
 
     band = header['filter'].rstrip()
     bmap = {"Y": 6, "J": 5, "H": 4, "K": 3}
@@ -567,15 +679,11 @@ def guess_wavelength_solution(slitno, header, bs):
     y0 = bs.csu_slit_to_pixel(slitno)
     csupos_mm = bs.csu_slit_center(slitno)
 
-    print("Slit %i at %4.3f" % (slitno, csupos_mm))
-
-    # The following values are determined through experimentation
-    # with c9 data
 
     [alpha_pixel, sinbeta_position, sinbeta_pixel, gamma_pixel, 
             delta_pixel] = param_guess_functions(band)
 
-    return [alpha_pixel(y0),
+    retv = [alpha_pixel(y0),
             sinbeta_position(csupos_mm) + sinbeta_pixel(y0),
             gamma_pixel(y0),
             delta_pixel(y0),
@@ -583,8 +691,10 @@ def guess_wavelength_solution(slitno, header, bs):
             y0, 
             csupos_mm]
 
+    return retv
+
 def plot_mask_solution_ds9(fname, maskname, options):
-    '''makes a ds9 region file guessing the wavelength solution'''
+    """makes a ds9 region file guessing the wavelength solution"""
 
 
     inpath = options["indir"]
@@ -598,9 +708,9 @@ def plot_mask_solution_ds9(fname, maskname, options):
 
     linelist = pick_linelist(header)
 
-    ds9 = '''# Region file format: DS9 version 4.1
+    ds9 = """# Region file format: DS9 version 4.1
 global color=red 
-'''
+"""
     pix = np.arange(2048)
     colors = ["red", "blue"]
     cidx = 0
@@ -642,9 +752,9 @@ global color=red
 
 
 def estimate_half_power_points(slitno, header, bs):
-    ''' This helper function is used to determine the filter half-power points.
+    """This helper function is used to determine the filter half-power points.
     This function is primarily used by the flat-field code to determine the 
-    on order regions of an image.  '''
+    on order regions of an image.  """
 
     band = header['filter'].rstrip()
     parguess = guess_wavelength_solution(slitno, header, bs)
@@ -656,13 +766,52 @@ def estimate_half_power_points(slitno, header, bs):
     return [ np.argmin(np.abs(ll-hpp[0])), np.argmin(np.abs(ll-hpp[1])) ]
 
 
-def find_known_lines(lines, ll, spec, options):
-    ''' 
+
+def xcor_known_lines(lines, ll, spec, spec0, options):
+    """
     lines[N]: list of lines in wavelength units
     ll[2048]: lambda vector
     spec[2048]: spectrum vector (as function of lambda)
     options: wavelength options
-    '''
+    """
+    inf = np.inf
+    dxs = []
+    sigs = []
+
+    pix = np.arange(2048.)
+
+    for lam in lines:
+        f = options["fractional-wavelength-search"]
+        roi = np.where((f*lam < ll) & (ll < lam/f))[0]
+
+        if not roi.any():
+            dxs.append(inf)
+            sigs.append(inf)
+            continue
+        
+        lags = np.arange(-len(roi)/2, len(roi)/2)
+        cors = Fit.xcor(spec[roi], spec0[roi], lags)
+
+        fit = Fit.mpfitpeak(lags, cors)
+
+        if (fit.perror is None) or (fit.status < 0):
+            dxs.append(inf)
+            sigs.append(inf)
+            continue
+
+        dxs.append(fit.params[1])
+        sigs.append(fit.params[2])
+
+    return map(np.array, [dxs, sigs])
+
+
+def find_known_lines(lines, ll, spec, options):
+    """
+    lines[N]: list of lines in wavelength units
+    ll[2048]: lambda vector
+    spec[2048]: spectrum vector (as function of lambda)
+    options: wavelength options
+    """
     inf = np.inf
     xs = []
     sxs = []
@@ -716,19 +865,27 @@ def find_known_lines(lines, ll, spec, options):
     return map(np.array, [xs, sxs, sigmas])
 
 def fit_chebyshev_to_lines(xs, sxs, lines, options):
-    ''' Fit a chebyshev function to the best fit determined lines.
+    """Fit a chebyshev function to the best fit determined lines.
     Note the best fits may fail and the first part of this function culls
     bad fits, while the second part of the function has all the chebyshev
     action.  For reference the numpy.polynomial.chebyshev package is imported
-    as CV '''
+    as CV """
 
     ok = np.isfinite(sxs)
-    if len(np.where(ok)[0]) < 3: return [[np.inf], None, None]
+    L = len(xs[ok])
+    badfit = np.zeros(options["chebyshev-degree"]+1)
+    baddelt = np.ones(L) * 9999.0
+
+    if L < 6:
+        return [baddelt, badfit, lines[ok]]
 
     cfit = CV.chebfit(xs[ok], lines[ok], options["chebyshev-degree"])
     delt = CV.chebval(xs[ok], cfit) - lines[ok]
 
-    return [delt, cfit, lines[ok]]
+    if cfit is None:
+        return [baddelt, badfit, lines[ok]]
+
+    return [np.array(delt), np.array(cfit), np.array(lines[ok])]
 
 
 
@@ -770,12 +927,190 @@ def fit_model_to_lines(xs, sxs, lines, parguess, options, fixed):
     return [ delt, lsf.params, lsf.perror]
 
 def guesslims(spec):
-    ''' Guess the spectral limits'''
+    """Guess the spectral limits"""
     f = 1.1
 
     s = spec.copy()
     s.sort()
     return [-500, s[-10]*f]
+
+def polyfit_err(x,y,order):
+
+    coef = np.polyfit(x,y,order)
+    fun = np.poly1d(coef)
+
+    return fun, coef, np.std(y - fun(x))
+
+class InteractiveOutwardSolution:
+    header = None
+    data = None
+    bs = None
+    parguess = None
+    linelist0 = None
+    foundlines = None
+    options = None
+    slitno = None   # the science slit number.
+    spec = None
+    good_solution = False
+    done = False
+
+    ll = None
+    pix = None
+    xlim = None
+    ylim = None
+    MAD = None
+    STD = None
+
+    first_time = True
+
+
+    def __init__(self, fig, mfits, lamdata, options, slitno, solutions=None):
+        self.header = mfits[0]
+        self.data = mfits[1]
+        self.bs = mfits[2]
+        self.options = options
+        self.slitno = slitno
+        self.fig = fig
+        self.lamdata = lamdata
+
+        self.pix = np.arange(2048)
+
+        if solutions is None:
+            self.solutions = range(len(self.bs.ssl))
+        else:
+            self.solutions = solutions
+
+        self.cid = self.fig.canvas.mpl_connect('key_press_event', self)
+
+        self.setup()
+
+    
+    def setup(self):
+
+        ld = self.lamdata[self.slitno-1]
+        self.coeffs = ld['2d']['coeffs']
+        self.pos = ld['2d']['positions']
+        self.mads = ld['2d']['lambdaMAD']
+        self.mads[np.isfinite(self.mads)==False] = 1
+
+        S = self.solutions[self.slitno-1]
+        if type(S) is not int: # previously setup
+            self.ok = S["ok"]
+            self.scat = S["scat"]
+            try:
+                self.fits = S["functions"]
+            except:
+                self.fits = S["fits"]
+        else:
+            self.ok = np.ones(len(self.pos))==1
+            pass
+
+        self.redraw()
+
+    def redraw(self):
+        pl.figure(1)
+
+        pl.ion()
+        pl.clf()
+
+        self.axes = [pl.subplot(3,2,1)]
+        pl.subplots_adjust(left=.1,right=.95,bottom=.1,top=.90)
+
+        self.c0s = self.coeffs[:,0]
+        ok = self.ok
+        N = self.coeffs.shape[1]
+
+        self.fits = np.zeros((N,2))
+        self.scat = np.zeros(N)
+        pl.scatter(self.pos[ok], self.c0s[ok], c=self.mads[ok])
+        f, coef0, self.scat[0] = polyfit_err(self.pos[ok], self.c0s[ok], 1)
+        pl.plot(self.pos[ok], f(self.pos[ok]))
+        pl.title("rms %1.3e" % self.scat[0])
+
+        self.fits[0,:] = coef0
+
+        N = self.coeffs.shape[1]
+        for i in xrange(1,N):
+            self.axes.append(pl.subplot(3,2,i+1))
+            pl.scatter(self.c0s[ok], self.coeffs[ok,i], c=self.mads[ok])
+            f, coefi, self.scat[i] = polyfit_err(self.c0s[ok], self.coeffs[ok,i], 1)
+            pl.plot(self.c0s[ok], f(self.c0s[ok]))
+            pl.title("rms %1.3e" % self.scat[i])
+
+            self.fits[i,:] = coefi
+
+        self.solutions[self.slitno-1] = {"scat": self.scat, "ok": self.ok,
+                "functions": self.fits, "positions": self.pos}
+    
+
+    def next(self, event):
+        """Move to next object"""
+
+        self.slitno += 1
+        self.setup()
+
+    def prev(self, event):
+        """Move to prev object"""
+
+        self.slitno -= 1
+        self.setup()
+
+
+    def delete(self, event):
+        """Delete element from fit"""
+        kp = event.key
+        x = event.xdata
+        y = event.ydata
+        the_axes = event.inaxes
+
+        
+        found = False
+        for i in xrange(len(self.axes)):
+            if self.axes[i] == the_axes:
+                found = True
+                break
+        
+        ok = self.ok
+
+        ylims = np.ptp(self.coeffs[ok,i])
+        frac = .05 # Radius to drop points under.
+        if i == 0:
+            xlims = np.ptp(self.pos[ok])
+            todrop = (np.abs(self.pos - x)/xlims < frac) & (np.abs(
+                self.coeffs[:,i] - y)/ylims < frac)
+        else:
+            xlims = np.ptp(self.c0s[ok])
+            todrop = (np.abs(self.c0s - x)/xlims < frac) & (np.abs(
+                self.coeffs[:,i] - y)/ylims < frac)
+
+
+        self.ok[todrop] = False
+
+        self.redraw()
+
+    def quit(self, event):
+        pl.ioff()
+        pl.close(self.fig)
+        
+    def reset(self, event):
+        """Restart fit from beginning"""
+        self.setup()
+
+
+    def __call__(self, event):
+        kp = event.key
+        x = event.xdata
+        y = event.ydata
+
+
+        if x is None: return
+        if y is None: return
+
+        actions = {"d": self.delete, 'G': self.next, 'R': self.reset, "Q":
+                self.quit, "P": self.prev}
+        if actions.has_key(kp):
+            actions[kp](event)
+
 
 class InteractiveSolution:
 
@@ -786,9 +1121,10 @@ class InteractiveSolution:
     linelist0 = None
     foundlines = None
     options = None
-    slitno = None
+    slitno = None   # the science slit number.
     spec = None
     good_solution = False
+    done = False
 
     ll = None
     pix = None
@@ -812,7 +1148,7 @@ class InteractiveSolution:
         self.pix = np.arange(2048)
 
         if solutions is None:
-            self.solutions = range(46)
+            self.solutions = range(len(self.bs.ssl))
         else:
             self.solutions = solutions
         self.cid = self.fig.canvas.mpl_connect('key_press_event', self)
@@ -821,29 +1157,50 @@ class InteractiveSolution:
 
     
     def setup(self):
-        self.parguess = guess_wavelength_solution(self.slitno, self.header,
-                self.bs)
+        csuslits = self.bs.scislit_to_csuslit(self.slitno)
+        try:
+            l = len(csuslits)
+            if l > 1:
+                csuslit = csuslits[l/2]
+            else:
+                csuslit = csuslits[0]
+        except:
+            csuslit = csuslits
+
+
         self.linelist = self.linelist0
-        y0 = self.parguess[5]
+        self.extract_pos = self.bs.science_slit_to_pixel(self.slitno)
 
         S = self.solutions[self.slitno-1]
         if type(S) is not int: # previously setup
             self.MAD = S["MAD"]
             self.STD = S["STD"]
-            self.parguess = S["params"]
             self.linelist = S["linelist"]
             self.foundlines = S["foundlines"]
             self.foundlinesig = S["foundlinesig"]
-            self.y0 = self.parguess[5]
+            self.extract_pos = S["extract_pos"]
+            self.cfit = S["sol_1d"][1]
         else:
             self.MAD = self.STD = self.foundlines = self.linesig = None
+            tx = np.arange(0,2048,100)
+            parguess = guess_wavelength_solution(csuslit, self.header,
+                self.bs)
+            ll = wavelength_model(parguess, tx)
+            self.cfit = CV.chebfit(tx, ll, self.options["chebyshev-degree"])
 
-        self.spec = np.ma.median(self.data[y0-1:y0+1, :], axis=0) 
-            # axis = 0 is spatial direction
+        self.spec = \
+            np.ma.median(self.data[self.extract_pos-1:self.extract_pos+1, :],
+                axis=0) # axis = 0 is spatial direction
 
-        self.ll = wavelength_model(self.parguess, self.pix)
+
+        self.ll = CV.chebval(self.pix, self.cfit)
+
         self.xrng = [min(self.ll) * .99, max(self.ll)*1/.99]
-        self.xlim = self.xrng
+        band = self.header["filter"].rstrip()
+        self.xlim = Filters.hpp[band][:]
+        self.xlim[0] *= 0.93
+        self.xlim[1] /= 0.93
+
         self.redraw()
 
     def draw_found_lines(self):
@@ -852,7 +1209,7 @@ class InteractiveSolution:
         pl.grid(True)
         xmin, xmax, ymin, ymax = pl.axis()
         if self.foundlines is not None:
-            foundlams = wavelength_model(self.parguess, self.foundlines)
+            foundlams = CV.chebval(self.foundlines, self.cfit)
             ok = np.isfinite(self.foundlinesig) 
 
             for i in xrange(len(self.linelist)):
@@ -861,29 +1218,20 @@ class InteractiveSolution:
                 pl.axvline(foundlams[i], color='orange', ymax=.75, ymin=.25,
                         linewidth=1.5)
                 pl.text(foundlams[i], 1500, "%1.2f" % D, rotation='vertical',
-                        size=12)
+                        size=10)
 
             pl.subplot(2,1,2)
             pl.grid(True)
 
+            if self.STD < 0.1: fmt = 'go'
+            else: fmt = 'bo'
             pl.plot(self.linelist[ok], (foundlams[ok] - self.linelist[ok])*1e4, 
-                    'o')
+                    fmt)
+            pl.xlim(self.xlim)
 
-            [xs, sxs, sigmas] = find_known_lines(self.linelist, self.ll,
-                    self.spec, self.options)
-
-            [cdelt, cpars, clines] = fit_chebyshev_to_lines(xs, sxs,
-                    self.linelist, self.options)
-
-            self.cdelt = cdelt
-            self.cpars = cpars
-            self.clines = clines
-
-            pl.plot(clines, cdelt*1e4, 'ro')
-            print "CSTD: %1.2f" % (np.std(cdelt)*1e4)
 
     def sweep(self):
-        '''
+        """
 
         plan: 
         1. Xcor outwards to figure out the curvature of the sepctra and guess
@@ -891,104 +1239,18 @@ class InteractiveSolution:
         2. pull out lines at xcor'd positions
         3. refit w/ 2d chebyshev
 
-        '''
-
-        pl.figure(2)
-        pl.clf()
-        y0 = self.parguess[5]
-        IMG = self.data
-        spec0 = np.ma.median(self.data[y0-1:y0+1,:], axis=0)
-        cpars0 = self.cpars
-        pix = np.arange(2048)
-        ll0 = CV.chebval(pix, cpars0)
-
-        shiftamounts = np.arange(-7,7)
-        lags = np.array([-2,-1,0,1,2,])
-        shifts = np.zeros((len(shiftamounts)))
-
-        ll_here = CV.chebval(pix, cpars0)
-        [xs0, sxs, sigmas] = find_known_lines(self.linelist, ll_here,
-                spec0, self.options)
-
-        cfits = []
-        for i in xrange(len(shiftamounts)):
-            shift = shiftamounts[i]
-            yhere = y0 + shift
-
-            spec_here = np.ma.median(self.data[yhere-1:yhere+1,:], axis=0)
-            peak_shift = np.argmax(Fit.xcor(spec_here, spec0, lags))
-            print "At %i peaks are shifted by %i" % (yhere, lags[peak_shift])
-            shifts[i] = lags[peak_shift]
-
-            ll_here = CV.chebval(pix-shifts[i], cpars0)
-
-            [xs, sxs, sigmas] = find_known_lines(self.linelist, ll_here,
-                    spec_here, self.options)
-
-            [delt, cfit, lines] = fit_chebyshev_to_lines(xs, sxs,
-                    self.linelist, self.options)
-
-            ll_plot = CV.chebval(pix, cfit)
-            
-            pl.figure(1)
-            pl.subplot(2,1,1)
-
-            devs = np.abs(ll_plot - self.ll)
-
-            if np.any(devs > 0.5):
-                print "bad fit: %1.3f" % np.ma.median(devs)
-            else:
-                pl.plot(ll_plot, self.spec)
-                cfits.append(cfit)
-
-        cfits = np.array(cfits)
-        cfit_funs = []
-
-        cfit_funs.append(np.poly1d(Fit.polyfit_clip(shiftamounts, cfits[:,0],2)))
-        for i in xrange(1,cfits.shape[1]):
-            cfit_funs.append(np.poly1d(Fit.polyfit_clip(cfits[:,0],cfits[:,i],2)))
-
-        for i in xrange(len(shiftamounts)):
-            shift = shiftamounts[i]
-            yhere = y0 + shift
-            c0 = cfit_funs[0](shift)
-            cs = [c0]
-            cs.extend([f(c0) for f in cfit_funs[1:]])
-            cs = np.array(cs)
-
-            ll_here = CV.chebval(pix, cs)
-            spec_here = np.ma.median(self.data[yhere-1:yhere+1,:], axis=0)
-
-            [xs, sxs, sigmas] = find_known_lines(self.linelist, ll_here,
-                    spec_here, self.options)
-
-            [delt, cfit, lines] = fit_chebyshev_to_lines(xs, sxs,
-                    self.linelist, self.options)
-
-            mad = np.median(np.abs(delt))
-            print "%i] %1.3f %1.3f" % (shift, np.std(delt)*1e4, mad*1e4)
+        """
 
 
 
+    def draw_done(self):
+        if not self.done: 
+            return
 
-        np.save("cfits.npy", cfits)
-        pdb.set_trace()
+        mid = np.mean(self.xlim)*.99
 
-
-
-
-    def draw_residuals(self):
-        pl.subplot(2,1,2)
-
-        pl.xlabel(u"$\\lambda$ [$\\mu$ m]")
-        pl.ylabel(u"$\\Delta$$\\lambda$ [$\\AA$]")
-        gamma = self.parguess[2]
-        delta = self.parguess[3]
-
-        x = np.arange(2048)
-        pl.plot(self.ll, gamma * (x - delta)**3)
-
-        pl.xlim(self.xlim)
+        pl.subplot(2,1,1)
+        pl.text(mid, 0, 'Done!', size=32, color='red')
 
     def draw_vertical_line_marks(self):
         pl.subplot(2,1,1)
@@ -1005,45 +1267,139 @@ class InteractiveSolution:
             pl.plot([line*fwl,line/fwl], [0,0], linewidth=2)
 
     def redraw(self):
+        pl.ion()
         pl.clf()
 
         pl.subplot(2,1,1)
         pl.subplots_adjust(left=.1,right=.95,bottom=.1,top=.90)
-        pl.plot(self.ll, self.spec)
+        pl.plot(self.ll, self.spec, linestyle='steps')
 
         if self.MAD is None:
             pl.title("[%i] Press 'f' to fit" % self.slitno)
         else:
-            a,b,g,d = self.parguess[0:4]
-            pl.title(u"[%i] Best fit STD: %0.2f $\AA$, MAD: %0.2f $\AA$: $\\alpha$%0.6f $\\beta$%3.1f $\\gamma$%1.4e $\\delta$%4.1f" % (self.slitno, self.STD, self.MAD, a, b, g, d))
+            name = self.bs.ssl[self.slitno-1]["Target_Name"]
 
+            pl.title(u"[%i,%s] Best fit STD: %0.2f $\AA$, MAD: %0.2f $\AA$: " \
+                     % (self.slitno, name, self.STD, self.MAD))
 
+        pl.ioff()
         self.draw_vertical_line_marks()
         self.draw_found_lines()
-        self.draw_residuals()
+        pl.ion()
 
         pl.subplot(2,1,1)
         xmin, xmax, ymin, ymax = pl.axis()
         pl.xlim(self.xlim)
         pl.ylim([-1000, ymax*.8])
+        
+        self.draw_done()
 
 
 
-    def shift(self, x):
+
+    def shift(self, x, y):
+        """Shift the observed spectrum"""
         theline = np.argmin(np.abs(x - self.linelist))
 
         delt = x - self.linelist[theline] 
-        self.parguess[1] -= delt*10
-        self.ll = wavelength_model(self.parguess, self.pix)
+        self.ll -= delt
         self.redraw()
 
-    def drop_point(self, x):
+    def drop_point(self, x, y):
+        """Drop point nearest in x from set"""
         theline = np.argmin(np.abs(x - self.linelist))
         self.linelist = np.delete(self.linelist, theline)
         if self.foundlines is not None:
             self.foundlines = np.delete(self.foundlines, theline)
             self.foundlinesig = np.delete(self.foundlinesig, theline)
+
+        self.redraw()
         
+    def unzoom(self, x, y):
+        """Show the full spectrum"""
+        self.xlim = self.xrng
+        pl.ion()
+        pl.subplot(2,1,1) ; pl.xlim(self.xlim)
+        pl.subplot(2,1,2) ; pl.xlim(self.xlim)
+
+    def zoom(self, x, y):
+        """Zoom/pan the view"""
+        self.xlim = [x*.988,x/.988]
+        pl.ion()
+        pl.subplot(2,1,1) ; pl.xlim(self.xlim)
+        pl.subplot(2,1,2) ; pl.xlim(self.xlim)
+
+    def fastforward(self, x, y):
+        """Fast forward to next uncalib obj """
+        for i in xrange(self.slitno+1, len(self.solutions)):
+            if type(self.solutions[i]) is int:
+                self.slitno = i-1
+                self.setup()
+                break
+
+
+    def nextobject(self, x, y):
+        """Go to the next object"""
+        self.slitno += 1
+        self.done = False
+        if self.slitno > len(self.bs.ssl): 
+            self.done = True
+            self.slitno -= 1
+
+        self.setup()
+
+    def prevobject(self, x, y):
+        """Go to the previous object"""
+        self.slitno -= 1
+        self.done = False
+        if self.slitno < 1: 
+            print "first limit"
+            self.slitno = 1
+        self.setup()
+
+    def quit(self, x, y):
+        """Quit and save the results """
+        pl.ioff()
+        pl.close(self.fig)
+
+    def reset(self, x, y):
+        """Reset the fitting performed on this object """
+        self.MAD = None
+        self.solutions[self.slitno-1] = self.slitno
+        self.setup()
+
+    def fit_event(self, x, y):
+        """Fit Chebyshev polynomial to predicted line locations """
+
+        print "Fitting"
+        [xs, sxs, sigmas] = find_known_lines(self.linelist, self.ll,
+            self.spec, self.options)
+
+        [deltas, cfit, perror] = fit_chebyshev_to_lines(xs, sxs,
+            self.linelist, self.options)
+
+        self.cfit = cfit
+        self.ll = CV.chebval(self.pix, self.cfit)
+        self.foundlines = xs
+        self.foundlinesig = sxs
+
+        ok = np.isfinite(deltas)
+        self.STD = np.std(deltas[ok])*1e4
+        self.MAD = np.ma.median(np.abs(deltas[ok]))*1e4
+
+        print "STD: %1.2f MAD: %1.2f" % (self.STD, self.MAD)
+
+
+        self.solutions[self.slitno-1] = {"linelist": self.linelist, "MAD":
+                self.MAD, "foundlines": self.foundlines, "foundlinesig":
+                self.foundlinesig, "sol_1d": [deltas, cfit, sigmas], "STD":
+                self.STD, "slitno": self.slitno, "extract_pos":
+                self.extract_pos}
+
+        print 'Stored: ', self.solutions[self.slitno-1]['slitno']
+
+        self.redraw()
+
     def __call__(self, event):
         kp = event.key
         x = event.xdata
@@ -1052,108 +1408,29 @@ class InteractiveSolution:
         if x is None: return
         if y is None: return
 
-        if kp == 'x':
-            self.xlim = [x*.985,x/.985]
+        actions = {"x": self.zoom, "X": self.unzoom, ">": self.fastforward,
+                "G": self.nextobject, "B": self.prevobject, "Q": self.quit,
+                "R": self.reset, "z": self.shift, "f": self.fit_event, "d":
+                self.drop_point}
 
-            pl.ion()
-            pl.subplot(2,1,1) ; pl.xlim(self.xlim)
-            pl.subplot(2,1,2) ; pl.xlim(self.xlim)
-
-        if kp == 'X':
-            self.xlim = self.xrng
-            pl.ion()
-            pl.subplot(2,1,1) ; pl.xlim(self.xlim)
-            pl.subplot(2,1,2) ; pl.xlim(self.xlim)
-
-        if kp == '>':
-            ''' Fast forward to next uncalib obj '''
-            for i in xrange(self.slitno+1, len(self.solutions)):
-                if type(self.solutions[i]) is int:
-                    self.slitno = i
-                    self.setup()
-                    break
-
-
-        if kp == 'G':
-            self.slitno += 1
-            if self.slitno > 46: 
-                print "end limit"
-                self.slitno = 46
-
-            self.setup()
-
-        if kp == 'B':
-            self.slitno -= 1
-            if self.slitno < 1: 
-                print "first limit"
-                self.slitno = 1
-            self.setup()
-
-
-        if kp == 'Q':
-            pl.ioff()
-            pl.close(self.fig)
-
-        if kp == 't':
-            self.parguess[3] *= 1.05
-            self.redraw()
-
-
-        if kp == 'R':
-            self.MAD = None
-            self.solutions[self.slitno-1] = self.slitno
-            self.setup()
-
-
-        if kp == 'z':
-            self.shift(x)
-
-        if kp == 'd':
-            self.drop_point(x)
-            self.redraw()
+        if actions.has_key(kp):
+            actions[kp](x, y)
 
         if kp == 'o':
             self.sweep()
 
-        if kp == 'f':
-            [xs, sxs, sigmas] = find_known_lines(self.linelist, self.ll,
-                    self.spec, self.options)
-
-
-            [deltas, params, perror] = fit_model_to_lines(xs, sxs,
-                    self.linelist, self.parguess, self.options, False)
-
-            self.ll = wavelength_model(self.parguess, self.pix)
-            self.foundlines = xs
-            self.foundlinesig = sxs
-
-            ok = np.isfinite(deltas)
-            self.STD = np.std(deltas[ok])
-            self.MAD = np.ma.median(np.abs(deltas[ok]))
-
-            print "STD: %1.2f MAD: %1.2f" % (self.STD, self.MAD)
-
-            self.parguess = params
-
-            self.solutions[self.slitno-1] = {"params": params, "linelist":
-                    self.linelist, "MAD": self.MAD, "foundlines":
-                    self.foundlines, "foundlinesig": self.foundlinesig,
-                    "sol_1d": [deltas, params, perror, sigmas], "STD":
-                    self.STD, "slitno": self.slitno}
-
-            print 'Stored: ', self.solutions[self.slitno-1]['slitno']
-
-            self.redraw()
-
-
+        if (kp == 'h') or (kp == '?'):
+            print "Commands Desc"
+            for key, value in actions.items():
+                print "%8s %s" % (key, value.__doc__)
 
 
 
 def fit_wavelength_solution(data, parguess, lines, options, 
         slitno, search_num=145, fixed=False):
-    '''Tweaks the guessed parameter values and provides 1d lambda solution
+    """Tweaks the guessed parameter values and provides 1d lambda solution
     
-    '''
+    """
 
     pix = np.arange(2048.)
     MAD = np.inf
@@ -1218,114 +1495,287 @@ def fit_wavelength_solution(data, parguess, lines, options,
         print("%3i: Could not find parameters" % slitno)
         return [[], parguess, None, []]
 
+
+def fit_mask_model(mfits, fname, maskname, options_local):
+    """Fit the two-dimensional wavelength solution to mask"""
+    global coeffs, data, linelist, options
+
+    options = options_local
+
+    (header, data, bs) = mfits
+    band = header['filter'].rstrip()
+    fnum = fname.rstrip(".fits")
+
+    coeffs = IO.load_lambdadata(fnum, maskname, band, options)
+    linelist = pick_linelist(header)
+    
+    solutions = []
+
+    tock = time.time()
+
+    p = Pool()
+    solutions = p.map(construct_model, range(1,len(bs.ssl)))
+    p.close()
+
+    tick = time.time()
+
+    print "-----> Mask took %i" % (tick-tock)
+
+    path = os.path.join(options["outdir"], maskname)
+    fn = os.path.join(path, "lambda_mask_coeffs_{0}.npy".format(fnum))
+
+    try: os.remove(fn)
+    except: pass
+    np.save(fn, solutions)
+
+    return solutions
+
+def construct_model(slitno):
+    """Given a matrix of Chebyshev polynomials describing the wavelength
+    solution per pixel, return a 2-d function returning the wavelength
+    solution.
+
+    For a set of Chebyshev coefficients c_1 to c_6 there is a strong
+    correlation between c_n and c_1 in pixel space. This correlation is
+    used to produce the 2-d wavelength solution.
+    """
+
+    global coeffs, data, linelist, options
+
+    print "Constructing model on %i" % slitno
+
+    pix = np.arange(2048)
+
+    cfits   = coeffs[slitno-1]['2d']['coeffs']
+    delts   = coeffs[slitno-1]['2d']['delts']
+    sds     = coeffs[slitno-1]['2d']['lambdaRMS']
+    mads    = coeffs[slitno-1]['2d']['lambdaMAD']
+    positions= coeffs[slitno-1]['2d']['positions']
+
+
+    ok = (sds*1e4 < 0.2) & (mads*1e4 < 0.1)
+    c0coeff = Fit.polyfit_sigclip(positions[ok], cfits[ok,0], 1, nmad=3)
+    c0fun = np.poly1d(c0coeff)
+
+    cfit_coeffs = [c0coeff]
+    cfit_funs = [c0fun]
+
+    for i in xrange(1, cfits.shape[1]):
+        if i < 3: order = 1
+        else: order = 1
+        ci_coeff = Fit.polyfit_sigclip(cfits[ok,0], cfits[ok,i], order, nmad=3)
+        cfit_coeffs.append(ci_coeff)
+
+        ci_fun = np.poly1d(ci_coeff)
+        cfit_funs.append(ci_fun)
+
+    lambdaRMS = []
+    lambdaMAD = []
+
+    cpolys = []
+    # Check the fits now
+    if False:
+        for i in xrange(len(positions)):
+            pos = positions[i]
+            c0 = c0fun(pos)
+            cs = [c0]
+            cs.extend([f(c0) for f in cfit_funs[1:]])
+
+            ll_now = CV.chebval(pix, cs)
+            spec_here = np.ma.median(data[pos-1:pos+1,:], axis=0)
+
+            [xs, sxs, sigmas] = find_known_lines(linelist,
+                ll_now, spec_here, options)
+
+            [delt, cfit, lines] = fit_chebyshev_to_lines(xs, sxs,
+                linelist, options)
+
+            rms = np.std(delt)*1e4
+            rmsR = np.median(np.abs(lines/delt))
+            if rms  > .2:
+                pre = bcolors.FAIL
+            elif rms > .1:
+                pre = bcolors.OKBLUE
+            else:
+                pre = bcolors.ENDC
+
+
+            print pre + "2d model S%2.2i p%4.4i: residual %1.3f Angstrom " \
+                    "RMS / %3.1e lam/dlam / %1.3f Angstrom MAD" % (slitno, pos,
+                            rms, rmsR, np.median(np.abs(delt*1e4))) + bcolors.ENDC
+
+
+            lambdaRMS.append(np.std(delt))
+            lambdaMAD.append(np.median(np.abs(delt)))
+            cpolys.append(cs)
+
+
+        """The return function takes a pixel position and returns wavelength
+        in angstrom"""
+
+        return {"functions": np.array(cfit_coeffs), "cpolys": np.array(cpolys),
+                "RMS": np.array(lambdaRMS), "MAD": np.array(lambdaMAD),
+                "positions": positions[ok]}
+
+    else:
+        print "No fit stats"
+
+        return {"functions": np.array(cfit_coeffs), "cpolys": [], "RMS":
+                np.zeros(len(positions[ok])), "MAD":
+                np.zeros(len(positions[ok])), "positions": positions[ok]}
+
+
+def fit_outwards_xcor(data, bs, sol_1d, lines, options, start, bottom, top,
+        slitno):
+
+    lags = np.arange(-10,10)
+    pix = np.arange(2048.)
+    linelist = lines
+
+
+    def sweep(positions):
+        
+        DXS = []
+        SIGMAS = []
+        for position in positions:
+            yhere = position
+            print yhere
+
+            cfit = sol_1d[1]
+
+            spec_here = np.ma.median(data[yhere-1:yhere+1, :], axis=0)
+            spec_here = spec_here.filled(0)
+            shift = Fit.xcor_peak(spec_here, spec0, lags)
+            ll_here = CV.chebval(pix - shift, cfit)
+
+            [dxs, sigmas] = xcor_known_lines(linelist,
+                ll_here, spec_here, spec0, options)
+            
+            DXS.append(dxs)
+            SIGMAS.append(sigmas)
+
+        pdb.set_trace()
+
+    positions = np.arange(bottom, top, 1)
+    spec0 = np.ma.median(data[start-1:start+1, :], axis=0)
+    spec0 = spec0.filled(0)
+    params = sweep(positions)
+
+    return params
 #
 # Two dimensional wavelength fitting
 #
-def fit_outwards_xcor(data, sol_1d, lines, options, slitno):
-    lags = np.arange(-5,5)
+def fit_outwards_refit(data, bs, sol_1d, lines, options, start, bottom, top,
+        slitno):
+    lags = np.arange(-8,8)
     pix = np.arange(2048.)
+    linelist = lines
 
-    def sweep(deltays):
-        deltas, params0, perror, sigmas = sol_1d
-        params0 = np.array(params0)
-        y0 = params0[5]
+    def fit_parameters(yhere):
+        """Return chebyshev fit to a pixel column """
+
+        cfit = sol_1d[1]
+        spec_here = np.ma.median(data[yhere-1:yhere+1, :], axis=0)
+        shift = Fit.xcor_peak(spec_here, spec0, lags)
+        ll_here = CV.chebval(pix - shift, cfit)
+        
+        [xs, sxs, sigmas] = find_known_lines(linelist,
+                ll_here, spec_here, options)
+
+        [delt, cfit, lines] = fit_chebyshev_to_lines(xs, sxs,
+                linelist, options)
+
+        print "Chebyshev resid Angstrom S%2.2i @ p%i: %1.2f rms %1.2f mad" % \
+                (slitno, yhere, np.std(delt)*1e4, np.median(np.abs(delt))*1e4)
+
+        return cfit, delt
+
+
+
+    def sweep(positions):
         ret = []
-        spec = np.ma.median(data[y0-1:y0+1, :], axis=0)
+        cfits = []
+        sds = []
+        mads = []
 
-        for deltay in deltays:
-            params = params0.copy()
-            params[5] = y0+deltay
+        for position in positions:
+            cfit, delt = fit_parameters(position)
 
-            if (params[5] < 0) or (params[5] > 2047):
-                print("%i: Skipping out of bounds %i" % (deltay, params[5]))
-                continue
+            cfits.append(cfit)
+            sds.append(np.std(delt))
+            mads.append(np.median(np.abs(delt)))
 
-            spec2 = np.ma.median(data[params[5]-1:params[5]+1, :], axis=0)
-            xcs = []
-            for lag in lags:
-                xc = np.sum(spec * np.roll(spec2, lag))
-                xcs.append(xc)
 
-            fp = Fit.mpfitpeak(lags, np.array(xcs))
-            spec = spec2
+        cfits, sds, mads = map(np.array, [cfits, sds, mads])
+        #model = construct_model(cfits, positions, sds)
 
-            params[1] -= np.degrees(fp.params[1] * 18/250e3)
-
-            [deltas, params, perror, sigmas] = fit_wavelength_solution( data,
-                    params, lines, options, slitno, search_num=25, 
-                    fixed=False)
-
-            success = True
-            if (len(deltas) < 2) or (np.ma.median(deltas) > .4):
-                success = False
-
-            
-            if True:
-                print ("%2i @ %4i: Success: %i - %3.5f %4.3f %3.3e %2.5f = %2.2f" %
-                        (slitno, params[5], success, params[0], params[1],
-                            params[2], params[3], np.ma.median(np.abs(deltas))))
-
-            ret.append([params, perror, np.ma.median(deltas), success])
-
-        return ret
+        assert(len(positions) == len(cfits))
+        return {'coeffs': cfits, 'delts': delt, 'lambdaRMS':
+                sds, 'lambdaMAD': mads, "positions": np.array(positions)}
 
     pix = np.arange(2048.)
 
-    params = sweep(xrange(0,10,1))
-    params_down = sweep(xrange(-1,-10,-1))
-
-    params.extend(params_down)
+    positions = np.arange(bottom, top, 1)
+    spec0 = np.ma.median(data[start-1:start+1, :], axis=0)
+    params = sweep(positions)
 
     return params
 
-def merge_solutions(lamout, slitno, order, bs, sol_2d, options):
-    ff = filter_2d_solutions(sol_2d)
-    ar = np.array(map(lambda x: x[0], ff))
+class NoSuchFit(Exception):
+    pass
 
-    if lamout == None:
-        pdb.set_trace()
-
-    if len(ar) == 0:
-        print("%3i: no slit level solution has been found." % slitno)
-        return lamout
+def fit_to_coefficients(fits, pos, slitno=None):
+    """Given a fit structure from fit_outwards_refit and a pixel y position
+    return the coefficients of a Chebyshev Polynomial"""
 
 
-    alphas = ar[:,0]
-    betas = ar[:,1]
-    gammas = ar[:,2]
-    deltas = ar[:,3]
-    pixels = ar[:,5]
+    if slitno is None:
+        slitno = 1
+        found = False
+        for fit in fits:
+            if type(fit) is int: continue
+            fitpos = fit["positions"]
+            mn = min(fitpos) ; mx = max(fitpos)
+            if (pos >= mn) and (pos <= mx):
+                found = True
+                break
+            slitno += 1
+        if not found:
+            raise NoSuchFit("Position %i does not have a fitted wavelength " \
+            " solution" % pos)
+            return np.zeros(5)
 
-    alphamodel = np.poly1d(np.polyfit(pixels, alphas, 2))
-    betamodel  = np.poly1d(np.polyfit(pixels, betas, 2))
-    gammamodel = np.poly1d(np.polyfit(pixels, gammas, 2))
-    deltamodel = np.poly1d(np.polyfit(pixels, deltas, 2))
+        fit = fits[slitno-1]
+        
+    else:
+        fit = fits[slitno-1]
+        fitpos = fit["positions"]
+        mn = min(fitpos) ; mx = max(fitpos)
+        if not ((pos >= mn) and (pos <= mx)):
+            raise Exception("Slitno %i has a pixel range of %i-%i but " \
+                    "position %i was requested" % (slitno, mn, mx, pos))
+            return np.zeros(5)
 
-    print "Alpha scatter: %3.3e" % np.std(alphas-alphamodel(pixels))
-    print " Beta scatter: %3.3e" % np.std(betas-betamodel(pixels))
+    funs = fit["functions"]
 
-    mn = np.min(pixels)-4
-    if mn < 0: mn = 0
-    mx = np.max(pixels)+4
-    if mx > 2047: mx = 2047
+    cs = np.zeros(funs.shape[0])
+    cs[0] = np.poly1d(funs[0])(pos)
+    for i in xrange(1,len(cs)):
+        cs[i] = np.poly1d(funs[i])(cs[0])
 
-    pixs = np.arange(2048.)
+    return np.array(cs)
 
-    for y in np.arange(np.int(mn), np.int(mx)+1):
-        pars = [alphamodel(y),
-                betamodel(y),
-                gammamodel(y),
-                deltamodel(y),
-                order,
-                y]
-        ll = wavelength_model(pars, pixs)
-        lamout[y,:] = ll
+    
+def fit_to_lambda(fits, pix_lambda, pix_spatial, slitno=None):
+    """Given a fit structure from fit_outwards_refit and a pixel x,y position
+    return the wavelength value"""
 
-    return lamout
+    cs = fit_to_coefficients(fits, pix_spatial, slitno=slitno)
 
+    return CV.chebval(pix_lambda, cs) * 1e4
 
 def fit_mask(pars, pixel_set, ys):
-    '''Fit mask model function to the whole mask'''
+    """Fit mask model function to the whole mask"""
     merit_fun = Fit.mpfit_residuals(mask_model)
     pars.extend(np.zeros(len(pixel_set)))
     pars = np.array(pars)
@@ -1333,14 +1783,21 @@ def fit_mask(pars, pixel_set, ys):
     parinfo = []
     for par in pars:
         parinfo.append({"fixed": 0, "value": par, "limited": [0, 0], 
-            "limits": [0, 0]})
+            "limits": [0, 0], "step": 1e-2})
+
+    parinfo[0]["step"] = 0.002
+    parinfo[1]["step"] = 1e-5
+    parinfo[2]["step"] = 1e-10
+    parinfo[3]["step"] = 1
 
     return Fit.mpfit_do(merit_fun, pixel_set, ys, parinfo)
+
+
 
 # Model Functions
 
 def wavelength_model(p, x):
-    ''' Returns wavelength [um] as function of pixel (x)
+    """Returns wavelength [um] as function of pixel (x)
     
     The parameter list, p, contains
     p[0:3] -- alpha, beta, gamma, delta, model parameters
@@ -1350,7 +1807,7 @@ def wavelength_model(p, x):
     x -- the x pixel position (dispersion direction)
 
     returns wavelength [micron]
-    '''
+    """
     order = p[4]
     y = p[5]
     (alpha, sinbeta, gamma, delta) = p[0:4]
@@ -1366,7 +1823,7 @@ def wavelength_model(p, x):
             gamma * (x - delta)**3
 
 def mask_model(p, xs):
-    '''Fit a continuous smooth function to parameters in the mask.
+    """Fit a continuous smooth function to parameters in the mask.
 
     parameters:
         linear model is:
@@ -1374,7 +1831,7 @@ def mask_model(p, xs):
         p[0] + p[1] x + p[2] x  + p[3] x  + discontinuity
 
         p[4:] -- [N] list of discontinuities
-        '''
+        """
 
     cpix = p[0]
     cpar = p[1]
@@ -1391,6 +1848,7 @@ def mask_model(p, xs):
 
     return np.array(vals).ravel()
 
+
 def plot_mask_fits(maskname, fname, options):
 
     from matplotlib.backends.backend_pdf import PdfPages
@@ -1404,60 +1862,54 @@ def plot_mask_fits(maskname, fname, options):
     mfits = IO.readmosfits(fp)
     header, data, bs = mfits
 
-    fname = fname.rstrip(".fits")
-    solname = os.path.join(path, "mask_solution_%s.npy" % fname)
-    maskfit = np.load(solname)[0]
+    band = header['filter'].rstrip()
 
+    fname = fname.rstrip(".fits")
+    Lmask = IO.load_lambdamodel(fname, maskname, band, options)
+    Lslit = IO.load_lambdadata(fname, maskname, band, options)
+
+    assert(len(Lmask) == len(Lslit))
     outname = os.path.join(path, "mask_fit_%s.pdf" % fname)
     pp = PdfPages(outname)
 
+    for i in xrange(len(Lmask)):
+        print i
+        ll = Lmask[i]
+        ls = Lslit[i]
+        coeffs  = ls['2d']['coeffs']
+        sds     = ls['2d']['lambdaRMS']
+        posc    = ls['2d']['positions']
+        fits    = ll['functions']
+        pos     = ll['positions']
 
-    def plotfun(px, ys, lsf, i):
-        pl.plot(px, ys, '.')
-        params = np.copy(lsf.params[0:5])
-        params[4] = lsf.params[4+i]
-        my = mask_model(params, [px])
-        pl.plot(px, my)
 
-    alpha_lsf = maskfit["alpha_lsf"]
-    beta_lsf = maskfit["beta_lsf"]
-    gamma_lsf = maskfit["gamma_lsf"]
-    delta_lsf = maskfit["delta_lsf"]
 
-    pixel_set = maskfit["pixels"]
-    alpha_set = maskfit["alphas"]
-    beta_set = maskfit["betas"]
-    gamma_set = maskfit["gammas"]
-    delta_set = maskfit["deltas"]
+        #N = fits.shape[1]
+        N = 6
+        ny = 2.0
+        nx = np.ceil(N/ny)
 
-    pixels, alphas, betas, gammas, deltas = map(np.concatenate, [pixel_set,
-        alpha_set, beta_set, gamma_set, delta_set])
+        pl.clf()
+        
+        c0 = np.poly1d(fits[0])
+        c0s = c0(pos)
 
-    pl.clf()
-    pl.plot(pixels, alphas, '.')
-    pl.ylim([0.9955, 0.9980])
-    for i in xrange(len(pixel_set)):
-        plotfun(pixel_set[i], alpha_set[i], alpha_lsf, i)
-    pp.savefig()
+        for i in xrange(1,N):
+            pl.subplot(int(nx),int(ny),i)
+            f = np.poly1d(fits[i])
+            pl.plot(pos, f(c0s), color='orange')
+            ylim = pl.ylim()
+            pl.scatter(posc, coeffs[:, i])
+            pl.ylim(ylim)
 
-    pl.clf()
-    for i in xrange(len(pixel_set)):
-        plotfun(pixel_set[i], beta_set[i], beta_lsf, i)
-    pp.savefig()
+            #newfit = np.poly1d(Fit.polyfit_clip(c0(posc), coeffs[:,i], 0))
+            #pl.plot(pos, newfit(c0(pos)))
 
-    pl.clf()
-    pl.plot(pixels, np.concatenate(gamma_set), '.')
-    for i in xrange(len(pixel_set)):
-        plotfun(pixel_set[i], gamma_set[i], gamma_lsf, i)
-    pp.savefig()
 
-    pl.clf()
-    pl.plot(pixels, np.concatenate(delta_set), '.')
-    for i in xrange(len(pixel_set)):
-        plotfun(pixel_set[i], delta_set[i], delta_lsf, i)
-    pp.savefig()
+        pp.savefig()
 
     pp.close()
+
 
 
 def plot_sky_spectra(maskname, fname, options):
@@ -1672,20 +2124,20 @@ def plot_data_quality(maskname, fname, options):
 
 if __name__ == "__main__":
     np.set_printoptions(precision=3)
-    global bs, sol_2d, solution
 
-    tester()
 
-    if False:
-        tester()
+    cc = np.load("lambda_coeffs_m120507_0230.npy")
 
-        ff = filter(lambda x: (x[1] is not None) and (x[1][0] < 3e-5) and 
-                (x[2] < .1) and (x[3] == True), sol_2d)
 
-        ar = np.array(map(lambda x: x[0], ff))
-    elif False:
-        plot_data_quality("/Users/npk/desktop/c9_reduce/"
-        "npk_calib3_q1700_pa_0/lambda_coeffs_m110323_2718.npy")
+    px = []
+    ys = []
+    for c in cc: 
+        px.append(c['2d']['positions'])
+        ys.append(c['2d']['coeffs'][:,0])
+
+    ff = fit_mask([1., 0., 0., 1024.], px, np.concatenate(ys))
+
+
 
 
 
