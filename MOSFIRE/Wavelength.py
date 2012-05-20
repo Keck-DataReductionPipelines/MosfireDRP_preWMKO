@@ -302,27 +302,49 @@ def apply_lambda_simple(mfits, fname, maskname, options):
     lambdadata = IO.load_lambdaoutwards(fnum, maskname, band, options)
     Ld = IO.load_lambdadata(fnum, maskname, band, options)
 
+    lines = pick_linelist(header)
+
+
 
     slitedges = edgedata[0:-1]
     edgeinfo = edgedata[-1]
 
     # write lambda
     lams = np.zeros((2048, 2048), dtype=np.float32)
+    sigs = np.zeros((2048, 2048), dtype=np.float)
     xx = np.arange(2048)
-
     
+    xypairs = []
     for i in xrange(len(Ld)):
         lp = Ld[i]["2d"]["positions"]
         lc = Ld[i]["2d"]["coeffs"]
+        lm = Ld[i]["2d"]["lambdaMAD"]
 
+        prev = 0
         for j in xrange(len(lp)):
-            lams[lp[j],:] = CV.chebval(xx, lc[j])
+            sigs[lp[j],:] = lm[j]
+            if lm[j]*1e4 < 0.1:
+                prev = lams[lp[j],:] = CV.chebval(xx, lc[j])
+                prevcoeff = lc[j]
+            else:
+                lams[lp[j],:] = prev
+                spec = np.ma.median(data[lp[j]-1:lp[j]+1,:], axis=0)
+                [xs, sxs, sigmas] = find_known_lines(lines, prev, spec, options)
+                loc = CV.chebval(xs, prevcoeff)
 
-
+                print "%4.4i] mad: %1.2f" % (lp[j], np.median(np.abs(loc -
+                    lines)))
 
     print("{0}: writing lambda".format(maskname))
     hdu = pf.PrimaryHDU(lams)
     fn = os.path.join(path, "lambda_solution_{0}".format(fname))
+    try: os.remove(fn)
+    except: pass
+    hdu.writeto(fn)
+
+    print("{0}: writing sigs".format(maskname))
+    hdu = pf.PrimaryHDU(sigs)
+    fn = os.path.join(path, "sigs_solution_{0}".format(fname))
     try: os.remove(fn)
     except: pass
     hdu.writeto(fn)
@@ -716,7 +738,7 @@ global color=red
     cidx = 0
 
 
-    for i in xrange(len(bs.ssl)):
+    for i in xrange(1,len(bs.ssl)+1):
         slits = bs.scislit_to_csuslit(i)
 
         print "Guessing: ", slits
