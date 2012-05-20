@@ -1,5 +1,6 @@
 
 import os
+import sys
 import time
 
 import numpy as np
@@ -18,9 +19,80 @@ from MOSFIRE import CSU, Fit, IO, Options, Filters, Detector
 #from IPython.Shell import IPShellEmbed
 #ipshell = IPShellEmbed()
 
+def imcombine(files, maskname, options, flat, outname=None):
 
-def handle_background(datalist, lamname, maskname, band_name, extension, 
-        options):
+    outpath = os.path.join(options["outdir"], maskname)
+    if not os.path.exists(outpath):
+        raise Exception("Output directory '%s' does not exist. This " 
+                "directory should exist." % outpath)
+
+    inpath = os.path.join(options["indir"], maskname)
+
+    datas = np.zeros((len(files), 2048, 2048))
+    itimes = []
+    prevssl = None
+    for i in xrange(len(files)):
+        fname = files[i]
+        hdr, data, bs = IO.readmosfits(fname)
+        itimes.append(hdr["truitime"])
+        datas[i,:,:] = data.filled(0)
+        if prevssl is not None:
+            if len(prevssl) != len(bs.ssl):
+                # todo Improve these chucks
+                raise Exception("The stack of input files seems to be of "
+                        " different masks")
+    
+    itimes = np.array(itimes)
+    if np.any(itimes[0] != itimes):
+        raise Exception("Nod position integration times are not all the same "
+                "current DRP cannot handle this situation properly")
+    
+    datas = np.array(datas) * Detector.gain
+    dd = np.sort(datas,axis=0)
+    output = np.zeros((2048, 2048))
+    cnts = np.zeros((2048,2048),np.int16) + len(datas)
+    mask = np.zeros((2048,2048),np.int16) + data.mask
+
+    if len(files) > 2:
+        mn = np.mean(datas,axis=0)
+        tots = np.sum(datas,axis=0)
+        md = np.median(datas,axis=0)
+        sd = np.std(datas,axis=0)
+    
+        issx, issy = np.where((mn-md)/md > 1)
+        for i in xrange(len(issx)):
+            x = issx[i] ; y = issy[i]
+            tots[x,y] = np.sum(dd[0:-1,x,y])
+            cnts[x,y] -= 1
+            mask[x,y] += 2
+
+    itime = itimes[0]
+    rates = tots / (cnts*itime*flat)
+    var = itime*cnts*flat*(1/tots + 1/Detector.RN**2)
+
+    path = os.path.join(options["outdir"], maskname)
+    if not os.path.exists(path):
+        raise Exception("Output directory '%s' does not exist. This " 
+                "directory should exist." % path)
+
+    if outname is not None:
+        hdu = pf.PrimaryHDU(rates)
+        outfile = os.path.join(path, outname)
+        try: os.remove(outfile)
+        except: pass
+        hdu.writeto(outfile)
+
+        hdu = pf.PrimaryHDU(mask)
+        outfile = os.path.join(path, "mask_" + outname)
+        try: os.remove(outfile)
+        except: pass
+        hdu.writeto(outfile)
+
+    return hdr, rates, var, mask, bs
+    
+
+def handle_background(As, Bs, lamname, maskname, band_name, options): 
+    
     global header, bs, edges, data, lam, sky_sub_out, sky_model_out, band
 
     band = band_name
@@ -29,43 +101,49 @@ def handle_background(datalist, lamname, maskname, band_name, extension,
     if not os.path.exists(path):
         raise Exception("Output directory '%s' does not exist. This " 
                 "directory should exist." % path)
-    
+
+    flatname = os.path.join(path, "pixelflat_2d_%s.fits" % band_name)
+    flat = IO.readfits(flatname)[1].filled(1)
+
+    hdrA, ratesA, varA, maskA, bsA = imcombine(As, maskname, options, 
+            flat, outname="A.fits")
+    hdrB, ratesB, varB, maskB, bsB = imcombine(Bs, maskname, options, 
+            flat, outname="B.fits")
+
+    AmB = ratesA-ratesB
+    vAmB = varA + varB
+
     sky_sub_out   = np.zeros((2048, 2048), dtype=np.float)
     sky_model_out = np.zeros((2048, 2048), dtype=np.float)
 
     edges = IO.load_edges(maskname, band, options)
     lam = IO.load_lambdaslit(lamname, maskname, band, options)
 
-    for fname in datalist:
-        fp = os.path.join(path, fname)
+    header = hdrA
+    bs = bsA
+    data = AmB
 
-        header, data, bs = IO.readmosfits(fp,
-                extension=os.path.join(path,extension))
-        ivar = 1/(data + 25)
+    p = Pool()
+    solutions = p.map(background_subtract_helper, xrange(len(bs.ssl)))
+    p.close()
 
-        data[np.logical_not(np.isfinite(data))] = 0.
+    xroi = slice(0,2048)
+    for sol in solutions:
+        if not sol["ok"]: continue
+
+        yroi = slice(sol["bottom"], sol["top"])
+        sky_sub_out[yroi, xroi] = sol["output"]
     
-        p = Pool()
-        solutions = map(background_subtract_helper, xrange(len(bs.ssl)))
-        p.close()
-
-        xroi = slice(0,2048)
-        for sol in solutions:
-            if not sol["ok"]: continue
-
-            yroi = slice(sol["bottom"], sol["top"])
-            sky_sub_out[yroi, xroi] = sol["output"]
-        
-        print path
-        output = os.path.join(path, 'b' + fname.lstrip(','))
-        hdu = pf.PrimaryHDU(sky_sub_out)
-        try: os.remove(output)
-        except: pass
-        hdu.writeto(output)
+    print path
+    output = os.path.join(path, 'bsub_%s_%s.fits' % (maskname, band))
+    hdu = pf.PrimaryHDU(sky_sub_out)
+    try: os.remove(output)
+    except: pass
+    hdu.writeto(output)
 
 
     if True:
-        dlam = np.median(np.diff(lam[1][1024,:]))
+        dlam = np.median(np.diff(lam[1][1024,:]))*1e4
         hpp = np.array(Filters.hpp[band]) * 1e4
         ll_fid = np.arange(hpp[0], hpp[1], dlam)
         nspec = len(ll_fid)
@@ -82,11 +160,16 @@ def handle_background(datalist, lamname, maskname, band_name, extension,
 
         from scipy.interpolate import interp1d
         for i in xrange(2048):
-            ll = lam[1][i,:]
+            ll = lam[1][i,:]*1e4
             ss = sky_sub_out[i,:]
-            iv = ivar[i,:]
+            iv = 1/vAmB[i,:]
 
-            f = interp1d(ll, ss, bounds_error=False)
+            ok = np.isfinite(ll) & np.isfinite(ss) & (ll < hpp[1]) & (ll >
+                    hpp[0])
+
+            if len(np.where(ok)[0]) < 100:
+                continue
+            f = interp1d(ll[ok], ss[ok], bounds_error=False)
             rectified[i,:] = f(ll_fid)
 
             f = interp1d(ll, iv, bounds_error=False)
@@ -112,7 +195,7 @@ def handle_background(datalist, lamname, maskname, band_name, extension,
         except: pass
         hdu.writeto(fn)
 
-        hdu = pf.PrimaryHDU(ivar)
+        hdu = pf.PrimaryHDU(1/vAmB)
         fn = os.path.join(path, "ivar_test.fits")
         try: os.remove(fn)
         except: pass
@@ -144,9 +227,8 @@ def background_subtract_helper(slitno):
     out.
 
     1. Extract the slit from the 2d image.
-    2. Find discrepant pixels and remove them from the set of background
-    3. Convert the 2d spectrum into a 1d spectrum
-    4. Estimate transmission function
+    2. Convert the 2d spectrum into a 1d spectrum
+    3. Estimate transmission function
 
     '''
 
@@ -154,8 +236,8 @@ def background_subtract_helper(slitno):
     tick = time.time()
 
     # 1
-    top = np.int(edges[slitno]["top"](1024)) - 5
-    bottom = np.int(edges[slitno]["bottom"](1024)) + 6
+    top = np.int(edges[slitno]["top"](1024)) - 7
+    bottom = np.int(edges[slitno]["bottom"](1024)) + 7
     print "Background subtracting slit %i [%i,%i]" % (slitno, top, bottom)
 
     pix = np.arange(2048)
@@ -166,22 +248,15 @@ def background_subtract_helper(slitno):
     ivar = 1/(slit)
     ivar[np.logical_not(np.isfinite(ivar))] = 0
 
-    lslit = lam[1][yroi,xroi]
+    lslit = lam[1][yroi,xroi]*1e4
 
     # 2
-    median_slit = sp.ndimage.median_filter(slit, size=(3,3))
-
-    deviations = np.abs(slit - median_slit)/np.sqrt(np.abs(median_slit))
-    deviations[np.logical_not(np.isfinite(deviations))] = 0
-
-
-    # 3
     xx = np.arange(slit.shape[1])
     yy = np.arange(slit.shape[0])
 
     X,Y = np.meshgrid(xx,yy)
 
-    ls = lslit.flatten()
+    ls = lslit.flatten().filled(0)
     ss = slit.flatten()
     ys = Y.flatten()
 
@@ -192,16 +267,16 @@ def background_subtract_helper(slitno):
     hpps = np.array(Filters.hpp[band] ) * 1e4
 
     diff = np.append(np.diff(ls), False)
-    OK = (diff > 0.001) & (deviations.flatten() < 15) & (ls > hpps[0]) & \
-        (ls < hpps[1]) 
+
+    OK = (diff > 0.01) & (ls > hpps[0]) & (ls < hpps[1]) & (np.isfinite(ls)) \
+            & (np.isfinite(ss[sort]))
 
     if len(np.where(OK)[0]) < 1000:
         print "Failed on slit ", slitno
         return {"ok": False}
 
-    # 4
+    # 3
     pp = np.poly1d([1.0])
-
     ss = (slit / pp(Y)).flatten()
     ss = ss[sort]
 
@@ -214,10 +289,13 @@ def background_subtract_helper(slitno):
             knots = np.arange(knotstart, knotend, delta)
             bspline = II.splrep(ls[OK], ss[OK], k=3, task=-1, t=knots)
         except:
-            delta = 3.0
+            delta = 5.0
             knots = np.arange(knotstart, knotend, delta)
-            bspline = II.splrep(ls[OK], ss[OK], k=3, task=-1, t=knots)
-            #ipshell()
+            try:
+                bspline = II.splrep(ls[OK], ss[OK], k=3, task=-1, t=knots)
+            except:
+                "Could not construct spline on slit ", slitno
+                return {"ok": False}
 
         ll = lslit.flatten()
         model = II.splev(ll, bspline)
