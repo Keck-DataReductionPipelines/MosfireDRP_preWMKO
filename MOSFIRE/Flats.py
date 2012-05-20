@@ -214,6 +214,7 @@ def make_pixel_flat(data, results, options, outfile, inputs):
     lowsn = data<225
     flat[lowsn] = data[lowsn]
     hdu.data = (data/flat).astype(np.float32)
+    hdu.data = hdu.data.filled(1)
     if os.path.exists(outfile):
             os.remove(outfile)
     hdu.writeto(outfile)
