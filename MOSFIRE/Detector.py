@@ -15,5 +15,6 @@ pixelsize = 0.018 * mm
 npix = (2048, 2048)
 
 gain = 2.15 # From MOSFIRE pre ship review pg. 125
+RN = 5.0
 
 
