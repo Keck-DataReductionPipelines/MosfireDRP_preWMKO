@@ -35,3 +35,6 @@ wavelength = {"outdir": flat["outdir"],
         "chebyshev-degree": 5, # polynomial order for fitting wavelengths
 
 }
+
+
+path_bpm = "/users/npk/desktop/8may/badpix_18may2012.fits"
