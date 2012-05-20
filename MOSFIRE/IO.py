@@ -14,12 +14,14 @@ import os
 import pdb
 
 import CSU
+import Options
 
 theBPM = None # the Bad pixel mask
 
 def badpixelmask():
     global theBPM
-    path = "/users/npk/desktop/8may/badpix_08may2012.fits"
+
+    path = Options.path_bpm
 
     if theBPM is None:
         hdulist = pf.open(path)
@@ -93,7 +95,6 @@ def readfits(path):
     theBPM = badpixelmask()
     data = np.ma.masked_array(data, theBPM, fill_value=0)
 
-
     return (header, data)
 
 
@@ -126,6 +127,7 @@ def readmosfits(path, extension=None):
         hdulist = pf.open(extension)
 
     try:
+        header = hdulist[0].header
         targs = hdulist[1].data
         ssl = hdulist[2].data
         msl = hdulist[3].data
