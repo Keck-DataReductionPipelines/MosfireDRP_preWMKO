@@ -42,53 +42,31 @@ if not os.path.exists(path):
     raise Exception("Output directory '%s' does not exist. This " 
             "directory should exist." % path)
 
+
 ind = options['indir']
-
-if False:
-    As = [ind + "m120507_%4.4i" % i for i in range(229,249,2)]
-    Bs = [ind + "m120507_%4.4i" % i for i in range(230,249,2)]
-
-    IO.imcombine(As, "A", reject='none')
-    IO.imcombine(Bs, "B", reject='none')
-
-    header, datA = IO.readfits("A.fits")
-    header, datB = IO.readfits("A.fits")
-    ffp = os.path.join(options['outdir'], '%s/pixelflat_2d_%s.fits' %
-            (maskname, band))
-    header, flat = IO.readfits(ffp)
-
-    AmB = (datA/flat) - (datB/flat)
-    AmB *= Detector.gain
-
-    outname = os.path.join(options['outdir'], 'AmB.fits') 
-    hdu = pf.PrimaryHDU(AmB)
-    try: os.remove(outname)
-    except: pass
-    hdu.writeto(outname)
-
-
-
-inpath = options['indir']
 fs = ['m120507_0230.fits']
 np.set_printoptions(precision=2)
 if True:
     for fname in fs:
-        fp = os.path.join(inpath, fname)
+        fp = os.path.join(ind, fname)
 
         mfits = IO.readmosfits(fp)
         header, data, bs = mfits
 
-        #Wavelength.plot_mask_solution_ds9(fname, maskname, options)
-        Wavelength.fit_lambda_interactively(mfits, fname, maskname, options)
-        #Wavelength.fit_lambda(mfits, fname, maskname, options)
-        #Wavelength.apply_lambda(mfits, fname, maskname, options)
-        #Wavelength.plot_data_quality(maskname, fname, options)
-        #Wavelength.plot_sky_spectra(maskname, fname, options)
-        #Wavelength.plot_mask_fits(maskname, fname, options)
+        Wavelength.plot_mask_solution_ds9(fname, maskname, options)
+        #Wavelength.fit_lambda_interactively(mfits, fname, maskname, options)
+        Wavelength.fit_lambda(mfits, fname, maskname, options)
+        Wavelength.apply_lambda(mfits, fname, maskname, options)
+        Wavelength.plot_data_quality(maskname, fname, options)
+        Wavelength.plot_sky_spectra(maskname, fname, options)
+        Wavelength.plot_mask_fits(maskname, fname, options)
 
-if False:
+if True:
 
-    Background.handle_background(['AmB.fits'], 'm120507_0230', maskname,
-            band, "120506_164909_egs_abs.fits", options)
+    As = [ind + "m120507_%4.4i.fits" % i for i in range(229,249,2)]
+    Bs = [ind + "m120507_%4.4i.fits" % i for i in range(230,249,2)]
+
+    Background.handle_background(As, Bs, 'm120507_0230', maskname,
+            band, options)
 
 
