@@ -10,9 +10,11 @@ import numpy as np
 import unittest
 
 
+
 import os
 import pdb
 
+import MOSFIRE
 import CSU
 import Options
 
@@ -29,7 +31,6 @@ def badpixelmask():
         theBPM = hdulist[0].data
 
     return theBPM
-
 
 def load_edges(maskname, band, options):
     ''' Load the slit edge functions '''
@@ -80,11 +81,46 @@ def load_lambdaslit(fnum, maskname, band, options):
 
     print fn
 
-    return readfits(fn)
+    return readfits(fn, options)
+
+def writefits(img, maskname, fname, options, header=None, bs=None,
+        overwrite=False):
+    '''Convenience wrapper to write MOSFIRE drp-friendly FITS files'''
+
+    hdu = pf.PrimaryHDU(img)
+    path = os.path.join(options["outdir"], maskname)
+    if not os.path.exists(path):
+        print("Output directory '%s' does not exist. The DRP will attempt" 
+                "to create this directory." % path)
+        os.mkdir(path)
+
+    fn = os.path.join(path, fname)
+
+    if header is None: header = {"DRPVER": MOSFIRE.version}
+    else: header.update("DRPVER", MOSFIRE.version)
+
+    if header is not None:
+        for k in header.keys():
+            if hdu.header.has_key(k): continue
+
+            k = k.rstrip()
+            if len(k) <= 8:
+                hdu.header.update(k, header[k])
+            else:
+                hdu.header.update("hierarch " + k, header[k])
+
+    if overwrite:
+        try: 
+            os.remove(fn)
+            print "Removed old file '%s'%" % (fn)
+        except: pass
+
+    print "Wrote to '%s'" % (fn)
+    hdu.writeto(fn)
 
 
 
-def readfits(path):
+def readfits(path, options):
     '''Read a fits file from path and return a tuple of (header, data, 
     Target List, Science Slit List (SSL), Mechanical Slit List (MSL),
     Alignment Slit List (ASL)).'''
@@ -104,8 +140,35 @@ def readheader(path):
 
     return pf.getheader(path)
 
+def read_drpfits(maskname, fname, options):
+    '''Read a fits file written by the DRP'''
 
-def readmosfits(path, extension=None):
+    path = os.path.join(options["outdir"], maskname, fname)
+
+    hdulist = pf.open(path)
+    output = []
+
+    for hdu in hdulist:
+        output.append(hdu.header)
+
+        if hdu.header.has_key("DRPVER"):
+            itsver = hdu.header.has_key("DRPVER") 
+            if itsver != MOSFIRE.version:
+                raise Exception("The file requested '%s' uses DRP version %f "
+                        "but the current DRP version is %f. There might be an "
+                        "incompatibility" % (itsver, MOSFIRE.version))
+            else:
+                raise Exception("The file requested '%s' does not seem to be "
+                        "the result of this DRP. This should never be the "
+                        " case.")
+
+        output.append(hdu.data)
+
+
+    return output
+
+
+def readmosfits(fname, options, extension=None):
     '''Read a fits file written by MOSFIRE from path and return a tuple of 
     (header, data, Target List, Science Slit List (SSL), Mechanical Slit 
     List (MSL), Alignment Slit List (ASL)).
@@ -114,8 +177,8 @@ def readmosfits(path, extension=None):
     does not append slit extension.
     '''
 
-    print path
-
+    path = os.path.join(options["indir"], fname)
+    
     hdulist = pf.open(path)
     header = hdulist[0].header
     data = hdulist[0].data
@@ -133,7 +196,12 @@ def readmosfits(path, extension=None):
         msl = hdulist[3].data
         asl = hdulist[4].data
     except:
-        print "Improper MOSFIRE FITS File: %s" % path
+        raise Exception("Improper MOSFIRE FITS File: %s" % path)
+
+    if np.abs(header["REGTMP1"] - 77) > .05:
+        raise Exception("The temperature of the detector is %f where it "
+                "should be 77.000 deg. Please notify Keck support staff." %
+                header["REGTMP1"])
 
     ssl = ssl[ssl.field("Slit_Number") != ' ']
     msl = msl[msl.field("Slit_Number") != ' ']

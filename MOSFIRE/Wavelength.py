@@ -124,9 +124,7 @@ def handle_lambdas(filelist, maskname, options):
                 "directory should exist." % path)
 
     for fname in filelist:
-        fp = os.path.join(path, fname)
-
-        mfits = IO.readmosfits(fp)
+        mfits = IO.readmosfits(fname, options)
         fit_lambda(mfits, fname, maskname, options)
         apply_lambda(mfits, fname, maskname, options)
 
@@ -324,7 +322,7 @@ def apply_lambda_simple(mfits, fname, maskname, options):
         for j in xrange(len(lp)):
             sigs[lp[j],:] = lm[j]
             if lm[j]*1e4 < 0.1:
-                prev = lams[lp[j],:] = CV.chebval(xx, lc[j])
+                prev = lams[lp[j],:] = CV.chebval(xx, lc[j])*1e4
                 prevcoeff = lc[j]
             else:
                 lams[lp[j],:] = prev
@@ -336,18 +334,13 @@ def apply_lambda_simple(mfits, fname, maskname, options):
                     lines)))
 
     print("{0}: writing lambda".format(maskname))
-    hdu = pf.PrimaryHDU(lams)
-    fn = os.path.join(path, "lambda_solution_{0}".format(fname))
-    try: os.remove(fn)
-    except: pass
-    hdu.writeto(fn)
+    IO.writefits(lams, maskname, "lambda_solution_{0}".format(fname), 
+            options, overwrite=True)
+
 
     print("{0}: writing sigs".format(maskname))
-    hdu = pf.PrimaryHDU(sigs)
-    fn = os.path.join(path, "sigs_solution_{0}".format(fname))
-    try: os.remove(fn)
-    except: pass
-    hdu.writeto(fn)
+    IO.writefits(sigs, maskname, "sigs_solution_{0}".format(fname), 
+            options, overwrite=True)
 
     print("{0}: rectifying".format(maskname))
     dlam = np.ma.median(np.diff(lams[1024,:]))
@@ -367,11 +360,8 @@ def apply_lambda_simple(mfits, fname, maskname, options):
         rectified[i,:] = f(ll_fid)
 
 
-    hdu = pf.PrimaryHDU(rectified)
-    fn = os.path.join(path, "rectified_{0}".format(fname))
-    try: os.remove(fn)
-    except: pass
-    hdu.writeto(fn)
+    IO.writefits(rectified, maskname, "rectified_{0}".format(fname), 
+            options, overwrite=True)
     
 def apply_lambda(mfits, fname, maskname, options):
     """Convert solutions into final output products"""
@@ -393,7 +383,6 @@ def apply_lambda(mfits, fname, maskname, options):
     Ld = IO.load_lambdadata(fnum, maskname, band, options)
 
 
-    pdb.set_trace()
     slitedges = edgedata[0:-1]
     edgeinfo = edgedata[-1]
 
@@ -719,14 +708,7 @@ def plot_mask_solution_ds9(fname, maskname, options):
     """makes a ds9 region file guessing the wavelength solution"""
 
 
-    inpath = options["indir"]
-    path = os.path.join(options["outdir"], maskname)
-    if not os.path.exists(path):
-        raise Exception("Output directory '%s' does not exist. This " 
-                "directory should exist." % path)
-
-    fn = os.path.join(inpath, fname)
-    (header, data, bs) = IO.readmosfits(fn)
+    (header, data, bs) = IO.readmosfits(fname, options)
 
     linelist = pick_linelist(header)
 
@@ -1874,14 +1856,8 @@ def mask_model(p, xs):
 def plot_mask_fits(maskname, fname, options):
 
     from matplotlib.backends.backend_pdf import PdfPages
-    path = os.path.join(options["outdir"], maskname)
-    print path
-    if not os.path.exists(path):
-        raise Exception("Output directory '%s' does not exist. This " 
-            "directory should exist." % path)
 
-    fp = os.path.join(options['indir'], fname)
-    mfits = IO.readmosfits(fp)
+    mfits = IO.readmosfits(fname, options)
     header, data, bs = mfits
 
     band = header['filter'].rstrip()

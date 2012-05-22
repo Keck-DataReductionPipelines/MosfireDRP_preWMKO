@@ -21,26 +21,70 @@ from MOSFIRE import CSU, Fit, IO, Options, Filters, Detector
 
 def imcombine(files, maskname, options, flat, outname=None):
 
-    outpath = os.path.join(options["outdir"], maskname)
-    if not os.path.exists(outpath):
-        raise Exception("Output directory '%s' does not exist. This " 
-                "directory should exist." % outpath)
-
-    inpath = os.path.join(options["indir"], maskname)
-
     datas = np.zeros((len(files), 2048, 2048))
     itimes = []
     prevssl = None
+    prevmn = None
+    patternid = None
+    maskname = None
+
+    header = None
+
     for i in xrange(len(files)):
         fname = files[i]
-        hdr, data, bs = IO.readmosfits(fname)
-        itimes.append(hdr["truitime"])
+        thishdr, data, bs = IO.readmosfits(fname, options)
+        itimes.append(thishdr["truitime"])
         datas[i,:,:] = data.filled(0)
+
+        ''' Construct Header'''
+        if header is None:
+            header = thishdr
+        header.update("imfno%2.2i" % (i), fname, "-------------------")
+        for key in header.keys():
+            val = header[key]
+
+            if thishdr.has_key(key):
+                if val != thishdr[key]:
+                    newkey = "hierarch " + key + ("_img%2.2i" % i)
+                    header.update(newkey.rstrip(), thishdr[key])
+
+        ''' Now handle error checking'''
+
+        if thishdr["aborted"]:
+            raise Exception("Img '%s' was aborted and should not be used" %
+                    fname)
+
         if prevssl is not None:
             if len(prevssl) != len(bs.ssl):
-                # todo Improve these chucks
+                # todo Improve these checks
                 raise Exception("The stack of input files seems to be of "
                         " different masks")
+        prevssl = bs.ssl
+
+        if patternid is not None:
+            if patternid != thishdr["frameid"]:
+                raise Exception("The stack should be of '%s' frames only, but "
+                        "the current image is a '%s' frame." % (patternid, 
+                            thishdr["frameid"]))
+
+        patternid = thishdr["frameid"]
+
+        if maskname is not None:
+            if maskname != thishdr["maskname"]:
+                raise Exception("The stack should be of CSU mask '%s' frames "
+                        "only but contains a frame of '%s'." % (maskname,
+                        thishdr["maskname"]))
+
+        maskname = thishdr["maskname"]
+
+        if thishdr["BUNIT"] != "ADU per coadd":
+            raise Exception("The units of '%s' are not in ADU per coadd and "
+                    "this violates an assumption of the DRP. Some code " 
+                    "is needed in the DRP to handle this case." % fname)
+
+        ''' Error checking is complete'''
+        print "%s %s[%s] %5.1f" % (fname, maskname, patternid, itimes[-1])
+
     
     itimes = np.array(itimes)
     if np.any(itimes[0] != itimes):
@@ -62,8 +106,8 @@ def imcombine(files, maskname, options, flat, outname=None):
         issx, issy = np.where((mn-md)/md > 1)
         for i in xrange(len(issx)):
             x = issx[i] ; y = issy[i]
-            tots[x,y] = np.sum(dd[0:-1,x,y])
-            cnts[x,y] -= 1
+            tots[x,y] = np.sum(dd[1:-1,x,y])
+            cnts[x,y] -= 2
             mask[x,y] += 2
 
     itime = itimes[0]
@@ -76,19 +120,12 @@ def imcombine(files, maskname, options, flat, outname=None):
                 "directory should exist." % path)
 
     if outname is not None:
-        hdu = pf.PrimaryHDU(rates)
-        outfile = os.path.join(path, outname)
-        try: os.remove(outfile)
-        except: pass
-        hdu.writeto(outfile)
+        IO.writefits(rates, maskname, outname, options, header=header,
+                overwrite=True)
+        IO.writefits(mask, maskname, "mask_" + outname, options, header=header,
+                overwrite=True)
 
-        hdu = pf.PrimaryHDU(mask)
-        outfile = os.path.join(path, "mask_" + outname)
-        try: os.remove(outfile)
-        except: pass
-        hdu.writeto(outfile)
-
-    return hdr, rates, var, mask, bs
+    return header, rates, var, mask, bs
     
 
 def handle_background(As, Bs, lamname, maskname, band_name, options): 
@@ -97,20 +134,17 @@ def handle_background(As, Bs, lamname, maskname, band_name, options):
 
     band = band_name
 
-    path = os.path.join(options["outdir"], maskname)
-    if not os.path.exists(path):
-        raise Exception("Output directory '%s' does not exist. This " 
-                "directory should exist." % path)
-
-    flatname = os.path.join(path, "pixelflat_2d_%s.fits" % band_name)
-    flat = IO.readfits(flatname)[1].filled(1)
+    
+    flatname = os.path.join(maskname, "pixelflat_2d_%s.fits" % band_name)
+    hdr, flat = IO.read_drpfits(maskname, 
+            "pixelflat_2d_%s.fits" % (band_name), options)
 
     hdrA, ratesA, varA, maskA, bsA = imcombine(As, maskname, options, 
             flat, outname="A.fits")
     hdrB, ratesB, varB, maskB, bsB = imcombine(Bs, maskname, options, 
             flat, outname="B.fits")
 
-    AmB = ratesA-ratesB
+    AmB = ratesA - ratesB
     vAmB = varA + varB
 
     sky_sub_out   = np.zeros((2048, 2048), dtype=np.float)
@@ -134,17 +168,15 @@ def handle_background(As, Bs, lamname, maskname, band_name, options):
         yroi = slice(sol["bottom"], sol["top"])
         sky_sub_out[yroi, xroi] = sol["output"]
     
-    print path
-    output = os.path.join(path, 'bsub_%s_%s.fits' % (maskname, band))
-    hdu = pf.PrimaryHDU(sky_sub_out)
-    try: os.remove(output)
-    except: pass
-    hdu.writeto(output)
+    IO.writefits(sky_sub_out, maskname, "bsub_%s_%s.fits" % (maskname, band),
+            options, header=header, overwrite=True)
 
 
     if True:
-        dlam = np.median(np.diff(lam[1][1024,:]))*1e4
-        hpp = np.array(Filters.hpp[band]) * 1e4
+        dlam = np.median(np.diff(lam[1][1024,:]))
+        print dlam
+        hpp = np.array(Filters.hpp[band]) 
+        print hpp
         ll_fid = np.arange(hpp[0], hpp[1], dlam)
         nspec = len(ll_fid)
 
@@ -248,7 +280,7 @@ def background_subtract_helper(slitno):
     ivar = 1/(slit)
     ivar[np.logical_not(np.isfinite(ivar))] = 0
 
-    lslit = lam[1][yroi,xroi]*1e4
+    lslit = lam[1][yroi,xroi]
 
     # 2
     xx = np.arange(slit.shape[1])
