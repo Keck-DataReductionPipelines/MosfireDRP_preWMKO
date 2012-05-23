@@ -150,7 +150,7 @@ def fit_lambda(mfits, fname, maskname, options):
     tock = time.time()
 
     p = Pool()
-    solutions = p.map(fit_lambda_helper, range(1,len(bs.ssl)))
+    solutions = p.map(fit_lambda_helper, range(len(bs.ssl)))
     p.close()
 
     tick = time.time()
@@ -173,9 +173,10 @@ def fit_lambda_helper(slitno):
 
     tick = time.time()
 
+    slitedges = edgedata[0:-1]
 
     sol_1d = center_solutions[slitidx]["sol_1d"]
-    edge = edgedata[slitidx]
+    edge = slitedges[slitidx]
     linelist = center_solutions[slitidx]["linelist"]
 
     start  = center_solutions[slitidx]["extract_pos"]
@@ -221,23 +222,6 @@ def fit_slit_interactively(mfits, fname, maskname, options):
     np.save(fn, np.array(II.solutions))
 
 
-def produce_2d_solution(mfits, fname, maskname, options):
-    path = os.path.join(options["outdir"], maskname)
-    outname = os.path.join(path, "lambda_2d_coeffs_{0}.npy".format(
-        fname.replace(".fits","")))
-    inname = os.path.join(path, "lambda_center_coeffs_{0}.npy".format(
-        fname.replace(".fits","")))
-
-    (header, data, bs) = mfits
-    
-    try: solutions = np.load(inname)
-    except: solutions = None
-
-
-    
-    lamout = np.zeros(shape=(2048, 2048), dtype=np.float32)
-
-
 def fit_lambda_interactively(mfits, fname, maskname, options):
     """Fit the one-dimensional wavelength solution to each science slit"""
     np.seterr(all="ignore")
@@ -265,24 +249,10 @@ def fit_lambda_interactively(mfits, fname, maskname, options):
     print "save to: ", fn
     np.save(fn, np.array(II.solutions))
 
-def produce_2d_solution(mfits, fname, maskname, options):
-    path = os.path.join(options["outdir"], maskname)
-    outname = os.path.join(path, "lambda_2d_coeffs_{0}.npy".format(
-        fname.replace(".fits","")))
-    inname = os.path.join(path, "lambda_center_coeffs_{0}.npy".format(
-        fname.replace(".fits","")))
-
-    (header, data, bs) = mfits
-    
-    try: solutions = np.load(inname)
-    except: solutions = None
-
-
-    
-    lamout = np.zeros(shape=(2048, 2048), dtype=np.float32)
 
 def apply_lambda_simple(mfits, fname, maskname, options):
-    """Convert solutions into final output products"""
+    """Convert solutions into final output products. This is the function that
+    should be used for now."""
 
     (header, data, bs) = mfits
 
@@ -355,7 +325,9 @@ def apply_lambda_simple(mfits, fname, maskname, options):
             options, overwrite=True)
     
 def apply_lambda(mfits, fname, maskname, options):
-    """Convert solutions into final output products"""
+    """Use a two dimensional fit across the slit to produce a wavelength
+    solution. This code is now OBSOLETE and will be removed on a future
+    revision"""
 
     (header, data, bs) = mfits
 
@@ -423,91 +395,6 @@ def apply_lambda(mfits, fname, maskname, options):
     except: pass
     hdu.writeto(fn)
     
-
-
-def mechanical_to_science_slit(bs, slitedges, lambdadata):
-    """Convert mechanical slit fits to fits accross the science slit"""
-    all_pixs = []
-    all_alphas = []
-    all_betas = []
-    all_gammas = []
-    all_deltas = []
-
-    
-    for i in xrange(len(bs.ssl)):
-        ss = bs.ssl[i]
-        edges = slitedges[i]
-        
-        print "SS#: %i, edges: %f" % (i, edges['top'](1024))
-
-        csuslits = bs.scislit_to_csuslit(i)
-
-        scislit_pixs = []
-        scislit_alphas = []
-        scislit_betas = []
-        scislit_gammas = []
-        scislit_deltas = []
-        for csuslit in csuslits:
-            sol = lambdadata[csuslit-1]
-            ff = filter_2d_solutions(sol["2d"])
-
-            assert(sol["slitno"] == csuslit)
-            ar = np.array(map(lambda x:x[0], ff))
-
-            try: 
-                pix = ar[:, 5]
-                alpha = ar[:, 0]
-                beta = ar[:, 1]
-                gamma = ar[:, 2]
-                delta = ar[:, 3]
-            except:
-                #print "Skipping %i" % csuslit
-                continue
-
-            print alpha
-
-            scislit_pixs.extend(pix)
-            scislit_alphas.extend(alpha)
-            scislit_betas.extend(beta)
-            scislit_gammas.extend(gamma)
-            scislit_deltas.extend(delta)
-
-        (scislit_pixs, scislit_alphas, scislit_betas, scislit_gammas, 
-                scislit_deltas) = map(np.array, [scislit_pixs, 
-                    scislit_alphas, scislit_betas, scislit_gammas, 
-                    scislit_deltas])
-
-        srt = np.argsort(scislit_pixs)
-        scislit_pixs = scislit_pixs[srt]
-        scislit_alphas = scislit_alphas[srt]
-        scislit_betas = scislit_betas[srt]
-        scislit_gammas = scislit_gammas[srt]
-        scislit_deltas = scislit_deltas[srt]
-
-        all_pixs.append(scislit_pixs)
-        all_alphas.append(scislit_alphas)
-        all_betas.append(scislit_betas)
-        all_gammas.append(scislit_gammas)
-        all_deltas.append(scislit_deltas)
-
-    return [all_pixs, all_alphas, all_betas, all_gammas, all_deltas]
-
-def filter_2d_solutions(vec):
-    """Select quality fits in two dimensional solution"""
-
-
-    def filter_fun(x):
-        sds = x[1] # standard deviation of first fit parameter
-        MAD = x[2] # Median absolute deviation of fit to data
-        success = x[3] # Binary success criteria
-
-        return (sds is not None) \
-            and (sds[0] < 2e-5) \
-            and (MAD < MADLIMIT) \
-            and (success)
-
-    return filter(filter_fun, vec)
-
 
 #
 # Fitting Methods
@@ -1645,8 +1532,6 @@ def fit_outwards_xcor(data, bs, sol_1d, lines, options, start, bottom, top,
             DXS.append(dxs)
             SIGMAS.append(sigmas)
 
-        pdb.set_trace()
-
     positions = np.arange(bottom, top, 1)
     spec0 = np.ma.median(data[start-1:start+1, :], axis=0)
     spec0 = spec0.filled(0)
@@ -1677,7 +1562,7 @@ def fit_outwards_refit(data, bs, sol_1d, lines, options, start, bottom, top,
                 linelist, options)
 
         print "Chebyshev resid Angstrom S%2.2i @ p%i: %1.2f rms %1.2f mad" % \
-                (slitno, yhere, np.std(delt), np.median(np.abs(delt)))
+                (slitno+1, yhere, np.std(delt), np.median(np.abs(delt)))
 
         return cfit, delt
 
