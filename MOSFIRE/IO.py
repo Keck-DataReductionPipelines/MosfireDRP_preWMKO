@@ -168,6 +168,30 @@ def read_drpfits(maskname, fname, options):
 
     return output
 
+def fname_to_path(fname, options):
+    '''Take a filename like m120507_0123, parse date, and return full path'''
+    months = {"01": "jan", "02": "feb", "03": "mar", "04": "apr", "05": "may",
+        "06": "jun", "07": "jul", "08": "aug", "09": "sep", "10": "oct",
+        "11": "nov", "12": "dec"}
+
+    try:
+        fdate = fname.split("m")[1][0:6]
+        yr, mn, dy = "20" + fdate[0:2], fdate[2:4], int(fdate[4:6])
+        month = months[mn]
+    except:
+        print "Could not parse date out of file name: %s" % (fname)
+
+
+    path = os.path.join(options["indir"], yr + month + "%2.2i" % dy)
+    if not os.path.exists(os.path.join(path, fname)):
+        path = os.path.join(options["indir"], yr + month + "%2.2i" % (dy-1))
+
+    if not os.path.exists(path):
+        raise Exception("Could not find file '%s' in '%s'" % (fname,
+            options["indir"]))
+
+    return path
+
 
 def readmosfits(fname, options, extension=None):
     '''Read a fits file written by MOSFIRE from path and return a tuple of 
@@ -178,9 +202,9 @@ def readmosfits(fname, options, extension=None):
     does not append slit extension.
     '''
 
-    path = os.path.join(options["indir"], fname)
-    
-    hdulist = pf.open(path)
+    path = fname_to_path(fname, options)
+    print path
+    hdulist = pf.open(os.path.join(path, fname))
     header = hdulist[0].header
     data = hdulist[0].data
 
@@ -265,7 +289,7 @@ def imcombine(filelist, out, options, bpmask=None, reject="none", nlow=None,
     from pyraf import iraf
     iraf.images()
 
-    path = options["indir"]
+    path = fname_to_path(filelist[0], options)
     filelist = [os.path.join(path, "%s[0]" % f) for f in filelist]
     pars = iraf.imcombine.getParList()
     iraf.imcombine.unlearn()
