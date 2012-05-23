@@ -18,7 +18,7 @@ __version__ = "19_04_2011"
 npix = 2048
 
 flat = {"outdir": "/scr2/mosfire/secondlight/",
-        "indir": "/scr2/mosfire/secondlight/",
+        "indir": "/users/npk/desktop",
         "version": 1, 
         "edge-order": 5, # Polynomial order for edge of slit 
         "edge-fit-width": 20,
