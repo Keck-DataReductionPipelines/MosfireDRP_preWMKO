@@ -125,11 +125,12 @@ def mosfire_geoxytran(x_kfp, y_kfp, transform="final.pix2mm.4.972.120k",
     return (x,y)
 
 def mosfire_geoxytrans(x_kfp, y_kfp, transform="final.pix2mm.4.972.120k",
-        database="/users/npk/dropbox/mosfire/code/platescale/10March2011.4.972.db", direction="forward"):
+        database="ale/10March2011.4.972.db", direction="forward"):
     '''Conveninece wrapper around IRAF geoxytran'''
     iraf.images()
     path = os.path.join(os.environ["MOSPATH"], "platescale", 
             "10March2011.4.972.db")
+    database = path
     pars = iraf.geoxytran.getParList()
     iraf.geoxytran.unlearn()
     ins = []
