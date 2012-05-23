@@ -110,6 +110,8 @@ def imcombine(files, maskname, options, flat, outname=None):
             cnts[x,y] -= 2
             mask[x,y] += 2
 
+
+    ''' Now handle IVAR '''
     itime = itimes[0]
     rates = tots / (cnts*itime*flat)
     var = itime*cnts*flat*(1/tots + 1/Detector.RN**2)
@@ -126,7 +128,7 @@ def imcombine(files, maskname, options, flat, outname=None):
                 overwrite=True)
 
     return header, rates, var, mask, bs
-    
+
 
 def handle_background(As, Bs, lamname, maskname, band_name, options): 
     
@@ -140,9 +142,9 @@ def handle_background(As, Bs, lamname, maskname, band_name, options):
             "pixelflat_2d_%s.fits" % (band_name), options)
 
     hdrA, ratesA, varA, maskA, bsA = imcombine(As, maskname, options, 
-            flat, outname="A.fits")
+            flat, outname="%s_A.fits" % band_name)
     hdrB, ratesB, varB, maskB, bsB = imcombine(Bs, maskname, options, 
-            flat, outname="B.fits")
+            flat, outname="%s_B.fits" % band_name)
 
     AmB = ratesA - ratesB
     vAmB = varA + varB
@@ -174,9 +176,7 @@ def handle_background(As, Bs, lamname, maskname, band_name, options):
 
     if True:
         dlam = np.median(np.diff(lam[1][1024,:]))
-        print dlam
         hpp = np.array(Filters.hpp[band]) 
-        print hpp
         ll_fid = np.arange(hpp[0], hpp[1], dlam)
         nspec = len(ll_fid)
 
@@ -192,7 +192,7 @@ def handle_background(As, Bs, lamname, maskname, band_name, options):
 
         from scipy.interpolate import interp1d
         for i in xrange(2048):
-            ll = lam[1][i,:]*1e4
+            ll = lam[1][i,:]
             ss = sky_sub_out[i,:]
             iv = 1/vAmB[i,:]
 
@@ -296,7 +296,7 @@ def background_subtract_helper(slitno):
     ls = ls[sort]
     ys = ys[sort]
 
-    hpps = np.array(Filters.hpp[band] ) * 1e4
+    hpps = np.array(Filters.hpp[band] ) 
 
     diff = np.append(np.diff(ls), False)
 

@@ -96,8 +96,8 @@ def writefits(img, maskname, fname, options, header=None, bs=None,
 
     fn = os.path.join(path, fname)
 
-    if header is None: header = {"DRPVER": MOSFIRE.version}
-    else: header.update("DRPVER", MOSFIRE.version)
+    if header is None: header = {"DRPVER": MOSFIRE.__version__}
+    else: header.update("DRPVER", MOSFIRE.__version__)
 
     if header is not None:
         for k in header.keys():
@@ -120,7 +120,7 @@ def writefits(img, maskname, fname, options, header=None, bs=None,
 
 
 
-def readfits(path, options):
+def readfits(path, use_bpm=False):
     '''Read a fits file from path and return a tuple of (header, data, 
     Target List, Science Slit List (SSL), Mechanical Slit List (MSL),
     Alignment Slit List (ASL)).'''
@@ -128,8 +128,9 @@ def readfits(path, options):
     header = hdulist[0].header
     data = hdulist[0].data
 
-    theBPM = badpixelmask()
-    data = np.ma.masked_array(data, theBPM, fill_value=0)
+    if use_bpm:
+        theBPM = badpixelmask()
+        data = np.ma.masked_array(data, theBPM, fill_value=0)
 
     return (header, data)
 
@@ -153,10 +154,10 @@ def read_drpfits(maskname, fname, options):
 
         if hdu.header.has_key("DRPVER"):
             itsver = hdu.header.has_key("DRPVER") 
-            if itsver != MOSFIRE.version:
+            if itsver != MOSFIRE.__version__:
                 raise Exception("The file requested '%s' uses DRP version %f "
                         "but the current DRP version is %f. There might be an "
-                        "incompatibility" % (itsver, MOSFIRE.version))
+                        "incompatibility" % (itsver, MOSFIRE.__version__))
             else:
                 raise Exception("The file requested '%s' does not seem to be "
                         "the result of this DRP. This should never be the "
@@ -252,7 +253,9 @@ def parse_header_for_bars(header):
     return np.array(poss)
 
 
-def imcombine(filelist, out, bpmask=None, reject="none", nlow=None, nhigh=None):
+def imcombine(filelist, out, options, bpmask=None, reject="none", nlow=None,
+        nhigh=None):
+
     '''Convenience wrapper around IRAF task imcombine
     
     reject: none, minmax, sigclip, avsigclip, pclip'''
@@ -262,7 +265,8 @@ def imcombine(filelist, out, bpmask=None, reject="none", nlow=None, nhigh=None):
     from pyraf import iraf
     iraf.images()
 
-    filelist = ["%s[0]" % f for f in filelist]
+    path = options["indir"]
+    filelist = [os.path.join(path, "%s[0]" % f) for f in filelist]
     pars = iraf.imcombine.getParList()
     iraf.imcombine.unlearn()
 

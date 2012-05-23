@@ -296,13 +296,9 @@ def apply_lambda_simple(mfits, fname, maskname, options):
 
     path = os.path.join(options["outdir"], maskname)
     edgedata = IO.load_edges(maskname, band, options)
-    #lambdadata = IO.load_lambdamodel(fnum, maskname, band, options)
-    lambdadata = IO.load_lambdaoutwards(fnum, maskname, band, options)
     Ld = IO.load_lambdadata(fnum, maskname, band, options)
 
     lines = pick_linelist(header)
-
-
 
     slitedges = edgedata[0:-1]
     edgeinfo = edgedata[-1]
@@ -317,21 +313,16 @@ def apply_lambda_simple(mfits, fname, maskname, options):
         lp = Ld[i]["2d"]["positions"]
         lc = Ld[i]["2d"]["coeffs"]
         lm = Ld[i]["2d"]["lambdaMAD"]
+        print "2d wavelengths: Slit %i/%i" % (i, len(Ld))
 
         prev = 0
         for j in xrange(len(lp)):
             sigs[lp[j],:] = lm[j]
-            if lm[j]*1e4 < 0.1:
-                prev = lams[lp[j],:] = CV.chebval(xx, lc[j])*1e4
+            if lm[j] < 0.1:
+                prev = lams[lp[j],:] = CV.chebval(xx, lc[j])
                 prevcoeff = lc[j]
             else:
                 lams[lp[j],:] = prev
-                spec = np.ma.median(data[lp[j]-1:lp[j]+1,:], axis=0)
-                [xs, sxs, sigmas] = find_known_lines(lines, prev, spec, options)
-                loc = CV.chebval(xs, prevcoeff)
-
-                print "%4.4i] mad: %1.2f" % (lp[j], np.median(np.abs(loc -
-                    lines)))
 
     print("{0}: writing lambda".format(maskname))
     IO.writefits(lams, maskname, "lambda_solution_{0}".format(fname), 
@@ -412,7 +403,7 @@ def apply_lambda(mfits, fname, maskname, options):
     print("{0}: rectifying".format(maskname))
     dlam = np.ma.median(np.diff(lams[1024,:]))
     hpp = Filters.hpp[band] 
-    ll_fid = np.arange(hpp[0]*1e4, hpp[1]*1e4, dlam)
+    ll_fid = np.arange(hpp[0], hpp[1], dlam)
     nspec = len(ll_fid)
 
     rectified = np.zeros((2048, nspec), dtype=np.float32)
@@ -621,7 +612,7 @@ def pick_linelist(header):
             13236.5414 ,
             13301.9624 ,
             13324.3509 ,
-             13421.579])/1e4
+             13421.579])
 
     if band == 'K':
         # from ccs oh_lines_K.txt
@@ -666,13 +657,8 @@ def pick_linelist(header):
         22517.9267 ,
         22690.1765 ,
         22742.1907 ,
-        22985.9156 ])/1e4
+        22985.9156 ])
 
-        #lines.extend([1.153879, 1.15917, #1.203083, 1.212249, 
-            #1.222931, 1.23516,
-            #1.242335, 1.268577, 1.284502, 1.29211, 1.268577, 1.278239, 1.29211,
-            #1.302164, 1.308528, 1.323654, 
-            #1.342156])
 
     lines = np.array(lines)
     return np.sort(lines)
@@ -883,6 +869,10 @@ def fit_chebyshev_to_lines(xs, sxs, lines, options):
     if L < 6:
         return [baddelt, badfit, lines[ok]]
 
+    if np.median(lines) < 1000:
+        raise Exception("Units fed to this function are likely in micron but "
+                "should be in angstrom")
+
     cfit = CV.chebfit(xs[ok], lines[ok], options["chebyshev-degree"])
     delt = CV.chebval(xs[ok], cfit) - lines[ok]
 
@@ -922,7 +912,7 @@ def fit_model_to_lines(xs, sxs, lines, parguess, options, fixed):
     lsf = Fit.mpfit_do(merit_function, xs[ok], lines[ok], 
             parinfo, error=slambda[ok])
 
-    delt = np.abs(wavelength_model(lsf.params, xs[ok]) - lines[ok])*1e4
+    delt = np.abs(wavelength_model(lsf.params, xs[ok]) - lines[ok])
 
     xsOK = xs[ok]
     linesOK = lines[ok]
@@ -1196,7 +1186,6 @@ class InteractiveSolution:
             np.ma.median(self.data[self.extract_pos-1:self.extract_pos+1, :],
                 axis=0) # axis = 0 is spatial direction
 
-
         self.ll = CV.chebval(self.pix, self.cfit)
 
         self.xrng = [min(self.ll) * .99, max(self.ll)*1/.99]
@@ -1218,7 +1207,7 @@ class InteractiveSolution:
 
             for i in xrange(len(self.linelist)):
                 if not ok[i]: continue
-                D = (foundlams[i] - self.linelist[i])*1e4
+                D = (foundlams[i] - self.linelist[i])
                 pl.axvline(foundlams[i], color='orange', ymax=.75, ymin=.25,
                         linewidth=1.5)
                 pl.text(foundlams[i], 1500, "%1.2f" % D, rotation='vertical',
@@ -1229,7 +1218,7 @@ class InteractiveSolution:
 
             if self.STD < 0.1: fmt = 'go'
             else: fmt = 'bo'
-            pl.plot(self.linelist[ok], (foundlams[ok] - self.linelist[ok])*1e4, 
+            pl.plot(self.linelist[ok], (foundlams[ok] - self.linelist[ok]), 
                     fmt)
             pl.xlim(self.xlim)
 
@@ -1263,7 +1252,7 @@ class InteractiveSolution:
         for line in self.linelist:
             pl.axvline(line, color='red', linewidth=.5)
 
-            pl.text(line, ymax*.75, "%5.1f" % (line*1e4), 
+            pl.text(line, ymax*.75, "%5.1f" % (line), 
                     rotation='vertical', color='black')
 
             i = i+1
@@ -1297,8 +1286,6 @@ class InteractiveSolution:
         pl.ylim([-1000, ymax*.8])
         
         self.draw_done()
-
-
 
 
     def shift(self, x, y):
@@ -1388,8 +1375,8 @@ class InteractiveSolution:
         self.foundlinesig = sxs
 
         ok = np.isfinite(deltas)
-        self.STD = np.std(deltas[ok])*1e4
-        self.MAD = np.ma.median(np.abs(deltas[ok]))*1e4
+        self.STD = np.std(deltas[ok])
+        self.MAD = np.ma.median(np.abs(deltas[ok]))
 
         print "STD: %1.2f MAD: %1.2f" % (self.STD, self.MAD)
 
@@ -1557,7 +1544,7 @@ def construct_model(slitno):
     positions= coeffs[slitno-1]['2d']['positions']
 
 
-    ok = (sds*1e4 < 0.2) & (mads*1e4 < 0.1)
+    ok = (sds < 0.2) & (mads < 0.1)
     c0coeff = Fit.polyfit_sigclip(positions[ok], cfits[ok,0], 1, nmad=3)
     c0fun = np.poly1d(c0coeff)
 
@@ -1578,7 +1565,7 @@ def construct_model(slitno):
 
     cpolys = []
     # Check the fits now
-    if False:
+    if True:
         for i in xrange(len(positions)):
             pos = positions[i]
             c0 = c0fun(pos)
@@ -1594,7 +1581,7 @@ def construct_model(slitno):
             [delt, cfit, lines] = fit_chebyshev_to_lines(xs, sxs,
                 linelist, options)
 
-            rms = np.std(delt)*1e4
+            rms = np.std(delt)
             rmsR = np.median(np.abs(lines/delt))
             if rms  > .2:
                 pre = bcolors.FAIL
@@ -1606,7 +1593,7 @@ def construct_model(slitno):
 
             print pre + "2d model S%2.2i p%4.4i: residual %1.3f Angstrom " \
                     "RMS / %3.1e lam/dlam / %1.3f Angstrom MAD" % (slitno, pos,
-                            rms, rmsR, np.median(np.abs(delt*1e4))) + bcolors.ENDC
+                            rms, rmsR, np.median(np.abs(delt))) + bcolors.ENDC
 
 
             lambdaRMS.append(np.std(delt))
@@ -1690,7 +1677,7 @@ def fit_outwards_refit(data, bs, sol_1d, lines, options, start, bottom, top,
                 linelist, options)
 
         print "Chebyshev resid Angstrom S%2.2i @ p%i: %1.2f rms %1.2f mad" % \
-                (slitno, yhere, np.std(delt)*1e4, np.median(np.abs(delt))*1e4)
+                (slitno, yhere, np.std(delt), np.median(np.abs(delt)))
 
         return cfit, delt
 
@@ -1776,7 +1763,7 @@ def fit_to_lambda(fits, pix_lambda, pix_spatial, slitno=None):
 
     cs = fit_to_coefficients(fits, pix_spatial, slitno=slitno)
 
-    return CV.chebval(pix_lambda, cs) * 1e4
+    return CV.chebval(pix_lambda, cs) 
 
 def fit_mask(pars, pixel_set, ys):
     """Fit mask model function to the whole mask"""
@@ -1822,9 +1809,9 @@ def wavelength_model(p, x):
 
     costerm = np.cos(scale * (y-1024))
 
-    return alpha/(order/d) * 1/costerm * \
+    return (alpha/(order/d) * 1/costerm * \
             (np.sin(scale * (x-1024)) + sinbeta) + \
-            gamma * (x - delta)**3
+            gamma * (x - delta)**3)*1e4
 
 def mask_model(p, xs):
     """Fit a continuous smooth function to parameters in the mask.
@@ -1850,7 +1837,7 @@ def mask_model(p, xs):
         y = p[0] + p[1] * x + p[2] * x*x + c
         vals.extend(y)
 
-    return np.array(vals).ravel()
+    return np.array(vals).ravel() * 1e4
 
 
 def plot_mask_fits(maskname, fname, options):
