@@ -99,15 +99,11 @@ def handle_flats(flatlist, maskname, band, options, extension=None):
     '''
 
     tick = time.time()
-    try:
-            os.mkdir(os.path.join(options["outdir"], maskname))
-    except OSError:
-            pass
 
     # Check
     for fname in flatlist:
 
-        hdr, dat = IO.readfits(fname)
+        hdr, dat, bs = IO.readmosfits(fname, options)
         if hdr["filter"] != band:
             raise Exception("Filter name %s does not match header filter name "
                     "%s in file %s" % (band, hdr["filter"], fname))
@@ -116,11 +112,9 @@ def handle_flats(flatlist, maskname, band, options, extension=None):
     combine(flatlist, maskname, band, options)
 
     print "Combined '%s' to '%s'" % (flatlist, maskname)
-    (header, data, bs) = IO.readmosfits(flatlist[0],extension=extension)
-
     path = os.path.join(options["outdir"], maskname,
                     "combflat_2d_%s.fits" % band)
-    (header, data) = IO.readfits(path)
+    (header, data) = IO.readfits(path, use_bpm=True)
 
     print "Flat written to %s" % path
 
@@ -295,7 +289,7 @@ def combine(flatlist, maskname, band, options):
     if os.path.exists(out):
             os.remove(out)
 
-    IO.imcombine(flatlist, out, reject="minmax", nlow=1, nhigh=1)
+    IO.imcombine(flatlist, out, options, reject="minmax", nlow=1, nhigh=1)
 
 
 def find_edge_pair(data, y, roi_width, hpps):
