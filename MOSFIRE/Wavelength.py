@@ -1285,12 +1285,12 @@ class InteractiveSolution:
 
         print kp, x, y
 
-        actions_mouseless = {">": self.fastforward, "G": self.nextobject, "B":
-                self.prevobject, "Q": self.quit, "R": self.reset, "f":
+        actions_mouseless = {".": self.fastforward, "]": self.nextobject, "[":
+                self.prevobject, "q": self.quit, "r": self.reset, "f":
                 self.fit_event}
 
         actions = { "z": self.shift, "d": self.drop_point,
-                "x": self.zoom, "X": self.unzoom}
+                "x": self.zoom, "c": self.unzoom}
 
         if (kp == 'h') or (kp == '?'):
             print "Commands Desc"
