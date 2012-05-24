@@ -225,19 +225,19 @@ def handle_background(As, Bs, lamname, maskname, band_name, options):
         hdu.header.update("cdelt2", 1)
 
         path = os.path.join(options["outdir"], maskname)
-        fn = os.path.join(path, "rectified_test.fits")
+        fn = os.path.join(path, "rectified_%s.fits" % bandname)
         try: os.remove(fn)
         except: pass
         hdu.writeto(fn)
 
         hdu = pf.PrimaryHDU(1/vAmB)
-        fn = os.path.join(path, "ivar_test.fits")
+        fn = os.path.join(path, "ivar_%s.fits" % bandname)
         try: os.remove(fn)
         except: pass
         hdu.writeto(fn)
 
         hdu = pf.PrimaryHDU(rectified*np.sqrt(rectified_ivar))
-        fn = os.path.join(path, "rectified_sn_test.fits")
+        fn = os.path.join(path, "rectified_sn_%s.fits" % bandname)
         try: os.remove(fn)
         except: pass
         hdu.writeto(fn)
