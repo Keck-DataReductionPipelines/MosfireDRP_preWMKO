@@ -25,59 +25,10 @@ import pdb
 import MOSFIRE
 from MOSFIRE import Fit, IO, Options, CSU, Wavelength, Filters, Detector
 
-__version__ = "5may2012"
-
-try:
-    __IPYTHON__
-    reload(Fit)
-    reload(IO)
-    reload(Options)
-    reload(Wavelength)
-    reload(Detector)
-except:
-    pass
+__version__ = 0.1
 
 #from IPython.Shell import IPShellEmbed
 #start_shell = IPShellEmbed()
-
-def tester(band):
-    options = Options.flat
-    path = os.path.join(options["indir"], "m110326_%4.4i.fits")
-
-    if band == 'Y':
-            handle_flats([path % 3242, path % 3243, path % 3244], 
-                            "npk_calib3_q1700_pa_0", band, options)
-
-    if band == 'H':
-            handle_flats([path % 3248, path % 3249, path % 3250], 
-                            "npk_calib3_q1700_pa_0", band, options)
-
-    if band == 'K':
-            handle_flats([path % 3251, path % 3252, path % 3253], 
-                            "npk_calib3_q1700_pa_0", band, options)
-
-    if band == 'J':
-            handle_flats([path % 3245, path % 3246, path % 3247], 
-                            "npk_calib3_q1700_pa_0", band, options)
-
-def tester2(band):
-    options = Options.flat
-    path = os.path.join(options["outdir"], "npk_calib3_q1700_pa_0")
-    res = np.load(os.path.join(path, "slit-edges_%s.npy" % band))
-    save_ds9_edges(res, options)
-
-def tester3(band):
-    options = Options.flat
-    path = os.path.join(options["outdir"], "npk_calib3_q1700_pa_0", 
-                    "combflat_2d_%s.fits" % band)
-    res = np.load(os.path.join(path, "slit-edges_%s.npy" % band))
-
-def tester4():
-    options = Options.flat
-    path = os.path.join('/scr2/mosfire/110326', "m110326_%4.4i.fits")
-    handle_flats([path % 3265, path % 3266, path % 3279], 
-                    "npk_calib4_q1700_pa_0", 'H', options)
-
 
 def handle_flats(flatlist, maskname, band, options, extension=None):
     '''
@@ -347,7 +298,7 @@ def find_edge_pair(data, y, roi_width, hpps):
         v = select_roi(data, roi_width)
         xs = np.arange(len(v))
 
-        # HACK: The number 450 below is hardcoded and essentially made up.
+        # TODO: The number 450 below is hardcoded and essentially made up.
         # A smarter piece of code belongs here.
         if (np.median(v) < 450) or (xp < hpps[0]) or (xp > hpps[1]):
             xposs_missing.append(xp)
@@ -417,18 +368,6 @@ def fit_edge_poly(xposs, xposs_missing, yposs, widths, order):
     if not ok.any():
             raise Exception("Flat is not well illuminated? Cannot find edges")
 
-    if False:
-        pl.ion()
-
-        pl.figure(1)
-        pl.clf()
-        pl.scatter(xposs, yposs)
-        pl.scatter(xposs, yposs+widths)
-
-        pl.plot(xposs[ok], yposs[ok])
-        pl.plot(xposs[ok], yposs[ok]+widths[ok])
-
-
     # Now refit to user requested order
     fun = np.poly1d(Fit.polyfit_clip(xposs[ok], yposs[ok], order))
     wfun = np.poly1d(Fit.polyfit_clip(xposs[ok], widths[ok], order))
@@ -495,6 +434,7 @@ def find_and_fit_edges(data, header, bs, options):
 
     '''
 
+    # TODO: move hardcoded values into Options.py
     # y is the location to start
     y = 2034
     DY = 44.25
@@ -589,7 +529,6 @@ def find_and_fit_edges(data, header, bs, options):
 
 class TestFlatsFunctions(unittest.TestCase):
     def setUp(self):
-
             pass
 
     def test_trace_edge(self):
