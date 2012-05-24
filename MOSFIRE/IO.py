@@ -181,14 +181,13 @@ def fname_to_path(fname, options):
     except:
         print "Could not parse date out of file name: %s" % (fname)
 
-
     path = os.path.join(options["indir"], yr + month + "%2.2i" % dy)
     if not os.path.exists(os.path.join(path, fname)):
         path = os.path.join(options["indir"], yr + month + "%2.2i" % (dy-1))
 
-    if not os.path.exists(path):
-        raise Exception("Could not find file '%s' in '%s'" % (fname,
-            options["indir"]))
+        if not os.path.exists(path):
+            raise Exception("Could not find file '%s' in '%s'" % (fname,
+                options["indir"]))
 
     return path
 
@@ -202,9 +201,9 @@ def readmosfits(fname, options, extension=None):
     does not append slit extension.
     '''
 
-    path = fname_to_path(fname, options)
-    print path
-    hdulist = pf.open(os.path.join(path, fname))
+    path = os.path.join(fname_to_path(fname, options), fname)
+
+    hdulist = pf.open(path)
     header = hdulist[0].header
     data = hdulist[0].data
 
