@@ -111,10 +111,10 @@ def imcombine(files, maskname, options, flat, outname=None):
             mask[x,y] += 2
 
 
-    ''' Now handle IVAR '''
+    ''' Now handle variance '''
     itime = itimes[0]
     rates = tots / (cnts*itime*flat)
-    var = itime*cnts*flat*(1/tots + 1/Detector.RN**2)
+    var = (tots/flat + Detector.RN**2) / (cnts * itime)
 
     path = os.path.join(options["outdir"], maskname)
     if not os.path.exists(path):
@@ -124,6 +124,8 @@ def imcombine(files, maskname, options, flat, outname=None):
     if outname is not None:
         IO.writefits(rates, maskname, outname, options, header=header,
                 overwrite=True)
+        IO.writefits(var, maskname, "var_" + outname, options, header=header,
+                overwrite=True)
         IO.writefits(mask, maskname, "mask_" + outname, options, header=header,
                 overwrite=True)
 
@@ -132,7 +134,7 @@ def imcombine(files, maskname, options, flat, outname=None):
 
 def handle_background(As, Bs, lamname, maskname, band_name, options): 
     
-    global header, bs, edges, data, lam, sky_sub_out, sky_model_out, band
+    global header, bs, edges, data, ivar, lam, sky_sub_out, sky_model_out, band
 
     band = band_name
 
@@ -148,6 +150,7 @@ def handle_background(As, Bs, lamname, maskname, band_name, options):
 
     AmB = ratesA - ratesB
     vAmB = varA + varB
+    ivar = 1/vAmB
 
     sky_sub_out   = np.zeros((2048, 2048), dtype=np.float)
     sky_model_out = np.zeros((2048, 2048), dtype=np.float)
@@ -264,7 +267,7 @@ def background_subtract_helper(slitno):
 
     '''
 
-    global header, bs, edges, data, lam, sky_sub_out, sky_model_out, band
+    global header, bs, edges, data, ivar, lam, sky_sub_out, sky_model_out, band
     tick = time.time()
 
     # 1
@@ -277,7 +280,6 @@ def background_subtract_helper(slitno):
     yroi = slice(bottom, top)
 
     slit = data[yroi, xroi]
-    ivar = 1/(slit)
     ivar[np.logical_not(np.isfinite(ivar))] = 0
 
     lslit = lam[1][yroi,xroi]
