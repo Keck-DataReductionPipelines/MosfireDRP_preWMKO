@@ -12,7 +12,7 @@ npk April 18th 2011
 '''
 
 
-__version__ = "19_04_2011"
+__version__ = 0.1
 
 
 npix = 2048
