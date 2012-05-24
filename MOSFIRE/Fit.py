@@ -7,7 +7,11 @@ from scipy.special import erf
 import scipy.optimize as optimize
 import numpy as np
 import pylab as pl
-import pytools.nmpfit as mpfit
+
+
+# Following is to correct for old/new version of stsci python
+try: import pytools.nmpfit as mpfit
+if ImportError: import stsci.tools.nmpfit as mpfit
 
 import unittest
 
