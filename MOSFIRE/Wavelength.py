@@ -1283,13 +1283,26 @@ class InteractiveSolution:
         x = event.xdata
         y = event.ydata
 
+        actions_mouseless = {">": self.fastforward, "G": self.nextobject, "B":
+                self.prevobject, "Q": self.quit, "R": self.reset, "f":
+                self.fit_event}
+
+        actions = { "z": self.shift, "d": self.drop_point,
+                "x": self.zoom, "X": self.unzoom}
+
+        if (kp == 'h') or (kp == '?'):
+            print "Commands Desc"
+            for key, value in actions.items():
+                print "%8s %s" % (key, value.__doc__)
+            for key, value in actions_mouseless.items():
+                print "%8s %s" % (key, value.__doc__)
+
+        if actions_mouseless.has_key(kp):
+            actions_mouseless[kp](x, y)
+
         if x is None: return
         if y is None: return
 
-        actions = {"x": self.zoom, "X": self.unzoom, ">": self.fastforward,
-                "G": self.nextobject, "B": self.prevobject, "Q": self.quit,
-                "R": self.reset, "z": self.shift, "f": self.fit_event, "d":
-                self.drop_point}
 
         if actions.has_key(kp):
             actions[kp](x, y)
@@ -1297,10 +1310,6 @@ class InteractiveSolution:
         if kp == 'o':
             self.sweep()
 
-        if (kp == 'h') or (kp == '?'):
-            print "Commands Desc"
-            for key, value in actions.items():
-                print "%8s %s" % (key, value.__doc__)
 
 
 
