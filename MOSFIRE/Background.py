@@ -79,8 +79,9 @@ def imcombine(files, maskname, options, flat, outname=None):
 
         if thishdr["BUNIT"] != "ADU per coadd":
             raise Exception("The units of '%s' are not in ADU per coadd and "
-                    "this violates an assumption of the DRP. Some code " 
-                    "is needed in the DRP to handle this case." % fname)
+                    "this violates an assumption of the DRP. Some new code " 
+                    "is needed in the DRP to handle the new units of "
+                    "'%s'." % (fname, thishdr["BUNIT"]))
 
         ''' Error checking is complete'''
         print "%s %s[%s] %5.1f" % (fname, maskname, patternid, itimes[-1])
@@ -97,12 +98,14 @@ def imcombine(files, maskname, options, flat, outname=None):
     cnts = np.zeros((2048,2048),np.int16) + len(datas)
     mask = np.zeros((2048,2048),np.int16) + data.mask
 
-    if len(files) > 2:
-        mn = np.mean(datas,axis=0)
-        tots = np.sum(datas,axis=0)
-        md = np.median(datas,axis=0)
-        sd = np.std(datas,axis=0)
+    tots = np.sum(datas,axis=0)
+
+    ''' mn, md, and sd are used to reject cosmic rays and not used again '''
+    mn = np.mean(datas,axis=0)
+    md = np.median(datas,axis=0)
+    sd = np.std(datas,axis=0)
     
+    if len(files) > 2:
         issx, issy = np.where((mn-md)/md > 1)
         for i in xrange(len(issx)):
             x = issx[i] ; y = issy[i]
@@ -110,22 +113,26 @@ def imcombine(files, maskname, options, flat, outname=None):
             cnts[x,y] -= 2
             mask[x,y] += 2
 
-
     ''' Now handle variance '''
+    numreads = header["READS0"]
+    RN = Detector.RN / np.sqrt(numreads)
     itime = itimes[0]
-    rates = tots / (cnts*itime*flat)
-    var = (tots/flat + Detector.RN**2) / (cnts * itime)
+    exptime = cnts*itime
 
-    path = os.path.join(options["outdir"], maskname)
-    if not os.path.exists(path):
-        raise Exception("Output directory '%s' does not exist. This " 
-                "directory should exist." % path)
+    rates = (tots/flat) / exptime
+    var = (tots/flat + RN**2 * cnts) / exptime**2
+
+
+    if header.has_key("RN"): raise Exception("RN already populated in header")
+    header.update("RN", "%1.3f e-" % RN)
 
     if outname is not None:
-        IO.writefits(rates, maskname, outname, options, header=header,
-                overwrite=True)
-        IO.writefits(var, maskname, "var_" + outname, options, header=header,
-                overwrite=True)
+        IO.writefits(tots/flat, maskname, "cnts_" + outname, options,
+                header=header, overwrite=True)
+
+        IO.writefits(var*exptime**2, maskname, "var_" + outname, options,
+                header=header, overwrite=True)
+
         IO.writefits(mask, maskname, "mask_" + outname, options, header=header,
                 overwrite=True)
 
@@ -142,6 +149,9 @@ def handle_background(As, Bs, lamname, maskname, band_name, options):
     flatname = os.path.join(maskname, "pixelflat_2d_%s.fits" % band_name)
     hdr, flat = IO.read_drpfits(maskname, 
             "pixelflat_2d_%s.fits" % (band_name), options)
+
+    if np.abs(np.median(flat) - 1) > 0.1:
+        raise Exception("Flat seems poorly behaved.")
 
     hdrA, ratesA, varA, maskA, bsA = imcombine(As, maskname, options, 
             flat, outname="%s_A.fits" % band_name)
@@ -177,71 +187,55 @@ def handle_background(As, Bs, lamname, maskname, band_name, options):
             options, header=header, overwrite=True)
 
 
-    if True:
-        dlam = np.median(np.diff(lam[1][1024,:]))
-        hpp = np.array(Filters.hpp[band]) 
-        ll_fid = np.arange(hpp[0], hpp[1], dlam)
-        nspec = len(ll_fid)
-
-        f = open("ll_fid.txt", "w")
-        for i in xrange(nspec):
-            f.write("%4.4i %6.6f\n" % (i, ll_fid[i]))
-
-        f.close()
+    '''Now create rectified solutions'''
+    dlam = np.median(np.diff(lam[1][1024,:]))
+    hpp = np.array(Filters.hpp[band]) 
+    ll_fid = np.arange(hpp[0], hpp[1], dlam)
+    nspec = len(ll_fid)
 
 
-        rectified = np.zeros((2048, nspec), dtype=np.float32)
-        rectified_ivar = np.zeros((2048, nspec), dtype=np.float32)
+    rectified = np.zeros((2048, nspec), dtype=np.float32)
+    rectified_ivar = np.zeros((2048, nspec), dtype=np.float32)
 
-        from scipy.interpolate import interp1d
-        for i in xrange(2048):
-            ll = lam[1][i,:]
-            ss = sky_sub_out[i,:]
-            iv = 1/vAmB[i,:]
+    from scipy.interpolate import interp1d
+    for i in xrange(2048):
+        ll = lam[1][i,:]
+        ss = sky_sub_out[i,:]
 
-            ok = np.isfinite(ll) & np.isfinite(ss) & (ll < hpp[1]) & (ll >
-                    hpp[0])
+        ok = np.isfinite(ll) & np.isfinite(ss) & (ll < hpp[1]) & (ll >
+                hpp[0])
 
-            if len(np.where(ok)[0]) < 100:
-                continue
-            f = interp1d(ll[ok], ss[ok], bounds_error=False)
-            rectified[i,:] = f(ll_fid)
+        if len(np.where(ok)[0]) < 100:
+            continue
+        f = interp1d(ll[ok], ss[ok], bounds_error=False)
+        rectified[i,:] = f(ll_fid)
 
-            f = interp1d(ll, iv, bounds_error=False)
-            rectified_ivar[i,:] = f(ll_fid)
+        f = interp1d(ll, ivar[i,:], bounds_error=False)
+        rectified_ivar[i,:] = f(ll_fid)
 
-        hdu = pf.PrimaryHDU(rectified)
-        hdu.header.update("wat0_001", "system=world")
-        hdu.header.update("wat1_001", "wtype=linear")
-        hdu.header.update("wat2_001", "wtype=linear")
-        hdu.header.update("dispaxis", 2)
-        hdu.header.update("dclog1", "Transform")
-        hdu.header.update("dc-flag", 0)
-        hdu.header.update("ctype1", "LINEAR")
-        hdu.header.update("ctype2", "LINEAR")
-        hdu.header.update("crval1", ll_fid[0])
-        hdu.header.update("crval2", 1)
-        hdu.header.update("cdelt1", dlam)
-        hdu.header.update("cdelt2", 1)
+    hdu = pf.PrimaryHDU(rectified)
+    hdu.header.update("wat0_001", "system=world")
+    hdu.header.update("wat1_001", "wtype=linear")
+    hdu.header.update("wat2_001", "wtype=linear")
+    hdu.header.update("dispaxis", 2)
+    hdu.header.update("dclog1", "Transform")
+    hdu.header.update("dc-flag", 0)
+    hdu.header.update("ctype1", "LINEAR")
+    hdu.header.update("ctype2", "LINEAR")
+    hdu.header.update("crval1", ll_fid[0])
+    hdu.header.update("crval2", 1)
+    hdu.header.update("cdelt1", dlam)
+    hdu.header.update("cdelt2", 1)
 
-        path = os.path.join(options["outdir"], maskname)
-        fn = os.path.join(path, "rectified_%s.fits" % bandname)
-        try: os.remove(fn)
-        except: pass
-        hdu.writeto(fn)
+    IO.writefits(rectified, maskname, "rectified_%s.fits" % band_name, options,
+            header=hdu.header, overwrite=True)
 
-        hdu = pf.PrimaryHDU(1/vAmB)
-        fn = os.path.join(path, "ivar_%s.fits" % bandname)
-        try: os.remove(fn)
-        except: pass
-        hdu.writeto(fn)
+    IO.writefits(rectified_ivar, maskname, "rectified_ivar_%s.fits" %
+            band_name, options, header=hdu.header, overwrite=True)
 
-        hdu = pf.PrimaryHDU(rectified*np.sqrt(rectified_ivar))
-        fn = os.path.join(path, "rectified_sn_%s.fits" % bandname)
-        try: os.remove(fn)
-        except: pass
-        hdu.writeto(fn)
-
+    IO.writefits(rectified*np.sqrt(rectified_ivar), maskname,
+            "rectified_sn_%s.fits" % band_name, options, header=hdu.header,
+            overwrite=True)
 
 
 
