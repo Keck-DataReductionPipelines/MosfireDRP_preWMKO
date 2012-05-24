@@ -1283,6 +1283,8 @@ class InteractiveSolution:
         x = event.xdata
         y = event.ydata
 
+        print kp, x, y
+
         actions_mouseless = {">": self.fastforward, "G": self.nextobject, "B":
                 self.prevobject, "Q": self.quit, "R": self.reset, "f":
                 self.fit_event}
