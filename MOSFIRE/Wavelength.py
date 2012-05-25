@@ -236,7 +236,7 @@ def fit_lambda_interactively(mfits, fname, maskname, options):
     try: solutions = np.load(fn)
     except IOError: solutions = None
 
-    lamout = np.zeros(shape=(2048, 2048), dtype=np.float32)
+    lamout = np.zeros(shape=(2048, 2048), dtype=np.float64)
 
     tock = time.time()
     
@@ -294,6 +294,7 @@ def apply_lambda_simple(mfits, fname, maskname, options):
             else:
                 lams[lp[j],:] = prev
 
+    
     print("{0}: writing lambda".format(maskname))
     IO.writefits(lams, maskname, "lambda_solution_{0}".format(fname), 
             options, overwrite=True)
@@ -311,7 +312,7 @@ def apply_lambda_simple(mfits, fname, maskname, options):
     nspec = len(ll_fid)
     print nspec
 
-    rectified = np.zeros((2048, nspec), dtype=np.float32)
+    rectified = np.zeros((2048, nspec), dtype=np.float64)
 
     for i in xrange(2048):
         ll = lams[i,:]
@@ -350,7 +351,7 @@ def apply_lambda(mfits, fname, maskname, options):
     edgeinfo = edgedata[-1]
 
     # write lambda
-    lams = np.zeros((2048, 2048), dtype=np.float32)
+    lams = np.zeros((2048, 2048), dtype=np.float64)
     xx = np.arange(2048)
 
     for i in xrange(len(bs.ssl)):
@@ -378,7 +379,7 @@ def apply_lambda(mfits, fname, maskname, options):
     ll_fid = np.arange(hpp[0], hpp[1], dlam)
     nspec = len(ll_fid)
 
-    rectified = np.zeros((2048, nspec), dtype=np.float32)
+    rectified = np.zeros((2048, nspec), dtype=np.float64)
 
     for i in xrange(2048):
         ll = lams[i,:]
