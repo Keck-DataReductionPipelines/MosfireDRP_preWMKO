@@ -138,6 +138,25 @@ def imcombine(files, maskname, options, flat, outname=None):
 
     return header, rates, var, mask, bs
 
+def merge_headers(h1, h2):
+    """Merge headers h1 and h2 such that h2 has the nod position name
+    appended"""
+    
+    h = h1.copy()
+
+    patternid = h2["frameid"]
+
+    for key in h2.keys():
+        val = h2[key]
+
+        if h.has_key(key):
+            if val != h[key]:
+                newkey = "hierarch " + key + ("_pos_%s" % patternid)
+                h.update(newkey.rstrip(), val)
+
+    return h
+
+
 
 def handle_background(As, Bs, lamname, maskname, band_name, options): 
     
@@ -158,6 +177,8 @@ def handle_background(As, Bs, lamname, maskname, band_name, options):
     hdrB, ratesB, varB, maskB, bsB = imcombine(Bs, maskname, options, 
             flat, outname="%s_B.fits" % band_name)
 
+    header = merge_headers(hdrA, hdrB)
+
     AmB = ratesA - ratesB
     vAmB = varA + varB
     ivar = 1/vAmB
@@ -168,7 +189,6 @@ def handle_background(As, Bs, lamname, maskname, band_name, options):
     edges = IO.load_edges(maskname, band, options)
     lam = IO.load_lambdaslit(lamname, maskname, band, options)
 
-    header = hdrA
     bs = bsA
     data = AmB
 
