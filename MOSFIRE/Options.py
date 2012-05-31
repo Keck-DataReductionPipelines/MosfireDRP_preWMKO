@@ -37,4 +37,4 @@ wavelength = {"outdir": flat["outdir"],
 }
 
 
-path_bpm = "/users/npk/desktop/8may/badpix_18may2012.fits"
+path_bpm = "/users/npk/desktop/2012may08/badpix_18may2012.fits"
