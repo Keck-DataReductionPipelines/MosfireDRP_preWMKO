@@ -186,8 +186,9 @@ def fname_to_path(fname, options):
         path = os.path.join(options["indir"], yr + month + "%2.2i" % (dy-1))
 
         if not os.path.exists(path):
-            raise Exception("Could not find file '%s' in '%s'" % (fname,
-                options["indir"]))
+            raise Exception("Could not find file '%s' in '%s' out of parsed "
+                "%s, %s, %s" % (fname,
+                options["indir"], yr, month, dy))
 
     return path
 
@@ -264,7 +265,7 @@ def parse_header_for_bars(header):
         p = posfmt % i
         s = statfmt % i
         pos = np.float32(header[p])
-        if header[s] != 'OK':
+        if (header[s] != 'OK') and (header[s] != 'SETUP'):
             pos *= -1
         poss.append(pos)
 
