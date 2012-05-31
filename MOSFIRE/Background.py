@@ -104,14 +104,14 @@ def imcombine(files, maskname, options, flat, outname=None):
     mn = np.mean(datas,axis=0)
     md = np.median(datas,axis=0)
     sd = np.std(datas,axis=0)
+    mad = np.abs(mn-md)
     
     if len(files) > 2:
-        issx, issy = np.where((mn-md)/md > 1)
-        for i in xrange(len(issx)):
-            x = issx[i] ; y = issy[i]
-            tots[x,y] = np.sum(dd[1:-1,x,y])
-            cnts[x,y] -= 2
-            mask[x,y] += 2
+        # TODO: Improve cosmic ray rejection code
+        tots = np.sum(dd[0:-1,:,:], axis=0)
+        cnts -= 1
+    else:
+        tots = np.sum(dd, axis=0)
 
     ''' Now handle variance '''
     numreads = header["READS0"]
@@ -285,8 +285,8 @@ def background_subtract_helper(slitno):
     tick = time.time()
 
     # 1
-    top = np.int(edges[slitno]["top"](1024)) - 7
-    bottom = np.int(edges[slitno]["bottom"](1024)) + 7
+    top = np.int(edges[slitno]["top"](1024)) - 8
+    bottom = np.int(edges[slitno]["bottom"](1024)) + 8
     print "Background subtracting slit %i [%i,%i]" % (slitno, top, bottom)
 
     pix = np.arange(2048)
@@ -328,16 +328,16 @@ def background_subtract_helper(slitno):
     ss = (slit / pp(Y)).flatten()
     ss = ss[sort]
 
-    knotstart = max(hpps[0], min(ls[OK])) + 5
-    knotend = min(hpps[1], max(ls[OK])) - 5
+    knotstart = max(hpps[0], min(ls[OK])) + 8
+    knotend = min(hpps[1], max(ls[OK])) - 8
 
     for i in range(3):
         try:
-            delta = 1.5
+            delta = 1.3
             knots = np.arange(knotstart, knotend, delta)
             bspline = II.splrep(ls[OK], ss[OK], k=3, task=-1, t=knots)
         except:
-            delta = 5.0
+            delta = 1.7
             knots = np.arange(knotstart, knotend, delta)
             try:
                 bspline = II.splrep(ls[OK], ss[OK], k=3, task=-1, t=knots)
