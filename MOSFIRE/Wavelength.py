@@ -9,15 +9,8 @@ grating equation, the size of a pixel (18 micron), and the focal length
 of the camera (250 mm), the lines per mm of the grating (110.5), and the
 order of the grating (Y: 6, J: 5, H: 4, K: 3).
 
-formally, a model is fit to a function:
- lambda(x, y | alpha, beta, gamma, delta) =
-
-alpha d                                                                       3
-------- cos(scale pixely)^-1 {sin(scale pixelx) - sin(beta)} + gamma (x-delta)
-   m 
-
- where x and y are pixel values, alpha, beta, gamma, and delta are measured
- parameters.
+formally, a fifth-order chebyshev polynomial is fit as the wavelength solution,
+though the order is specified through Options.py
 
  scale is (pixel size) / (camera focal length)
 
@@ -404,27 +397,20 @@ def apply_lambda(mfits, fname, maskname, options):
 def param_guess_functions(band):
     """Parameters determined from experimentation with cooldown 9 data"""
 
-    fudge_npk = 1.00100452
-    fudge_npk = 1.0
     alpha_pixel = np.poly1d([-8.412e-16, 3.507e-12, -3.593e-9, 
-        6.303e-9, 0.9963]) * fudge_npk
+        6.303e-9, 0.9963]) 
 
     # Note that these numbers were tweaked by hand by npk on 28 apr
-    # they are not reliable. The fudge_* factors will need to change
-    # or dissapear
+    # they are not reliable. this function should change dramatically.
     if band == 'Y' or band == 'J':
-        fudge_npk = 0.000
-        sinbeta_position = np.poly1d([0.0239, 36.2 + fudge_npk])
+        sinbeta_position = np.poly1d([0.0239, 36.2])
         sinbeta_pixel = np.poly1d([-2.578e-7, 0.00054, -0.2365])
         gamma_pixel = np.poly1d([1.023e-25, -4.313e-22, 7.668e-17, 6.48e-13])
     elif band == 'H' or band == 'K':
-        fudge_npk = -0.05
-        sinbeta_position = np.poly1d([2.331e-2, 38.24]) + fudge_npk
+        sinbeta_position = np.poly1d([2.331e-2, 38.24])
         sinbeta_pixel = np.poly1d([-2.664e-7, 5.534e-4, -1.992e-1])
-
-        fudge_npk = 1
         gamma_pixel = np.poly1d([1.033e-25, -4.36e-22, 4.902e-19, -8.021e-17,
-            6.654e-13]) * fudge_npk
+            6.654e-13]) 
 
     delta_pixel = np.poly1d([-1.462e-11, 6.186e-8, -5.152e-5, -0.0396,
         1193])  - 50
@@ -1102,6 +1088,8 @@ class InteractiveSolution:
 
             pl.subplot(2,1,2)
             pl.grid(True)
+            pl.axhline(0.1)
+            pl.axhline(-0.1)
 
             if self.STD < 0.1: fmt = 'go'
             else: fmt = 'bo'
@@ -1246,6 +1234,10 @@ class InteractiveSolution:
         self.solutions[self.slitno-1] = self.slitno
         self.setup()
 
+    def savefig(self, x, y):
+        """Save the figure to disk"""
+        pass
+
     def fit_event(self, x, y):
         """Fit Chebyshev polynomial to predicted line locations """
 
@@ -1285,12 +1277,12 @@ class InteractiveSolution:
 
         print kp, x, y
 
-        actions_mouseless = {".": self.fastforward, "]": self.nextobject, "[":
+        actions_mouseless = {".": self.fastforward, "d": self.nextobject, "a":
                 self.prevobject, "q": self.quit, "r": self.reset, "f":
                 self.fit_event}
 
-        actions = { "z": self.shift, "d": self.drop_point,
-                "x": self.zoom, "c": self.unzoom}
+        actions = { "c": self.shift, "e": self.drop_point,
+                "z": self.zoom, "x": self.unzoom, "s": self.savefig}
 
         if (kp == 'h') or (kp == '?'):
             print "Commands Desc"
@@ -1572,7 +1564,7 @@ def fit_outwards_refit(data, bs, sol_1d, lines, options, start, bottom, top,
         [delt, cfit, lines] = fit_chebyshev_to_lines(xs, sxs,
                 linelist, options)
 
-        print "Chebyshev resid Angstrom S%2.2i @ p%i: %1.2f rms %1.2f mad" % \
+        print "resid ang S%2.2i @ p%4.0i: %1.2f rms %1.2f mad" % \
                 (slitno+1, yhere, np.std(delt), np.median(np.abs(delt)))
 
         return cfit, delt
