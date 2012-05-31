@@ -52,13 +52,30 @@ def handle_flats(flatlist, maskname, band, options, extension=None):
     tick = time.time()
 
     # Check
+    bpos = np.ones(92) * -1
     for fname in flatlist:
 
         hdr, dat, bs = IO.readmosfits(fname, options)
+        try:
+            bs0
+        except:
+            bs0 = bs
+
+        if np.any(bs0.pos != bs.pos):
+            raise Exception("Barsets do not seem to match")
+
         if hdr["filter"] != band:
             raise Exception("Filter name %s does not match header filter name "
                     "%s in file %s" % (band, hdr["filter"], fname))
-
+        for i in xrange(len(bpos)):
+            b = hdr["B{0:02d}POS".format(i+1)]
+            if bpos[i] == -1:
+                bpos[i] = b
+            else:
+                if bpos[i] != b:
+                    raise Exception("Bar positions are not all the same in "
+                            "this set of flat files")
+    bs = bs0
     # Imcombine
     combine(flatlist, maskname, band, options)
 
@@ -307,6 +324,7 @@ def find_edge_pair(data, y, roi_width, hpps):
         #3
         ff = Fit.do_fit(v, residual_fun=Fit.residual_disjoint_pair)
         fit_ok = 0 < ff[4] < 4
+
         if fit_ok:
             (sigma, offset, mult1, mult2, add, width) = ff[0]
 
@@ -380,6 +398,7 @@ def fit_edge_poly(xposs, xposs_missing, yposs, widths, order):
     # if it's not, then we fix it.
     if np.abs(fun(0) - fun(2048)) > 15:
         print "Forcing a horizontal slit edge"
+        pdb.set_trace()
         fun = np.poly1d(np.median(yposs[ok]))
         wfun = np.poly1d(np.median(widths[ok]))
 
@@ -476,6 +495,9 @@ def find_and_fit_edges(data, header, bs, options):
                         ssl[target]["Target_Name"], y)
         print "Science slit is composed of %i CSU slits" % numslits[target]
         tock = time.clock()
+
+        hpps = Wavelength.estimate_half_power_points(slitno, header, bs)
+        print hpps
 
         (xposs, xposs_missing, yposs, widths, scatters) = \
                         find_edge_pair(data, y, 
