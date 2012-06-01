@@ -135,7 +135,7 @@ def fit_lambda(mfits, fname, maskname, options):
     (header, data, bs) = mfits
     band = header['filter'].rstrip()
     center_solutions = IO.load_lambdacenter(fnum, maskname, options)
-    edgedata = IO.load_edges(maskname, band, options)
+    edgedata, metadata = IO.load_edges(maskname, band, options)
     
     solutions = []
     lamout = np.zeros(shape=(2048, 2048), dtype=np.float32)
@@ -166,7 +166,7 @@ def fit_lambda_helper(slitno):
 
     tick = time.time()
 
-    slitedges = edgedata[0:-1]
+    slitedges = edgedata
 
     sol_1d = center_solutions[slitidx]["sol_1d"]
     edge = slitedges[slitidx]
@@ -258,13 +258,10 @@ def apply_lambda_simple(mfits, fname, maskname, options):
     fnum = fname.rstrip(".fits")
 
     path = os.path.join(options["outdir"], maskname)
-    edgedata = IO.load_edges(maskname, band, options)
+    slitedges, edgeinfo = IO.load_edges(maskname, band, options)
     Ld = IO.load_lambdadata(fnum, maskname, band, options)
 
     lines = pick_linelist(header)
-
-    slitedges = edgedata[0:-1]
-    edgeinfo = edgedata[-1]
 
     # write lambda
     lams = np.zeros((2048, 2048), dtype=np.float32)
@@ -341,14 +338,10 @@ def apply_lambda(mfits, fname, maskname, options):
     fnum = fname.rstrip(".fits")
 
     path = os.path.join(options["outdir"], maskname)
-    edgedata = IO.load_edges(maskname, band, options)
+    slitedegs, edgeinfo = IO.load_edges(maskname, band, options)
     #lambdadata = IO.load_lambdamodel(fnum, maskname, band, options)
     lambdadata = IO.load_lambdaoutwards(fnum, maskname, band, options)
     Ld = IO.load_lambdadata(fnum, maskname, band, options)
-
-
-    slitedges = edgedata[0:-1]
-    edgeinfo = edgedata[-1]
 
     # write lambda
     lams = np.zeros((2048, 2048), dtype=np.float32)
