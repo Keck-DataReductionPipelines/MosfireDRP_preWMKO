@@ -186,7 +186,7 @@ def handle_background(As, Bs, lamname, maskname, band_name, options):
     sky_sub_out   = np.zeros((2048, 2048), dtype=np.float)
     sky_model_out = np.zeros((2048, 2048), dtype=np.float)
 
-    edges = IO.load_edges(maskname, band, options)
+    edges, meta = IO.load_edges(maskname, band, options)
     lam = IO.load_lambdaslit(lamname, maskname, band, options)
 
     bs = bsA
@@ -202,10 +202,16 @@ def handle_background(As, Bs, lamname, maskname, band_name, options):
 
         yroi = slice(sol["bottom"], sol["top"])
         sky_sub_out[yroi, xroi] = sol["output"]
+        sky_model_out[yroi, xroi] = sol["model"]
     
+    IO.writefits(data, maskname, "sub_%s_%s.fits" % (maskname, band),
+            options, header=header, overwrite=True)
+
     IO.writefits(sky_sub_out, maskname, "bsub_%s_%s.fits" % (maskname, band),
             options, header=header, overwrite=True)
 
+    IO.writefits(sky_model_out, maskname, "bmod_%s_%s.fits" % (maskname, band),
+            options, header=header, overwrite=True)
 
     '''Now create rectified solutions'''
     dlam = np.median(np.diff(lam[1][1024,:]))
