@@ -33,11 +33,24 @@ def badpixelmask():
     return theBPM
 
 def load_edges(maskname, band, options):
-    ''' Load the slit edge functions '''
+    ''' Load the slit edge functions. Returns (edges, metadata) '''
     path = os.path.join(options["outdir"], maskname)
     fn = os.path.join(path, "slit-edges_{0}.npy".format(band))
 
-    return np.load(fn)
+    edges = np.load(fn)
+
+    edges,meta = edges[0:-1], edges[-1]
+
+    if meta['maskname'] != maskname:
+        raise Exception("The maskname for the edge file does not match "
+                "that in the edge file")
+
+    if meta["band"] != band:
+        raise Exception("The bandname for the edgefile does not match that "
+                "requested. This may not be a problem, but will require "
+                "you to inspect the data first.")
+
+    return edges, meta
 
 def load_lambdacenter(fnum, maskname, options):
     ''' Load the wavelength coefficient functions '''
@@ -80,6 +93,13 @@ def load_lambdaslit(fnum, maskname, band, options):
     fn = os.path.join(path, "lambda_solution_{0}.fits".format(fnum))
 
     print fn
+
+    ret = readfits(fn, options)
+    if ret[0]['filter'] != band:
+        raise Exception("band name mismatch")
+
+    if ret[0]['maskname'] != maskname:
+        raise Exception("mask name mismatch")
 
     return readfits(fn, options)
 

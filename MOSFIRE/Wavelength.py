@@ -287,14 +287,22 @@ def apply_lambda_simple(mfits, fname, maskname, options):
             else:
                 lams[lp[j],:] = prev
 
-    print("{0}: writing lambda".format(maskname))
-    IO.writefits(lams, maskname, "lambda_solution_{0}".format(fname), 
-            options, overwrite=True)
 
+    print("{0}: writing lambda".format(maskname))
+
+    header = pf.Header()
+    header.update("maskname", maskname)
+    header.update("filter", band)
+    header.update("object", "Wavelengths {0}/{1}".format(maskname, band))
+
+    IO.writefits(lams, maskname, "lambda_solution_{0}".format(fname), 
+            options, overwrite=True, header=header)
+                
 
     print("{0}: writing sigs".format(maskname))
+    header.update("object", "Sigmas {0}/{1}".format(maskname, band))
     IO.writefits(sigs, maskname, "sigs_solution_{0}".format(fname), 
-            options, overwrite=True)
+            options, overwrite=True, header=header)
 
     print("{0}: rectifying".format(maskname))
     dlam = np.ma.median(np.diff(lams[1024,:]))
