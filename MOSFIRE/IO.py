@@ -313,8 +313,7 @@ def imcombine(filelist, out, options, bpmask=None, reject="none", nlow=None,
     from pyraf import iraf
     iraf.images()
 
-    path = fname_to_path(filelist[0], options)
-    filelist = [os.path.join(path, "%s[0]" % f) for f in filelist]
+    filelist = [os.path.join(fname_to_path(f, options), "%s[0]" % f) for f in filelist]
     pars = iraf.imcombine.getParList()
     iraf.imcombine.unlearn()
 
