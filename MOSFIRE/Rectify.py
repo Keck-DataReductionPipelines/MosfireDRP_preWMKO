@@ -18,8 +18,10 @@ from MOSFIRE import CSU, Fit, IO, Options, Filters, Detector
 
 
 
-def handle_rectification(maskname, nod_posns, lname, band, options):
-    global edges, dats, shifts, lambdas
+def handle_rectification(maskname, nod_posns, lname, band_pass, options):
+    global edges, dats, shifts, lambdas, band
+
+    band = band_pass
 
 
     lambdas = IO.load_lambdaslit(lname, maskname, band, options)
@@ -75,6 +77,8 @@ def handle_rectification(maskname, nod_posns, lname, band, options):
         header.update("crval2", 0)
         header.update("cdelt1", ll[1]-ll[0])
         header.update("cdelt2", 0)
+        header.update("crpix1", 0)
+        header.update("crpix2", 0)
         header.update("radecsys", "")
         header.rename_key("cd1_1", "ol_cd1_1")
         header.rename_key("cd1_2", "ol_cd1_2")
@@ -116,7 +120,7 @@ def r_interpol(ls, fs, ss, lfid, ffid):
 
 
 def handle_rectification_helper(edgeno):
-    global edges, dats, shifts, lambdas
+    global edges, dats, shifts, lambdas, band
 
     pix = np.arange(2048)
     
@@ -141,9 +145,9 @@ def handle_rectification_helper(edgeno):
 
     fidf = fracs[:,1024]
     lmid = ll[ll.shape[0]/2,:]
-    fl = np.poly1d(np.polyfit(pix,lmid,1))
-    fidl = fl(pix)
-
+    dl = np.median(np.diff(lmid))
+    hpp = Filters.hpp[band]
+    fidl = np.arange(hpp[0], hpp[1], dl)
 
     interps = []
     sign = 1

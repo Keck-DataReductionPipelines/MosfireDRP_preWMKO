@@ -8,7 +8,9 @@
 import os, time
 
 import MOSFIRE
-from MOSFIRE import Flats, Options, IO, Wavelength, Background, Detector
+import warnings
+
+from MOSFIRE import Flats, Options, IO, Wavelength, Background, Detector, Rectify 
 import numpy as np, pylab as pl, pyfits as pf
 
 
@@ -39,7 +41,8 @@ options["outdir"] = "/scr2/mosfire/secondlight/"
 options["indir"] = "/users/npk/desktop/"
 
 
-fs = ['m120507_0230.fits']
+lname = "m120507_0230"
+fs = [lname + ".fits"]
 np.set_printoptions(precision=2)
 if False:
     for fname in fs:
@@ -50,12 +53,16 @@ if False:
         #Wavelength.fit_lambda(mfits, fname, maskname, options)
         Wavelength.apply_lambda_simple(mfits, fname, maskname, options)
 
-if True:
+if False:
 
     As = ["m120507_%4.4i.fits" % i for i in range(229,249,2)]
     Bs = ["m120507_%4.4i.fits" % i for i in range(230,249,2)]
 
-    Background.handle_background(As, Bs, 'm120507_0230', maskname,
+    Background.handle_background(As, Bs, lname, maskname,
             band, options)
+
+
+if True:
+    Rectify.handle_rectification(maskname, ["A", "B"], lname, band, options)
 
 

@@ -50,6 +50,13 @@ def imcombine(files, maskname, options, flat, outname=None):
 
         ''' Now handle error checking'''
 
+        if maskname is not None:
+            if thishdr["maskname"] != maskname:
+                raise Exception("File %s uses mask '%s' but the stack is of '%s'" %
+                    (fname, thishdr["maskname"], maskname))
+
+        maskname = thishdr["maskname"]
+            
         if thishdr["aborted"]:
             raise Exception("Img '%s' was aborted and should not be used" %
                     fname)
@@ -58,7 +65,7 @@ def imcombine(files, maskname, options, flat, outname=None):
             if len(prevssl) != len(bs.ssl):
                 # todo Improve these checks
                 raise Exception("The stack of input files seems to be of "
-                        " different masks")
+                        "different masks")
         prevssl = bs.ssl
 
         if patternid is not None:
