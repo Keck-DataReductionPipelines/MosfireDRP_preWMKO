@@ -107,20 +107,17 @@ def imcombine(files, maskname, options, flat, outname=None):
         shp = el_per_sec.shape
         sti = np.ogrid[0:shp[0], 0:shp[1], 0:shp[2]]
 
-        # The sort index is a flat array (axis=none flattens)
-        # thus I have to flatten, sort, and resize the arrays
-        el_per_sec = el_per_sec[srt, sti[1], sti[2]]
-        el_per_sec = np.mean(el_per_sec[0:-1,:,:], axis=0)
-
         electrons = electrons[srt, sti[1], sti[2]]
         electrons = np.sum(electrons[0:-1,:,:], axis=0)
 
         itimes = itimes[srt, sti[1], sti[2]]
         itimes = np.sum(itimes[0:-1,:,:], axis=0)
+
     else:
-        means = np.mean(el_per_sec, axis=0)
         electrons = np.sum(electrons, axis=0)
         itimes = np.sum(itimes, axis=0)
+
+    el_per_sec = electrons/itimes
 
     ''' Now handle variance '''
     numreads = header["READS0"]
