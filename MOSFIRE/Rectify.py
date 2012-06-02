@@ -41,10 +41,11 @@ def handle_rectification(maskname, nod_posns, lname, band, options):
         shifts.append(shift)
         print "Position {0} shift: {1:2.2f} as".format(pos, shift)
     
-    II = IO.read_drpfits(maskname, "bsub_{0}_{1}.fits".format(maskname, band),
-            options)
+    fname = "bsub_{0}_{1}.fits".format(maskname, band)
+    II = IO.read_drpfits(maskname, fname, options)
 
     dats = II
+    II[0].update("ORIGFILE", fname)
 
     tock = time.time()
     p = Pool()
@@ -54,11 +55,35 @@ def handle_rectification(maskname, nod_posns, lname, band, options):
     print "-----> Mask took %i. Writing to disk." % (tick-tock)
 
     for i in xrange(len(solutions)):
-        solution = solutions[i]["img"]
+        solution = solutions[i]
+        header = II[0].copy()
+        
+        header.update("OBJECT", "{0}".format(solution["Target_Name"]))
 
-        IO.writefits(solution, maskname,
+        ll = solution["lambda"]
+        ff = solution["frac"]
+        
+        header.update("wat0_001", "system=world")
+        header.update("wat1_001", "wtype=linear")
+        header.update("wat2_001", "wtype=linear")
+        header.update("dispaxis", 2)
+        header.update("dclog1", "Transform")
+        header.update("dc-flag", 0)
+        header.update("ctype1", "LINEAR")
+        header.update("ctype2", "LINEAR")
+        header.update("crval1", ll[0])
+        header.update("crval2", 0)
+        header.update("cdelt1", ll[1]-ll[0])
+        header.update("cdelt2", 0)
+        header.update("radecsys", "")
+        header.rename_key("cd1_1", "ol_cd1_1")
+        header.rename_key("cd1_2", "ol_cd1_2")
+        header.rename_key("cd2_1", "ol_cd2_1")
+        header.rename_key("cd2_2", "ol_cd2_2")
+
+        IO.writefits(solution["img"], maskname,
                 "stacked_{0}_S{1:02g}.fits".format(band, i+1), options,
-                overwrite=True)
+                overwrite=True, header=header)
 
 
 def r_interpol(ls, fs, ss, lfid, ffid):
@@ -131,5 +156,6 @@ def handle_rectification_helper(edgeno):
     np.array(interps)
     img = np.sum(interps, axis=0)
 
-    return {"img": img}
+    return {"img": img, "lambda": fidl, "Target_Name": edge["Target_Name"],
+            "slitno": edgeno+1, "frac": fidf}
 

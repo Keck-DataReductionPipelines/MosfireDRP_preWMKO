@@ -77,6 +77,7 @@ def handle_flats(flatlist, maskname, band, options, extension=None):
                             "this set of flat files")
     bs = bs0
     # Imcombine
+    print "Attempting to combine: ", flatlist
     combine(flatlist, maskname, band, options)
 
     print "Combined '%s' to '%s'" % (flatlist, maskname)

@@ -21,8 +21,8 @@ from MOSFIRE import CSU, Fit, IO, Options, Filters, Detector
 
 def imcombine(files, maskname, options, flat, outname=None):
 
-    datas = np.zeros((len(files), 2048, 2048))
-    itimes = []
+    ADUs = np.zeros((len(files), 2048, 2048))
+    itimes = np.ones((len(files), 2048, 2048))
     prevssl = None
     prevmn = None
     patternid = None
@@ -33,8 +33,8 @@ def imcombine(files, maskname, options, flat, outname=None):
     for i in xrange(len(files)):
         fname = files[i]
         thishdr, data, bs = IO.readmosfits(fname, options)
-        itimes.append(thishdr["truitime"])
-        datas[i,:,:] = data.filled(0)
+        itimes[i,:,:] *= thishdr["truitime"]
+        ADUs[i,:,:] = data.filled(0)
 
         ''' Construct Header'''
         if header is None:
@@ -84,59 +84,58 @@ def imcombine(files, maskname, options, flat, outname=None):
                     "'%s'." % (fname, thishdr["BUNIT"]))
 
         ''' Error checking is complete'''
-        print "%s %s[%s] %5.1f" % (fname, maskname, patternid, itimes[-1])
+        print "%s %s[%s] %5.1f" % (fname, maskname, patternid,
+                np.mean(itimes[i]))
 
-    
-    itimes = np.array(itimes)
-    if np.any(itimes[0] != itimes):
-        raise Exception("Nod position integration times are not all the same "
-                "current DRP cannot handle this situation properly")
-    
-    datas = np.array(datas) * Detector.gain
-    dd = np.sort(datas,axis=0)
+    electrons = np.array(ADUs) * Detector.gain
+    el_per_sec = electrons / itimes
+
     output = np.zeros((2048, 2048))
-    cnts = np.zeros((2048,2048),np.int16) + len(datas)
-    mask = np.zeros((2048,2048),np.int16) + data.mask
+    exptime = np.zeros((2048, 2048))
 
-    tots = np.sum(datas,axis=0)
 
-    ''' mn, md, and sd are used to reject cosmic rays and not used again '''
-    mn = np.mean(datas,axis=0)
-    md = np.median(datas,axis=0)
-    sd = np.std(datas,axis=0)
-    mad = np.abs(mn-md)
-    
     if len(files) > 2:
         # TODO: Improve cosmic ray rejection code
-        tots = np.sum(dd[0:-1,:,:], axis=0)
-        cnts -= 1
+        srt = np.argsort(el_per_sec,axis=0)
+        shp = el_per_sec.shape
+        sti = np.ogrid[0:shp[0], 0:shp[1], 0:shp[2]]
+
+        # The sort index is a flat array (axis=none flattens)
+        # thus I have to flatten, sort, and resize the arrays
+        el_per_sec = el_per_sec[srt, sti[1], sti[2]]
+        el_per_sec = np.mean(el_per_sec[0:-1,:,:], axis=0)
+
+        electrons = electrons[srt, sti[1], sti[2]]
+        electrons = np.sum(electrons[0:-1,:,:], axis=0)
+
+        itimes = itimes[srt, sti[1], sti[2]]
+        itimes = np.sum(itimes[0:-1,:,:], axis=0)
     else:
-        tots = np.sum(dd, axis=0)
+        means = np.mean(el_per_sec, axis=0)
+        electrons = np.sum(electrons, axis=0)
+        itimes = np.sum(itimes, axis=0)
 
     ''' Now handle variance '''
     numreads = header["READS0"]
     RN = Detector.RN / np.sqrt(numreads)
-    itime = itimes[0]
-    exptime = cnts*itime
 
-    rates = (tots/flat) / exptime
-    var = (tots/flat + RN**2 * cnts) / exptime**2
+    var = (electrons/flat + RN**2) / itimes**2
 
 
     if header.has_key("RN"): raise Exception("RN already populated in header")
     header.update("RN", "%1.3f e-" % RN)
 
     if outname is not None:
-        IO.writefits(tots/flat, maskname, "cnts_" + outname, options,
+        IO.writefits(electrons, maskname, "cnts_" + outname, options,
                 header=header, overwrite=True)
 
-        IO.writefits(var*exptime**2, maskname, "var_" + outname, options,
+        IO.writefits(var*itimes**2, maskname, "var_" + outname, options,
                 header=header, overwrite=True)
 
-        IO.writefits(mask, maskname, "mask_" + outname, options, header=header,
-                overwrite=True)
+        IO.writefits(np.float32(itimes), maskname, "itimes_" + outname, options,
+                header=header, overwrite=True)
 
-    return header, rates, var, mask, bs
+    return header, el_per_sec, var, bs
 
 def merge_headers(h1, h2):
     """Merge headers h1 and h2 such that h2 has the nod position name
@@ -172,9 +171,9 @@ def handle_background(As, Bs, lamname, maskname, band_name, options):
     if np.abs(np.median(flat) - 1) > 0.1:
         raise Exception("Flat seems poorly behaved.")
 
-    hdrA, ratesA, varA, maskA, bsA = imcombine(As, maskname, options, 
+    hdrA, ratesA, varA, bsA = imcombine(As, maskname, options, 
             flat, outname="%s_A.fits" % band_name)
-    hdrB, ratesB, varB, maskB, bsB = imcombine(Bs, maskname, options, 
+    hdrB, ratesB, varB, bsB = imcombine(Bs, maskname, options, 
             flat, outname="%s_B.fits" % band_name)
 
     header = merge_headers(hdrA, hdrB)
