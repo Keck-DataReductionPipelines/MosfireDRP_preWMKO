@@ -247,7 +247,7 @@ def readmosfits(fname, options, extension=None):
     except:
         raise Exception("Improper MOSFIRE FITS File: %s" % path)
 
-    if np.abs(header["REGTMP1"] - 77) > .05:
+    if np.abs(header["REGTMP1"] - 77) > 0.5:
         raise Exception("The temperature of the detector is %f where it "
                 "should be 77.000 deg. Please notify Keck support staff." %
                 header["REGTMP1"])
