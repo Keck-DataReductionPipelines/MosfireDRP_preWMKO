@@ -19,7 +19,7 @@ from MOSFIRE import CSU, Fit, IO, Options, Filters, Detector
 
 
 def handle_rectification(maskname, nod_posns, lname, band_pass, options):
-    global edges, dats, shifts, lambdas, band
+    global edges, dats, ivars, shifts, lambdas, band
 
     band = band_pass
 
@@ -44,10 +44,13 @@ def handle_rectification(maskname, nod_posns, lname, band_pass, options):
         print "Position {0} shift: {1:2.2f} as".format(pos, shift)
     
     fname = "bsub_{0}_{1}.fits".format(maskname, band)
-    II = IO.read_drpfits(maskname, fname, options)
+    EPS = IO.read_drpfits(maskname, fname, options)
+    fname = "bsub_ivar_{0}_{1}.fits".format(maskname, band)
+    IVAR = IO.read_drpfits(maskname, fname, options)
 
-    dats = II
-    II[0].update("ORIGFILE", fname)
+    dats = EPS
+    ivars = IVAR
+    EPS[0].update("ORIGFILE", fname)
 
     tock = time.time()
     p = Pool()
@@ -58,13 +61,13 @@ def handle_rectification(maskname, nod_posns, lname, band_pass, options):
 
     for i in xrange(len(solutions)):
         solution = solutions[i]
-        header = II[0].copy()
+        header = EPS[0].copy()
         
         header.update("OBJECT", "{0}".format(solution["Target_Name"]))
 
         ll = solution["lambda"]
         ff = solution["frac"]
-        
+
         header.update("wat0_001", "system=world")
         header.update("wat1_001", "wtype=linear")
         header.update("wat2_001", "wtype=linear")
@@ -76,7 +79,7 @@ def handle_rectification(maskname, nod_posns, lname, band_pass, options):
         header.update("crval1", ll[0])
         header.update("crval2", 0)
         header.update("cdelt1", ll[1]-ll[0])
-        header.update("cdelt2", 0)
+        header.update("cdelt2", ff[1]-ff[0])
         header.update("crpix1", 0)
         header.update("crpix2", 0)
         header.update("radecsys", "")
@@ -85,8 +88,12 @@ def handle_rectification(maskname, nod_posns, lname, band_pass, options):
         header.rename_key("cd2_1", "ol_cd2_1")
         header.rename_key("cd2_2", "ol_cd2_2")
 
-        IO.writefits(solution["img"], maskname,
-                "stacked_{0}_S{1:02g}.fits".format(band, i+1), options,
+        IO.writefits(solution["eps_img"], maskname,
+                "eps_{0}_S{1:02g}.fits".format(band, i+1), options,
+                overwrite=True, header=header)
+
+        IO.writefits(solution["iv_img"], maskname,
+                "ivar_{0}_S{1:02g}.fits".format(band, i+1), options,
                 overwrite=True, header=header)
 
 
@@ -120,7 +127,7 @@ def r_interpol(ls, fs, ss, lfid, ffid):
 
 
 def handle_rectification_helper(edgeno):
-    global edges, dats, shifts, lambdas, band
+    global edges, dats, ivars, shifts, lambdas, band
 
     pix = np.arange(2048)
     
@@ -141,25 +148,38 @@ def handle_rectification_helper(edgeno):
     X,Y = np.mgrid[bot:top, 0:2048]
     fracs = (X.copy() - bots) * slopes
     ll = lambdas[1].data[bot:top, :]
-    ss = dats[1][bot:top, :]
+    eps = dats[1][bot:top, :]
+    ivs = ivars[1][bot:top, :]
 
     fidf = fracs[:,1024]
     lmid = ll[ll.shape[0]/2,:]
     dl = np.median(np.diff(lmid))
     hpp = Filters.hpp[band]
-    fidl = np.arange(hpp[0], hpp[1], dl)
+    fidl = lmid
 
-    interps = []
+    minl = lmid[0] if lmid[0]>hpp[0] else hpp[0]
+    maxl = lmid[-1] if lmid[-1]<hpp[1] else hpp[1]
+
+    fidl = fidl[np.where((fidl > minl) & (fidl < maxl))]
+    fun = np.poly1d(np.polyfit(np.arange(len(fidl)), fidl, 1))
+    fidl = fun(pix)
+
+    epss = []
+    ivss = []
     sign = 1
     for shift in shifts:
-        interps.append(sign * r_interpol(ll, fracs, ss, 
+        epss.append(sign * r_interpol(ll, fracs, eps, 
+            fidl, fidf - shift/lenas))
+
+        ivss.append(r_interpol(ll, fracs, ivs, 
             fidl, fidf - shift/lenas))
 
         sign *= -1
 
-    np.array(interps)
-    img = np.sum(interps, axis=0)
+    eps_img = np.sum(epss, axis=0)
+    iv_img = 1/np.sum(1/np.array(ivss), axis=0)
 
-    return {"img": img, "lambda": fidl, "Target_Name": edge["Target_Name"],
-            "slitno": edgeno+1, "frac": fidf}
+    return {"eps_img": eps_img, "iv_img": iv_img, "lambda": fidl,
+            "Target_Name": edge["Target_Name"], "slitno": edgeno+1, "frac":
+            fidf}
 
