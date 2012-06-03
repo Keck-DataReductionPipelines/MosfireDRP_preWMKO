@@ -107,8 +107,8 @@ def imcombine(files, maskname, options, flat, outname=None):
                     "'%s'." % (fname, thishdr["BUNIT"]))
 
         ''' Error checking is complete'''
-        print "%s %s[%s] %5.1f" % (fname, maskname, patternid,
-                np.mean(itimes[i]))
+        print "%s %s[%s]/%s %5.1f" % (fname, maskname, patternid,
+            header['filter'], np.mean(itimes[i]))
 
     electrons = np.array(ADUs) * Detector.gain
     el_per_sec = electrons / itimes
@@ -145,16 +145,20 @@ def imcombine(files, maskname, options, flat, outname=None):
     if header.has_key("RN"): raise Exception("RN already populated in header")
     header.update("RN", "%1.3f e-" % RN)
 
+
     if outname is not None:
         header.update("object", "{0}: electrons signal".format(maskname))
+        header.update("bunit", "ELECTRONS")
         IO.writefits(electrons, maskname, "cnts_" + outname, options,
                 header=header, overwrite=True)
 
         header.update("object", "{0}: electrons^2 var".format(maskname))
+        header.update("bunit", "ELECTRONS^2")
         IO.writefits(var*itimes**2, maskname, "var_" + outname, options,
                 header=header, overwrite=True)
 
         header.update("object", "{0}: itime s".format(maskname))
+        header.update("bunit", "SECOND")
         IO.writefits(np.float32(itimes), maskname, "itimes_" + outname, options,
                 header=header, overwrite=True)
 
@@ -227,18 +231,22 @@ def handle_background(As, Bs, lamname, maskname, band_name, options):
         sky_model_out[yroi, xroi] = sol["model"]
     
     header.update("object", "{0}: electron/s".format(maskname))
+    header.update("bunit", "ELECTRONS/S")
     IO.writefits(data, maskname, "sub_%s_%s.fits" % (maskname, band),
             options, header=header, overwrite=True)
 
     header.update("object", "{0}: electron/s".format(maskname))
+    header.update("bunit", "ELECTRONS/S")
     IO.writefits(sky_sub_out, maskname, "bsub_%s_%s.fits" % (maskname, band),
             options, header=header, overwrite=True)
 
     header.update("object", "{0}: (s/electron)^2".format(maskname))
+    header.update("bunit", "(S/ELECTRONS)^2")
     IO.writefits(ivar, maskname, "bsub_ivar_%s_%s.fits" % (maskname, band),
             options, header=header, overwrite=True)
 
     header.update("object", "{0}: electron/s".format(maskname))
+    header.update("bunit", "ELECTRONS/S")
     IO.writefits(sky_model_out, maskname, "bmod_%s_%s.fits" % (maskname, band),
             options, header=header, overwrite=True)
 
@@ -355,6 +363,8 @@ def background_subtract_helper(slitno):
     ss = slit[train_roi].flatten()
     ys = Y[train_roi].flatten()
 
+    dl = np.median(np.diff(lslit[lslit.shape[0]/2,:]))
+
     sort = np.argsort(ls)
     ls = ls[sort]
     ys = ys[sort]
@@ -378,16 +388,17 @@ def background_subtract_helper(slitno):
     knotstart = max(hpps[0], min(ls[OK])) + 8
     knotend = min(hpps[1], max(ls[OK])) - 8
 
+
     for i in range(3):
         try:
-            delta = 1.3
+            delta = dl
             knots = np.arange(knotstart, knotend, delta)
-            bspline = II.splrep(ls[OK], ss[OK], k=3, task=-1, t=knots)
+            bspline = II.splrep(ls[OK], ss[OK], k=5, task=-1, t=knots)
         except:
-            delta = 1.7
+            delta = dl*1.4
             knots = np.arange(knotstart, knotend, delta)
             try:
-                bspline = II.splrep(ls[OK], ss[OK], k=3, task=-1, t=knots)
+                bspline = II.splrep(ls[OK], ss[OK], k=5, task=-1, t=knots)
             except:
                 "Could not construct spline on slit ", slitno
                 return {"ok": False}
