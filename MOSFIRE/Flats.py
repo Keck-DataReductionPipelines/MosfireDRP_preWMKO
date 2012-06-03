@@ -56,10 +56,8 @@ def handle_flats(flatlist, maskname, band, options, extension=None):
     for fname in flatlist:
 
         hdr, dat, bs = IO.readmosfits(fname, options)
-        try:
-            bs0
-        except:
-            bs0 = bs
+        try: bs0
+        except: bs0 = bs
 
         if np.any(bs0.pos != bs.pos):
             raise Exception("Barsets do not seem to match")
@@ -129,7 +127,6 @@ def make_pixel_flat(data, results, options, outfile, inputs):
     slitno = 0
     for result in results[0:-1]:
         slitno += 1
-        print result["Target_Name"]
 
         hdu.header.update("targ%2.2i" % slitno, result["Target_Name"])
 
@@ -149,7 +146,8 @@ def make_pixel_flat(data, results, options, outfile, inputs):
         hdu.header.update("top%2.2i" % slitno, top)
         hdu.header.update("bottom%2.2i" % slitno, bottom)
 
-        print "Bounding top/bottom: %i/%i" % (bottom, top)
+        print "%s] Bounding top/bottom: %i/%i" % (result["Target_Name"],
+                bottom, top)
 
         v = collapse_flat_box(data[bottom:top,hpps[0]:hpps[1]])
 
@@ -160,8 +158,8 @@ def make_pixel_flat(data, results, options, outfile, inputs):
         for i in np.arange(bottom-1, top+1):
             flat[i,:] = v
 
+    print "Producing Pixel Flat..."
     for r in range(len(results)-2):
-        print r
         first = results[r]
         second = results[r+1]
 
@@ -399,7 +397,6 @@ def fit_edge_poly(xposs, xposs_missing, yposs, widths, order):
     # if it's not, then we fix it.
     if np.abs(fun(0) - fun(2048)) > 15:
         print "Forcing a horizontal slit edge"
-        pdb.set_trace()
         fun = np.poly1d(np.median(yposs[ok]))
         wfun = np.poly1d(np.median(widths[ok]))
 
@@ -485,20 +482,18 @@ def find_and_fit_edges(data, header, bs, options):
     hpps = Wavelength.estimate_half_power_points(slitno, header, bs)
 
     for target in xrange(len(ssl) - 1):
-        print target
 
         y -= DY * numslits[target]
 
         slitno += numslits[target]
 
-        print "-------------==========================-------------"
-        print "Finding Slit Edges for %s starting at %4.0i" % (
-                        ssl[target]["Target_Name"], y)
-        print "Science slit is composed of %i CSU slits" % numslits[target]
+        print("%2.2i] Finding Slit Edges for %s starting at %4.0i. Slit "
+                "composed of %i CSU slits" % ( target,
+                    ssl[target]["Target_Name"], y, numslits[target]))
+
         tock = time.clock()
 
         hpps = Wavelength.estimate_half_power_points(slitno, header, bs)
-        print hpps
 
         (xposs, xposs_missing, yposs, widths, scatters) = \
                         find_edge_pair(data, y, 
@@ -525,20 +520,17 @@ def find_and_fit_edges(data, header, bs, options):
 
         #5
         result = {}
-        result["Target_Name"] = ssl[target]["Target_Name"]
+        result["Target_Name"] = ssl[target+1]["Target_Name"]
         result["top"] = np.poly1d(top)
 
         hpps = Wavelength.estimate_half_power_points(slitno, header, bs)
         result["hpps"] = hpps
 
-        print fun
-        print "Clipped Resid Sigma: %5.3f P2V: %5.3f" % (
-                        np.std(res[ok]), res[ok].max()-res[ok].min())
-
         tic = time.clock()
 
-        print " .... %4.2f s elapsed." % (tic - tock)
-        print
+        print("    Clipped Resid Sigma: %5.3f P2V: %5.3f .... %4.2f s elapsed" % 
+            (np.std(res[ok]), res[ok].max()-res[ok].min(),tic-tock))
+
 
     #6
     result["bottom"] = np.poly1d([3])
