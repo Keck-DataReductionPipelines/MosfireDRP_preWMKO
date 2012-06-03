@@ -51,6 +51,10 @@ def handle_flats(flatlist, maskname, band, options, extension=None):
 
     tick = time.time()
 
+    path = os.path.join(options["outdir"], maskname)
+    try: os.mkdir(path)
+    except OSError: pass
+
     # Check
     bpos = np.ones(92) * -1
     for fname in flatlist:
