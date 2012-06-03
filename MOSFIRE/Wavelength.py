@@ -441,7 +441,7 @@ def pick_linelist(header):
         lines = np.array([
                 14605.0225 , 14664.9975 , 14698.7767 , 14740.3346 , 14783.7537 ,
                 14833.029 , 14864.3219 , 14887.5334 , 14931.8767 , 15055.3754 ,
-                15068.3899 , 15088.2599 , 15187.1554 , 15240.922 , 15287.7652 ,
+                15088.2599 , 15187.1554 , 15240.922 , 15287.7652 ,
                 15332.3843 , 15395.3014 , 15432.1242 , 15570.0593 , 15597.6252 ,
                 15631.4697 , 15655.3049 , 15702.5101 , 15833.0432 , 15848.0556 ,
                 15869.3672 , 15972.6151 , 16030.8077 , 16079.6529 , 16128.6053 ,
@@ -1085,7 +1085,7 @@ class InteractiveSolution:
 
         pl.subplot(2,1,1)
         pl.subplots_adjust(left=.1,right=.95,bottom=.1,top=.90)
-        pl.plot(self.ll, self.spec, linestyle='steps')
+        pl.plot(self.ll, self.spec, linestyle='steps-mid')
 
         if self.MAD is None:
             pl.title("[%i] Press 'f' to fit" % self.slitno)
