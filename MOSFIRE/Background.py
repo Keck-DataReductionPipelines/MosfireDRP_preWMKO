@@ -19,6 +19,16 @@ from MOSFIRE import CSU, Fit, IO, Options, Filters, Detector
 #from IPython.Shell import IPShellEmbed
 #ipshell = IPShellEmbed()
 
+def rem_header_key(header, key):
+
+    try:
+        del header[key]
+    except:
+        return False
+
+    return True
+
+
 def imcombine(files, maskname, options, flat, outname=None):
 
     ADUs = np.zeros((len(files), 2048, 2048))
@@ -40,6 +50,12 @@ def imcombine(files, maskname, options, flat, outname=None):
         if header is None:
             header = thishdr
         header.update("imfno%2.2i" % (i), fname, "-------------------")
+
+        map(lambda x: rem_header_key(header, x), ["CTYPE1", "CTYPE2", "WCSDIM",
+            "CD1_1", "CD1_2", "CD2_1", "CD2_2", "LTM1_1", "LTM2_2", "WAT0_001",
+            "WAT1_001", "WAT2_001", "CRVAL1", "CRVAL2", "CRPIX1", "CRPIX2",
+            "RADECSYS"])
+
         for key in header.keys():
             val = header[key]
 
@@ -252,28 +268,39 @@ def handle_background(As, Bs, lamname, maskname, band_name, options):
         f = interp1d(ll, ivar[i,:], bounds_error=False)
         rectified_ivar[i,:] = f(ll_fid)
 
-    hdu = pf.PrimaryHDU(rectified)
-    hdu.header.update("wat0_001", "system=world")
-    hdu.header.update("wat1_001", "wtype=linear")
-    hdu.header.update("wat2_001", "wtype=linear")
-    hdu.header.update("dispaxis", 2)
-    hdu.header.update("dclog1", "Transform")
-    hdu.header.update("dc-flag", 0)
-    hdu.header.update("ctype1", "LINEAR")
-    hdu.header.update("ctype2", "LINEAR")
-    hdu.header.update("crval1", ll_fid[0])
-    hdu.header.update("crval2", 1)
-    hdu.header.update("cdelt1", dlam)
-    hdu.header.update("cdelt2", 1)
+    header.update("wat0_001", "system=world")
+    header.update("wat1_001", "wtype=linear")
+    header.update("wat2_001", "wtype=linear")
+    header.update("dispaxis", 1)
+    header.update("dclog1", "Transform")
+    header.update("dc-flag", 0)
+    header.update("ctype1", "AWAV")
+    header.update("cunit1", "Angstrom")
+    header.update("crval1", ll_fid[0])
+    header.update("crval2", 0)
+    header.update("crpix1", 1)
+    header.update("crpix2", 1)
+    header.update("cdelt1", 1)
+    header.update("cdelt2", 1)
+    header.update("cname1", "angstrom")
+    header.update("cname2", "pixel")
+    header.update("cd1_1", dlam)
+    header.update("cd1_2", 0)
+    header.update("cd2_1", 0)
+    header.update("cd2_2", 1)
 
+
+    header.update("object", "rectified [eps]")
     IO.writefits(rectified, maskname, "rectified_%s.fits" % band_name, options,
-            header=hdu.header, overwrite=True)
+            header=header, overwrite=True)
 
+    header.update("object", "rectified ivar [1/eps^2]")
     IO.writefits(rectified_ivar, maskname, "rectified_ivar_%s.fits" %
-            band_name, options, header=hdu.header, overwrite=True)
+            band_name, options, header=header, overwrite=True)
 
+    header.update("object", "rectified snr")
     IO.writefits(rectified*np.sqrt(rectified_ivar), maskname,
-            "rectified_sn_%s.fits" % band_name, options, header=hdu.header,
+            "rectified_sn_%s.fits" % band_name, options, header=header,
             overwrite=True)
 
 
