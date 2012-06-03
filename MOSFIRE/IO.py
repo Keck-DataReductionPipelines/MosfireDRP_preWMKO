@@ -42,8 +42,9 @@ def load_edges(maskname, band, options):
     edges,meta = edges[0:-1], edges[-1]
 
     if meta['maskname'] != maskname:
-        raise Exception("The maskname for the edge file does not match "
-                "that in the edge file")
+        print("The maskname for the edge file '%s' does not match "
+                "that in the edge file '%s'" % (maskname, meta['maskname']))
+        print "Continuing"
 
     if meta["band"] != band:
         raise Exception("The bandname for the edgefile does not match that "
