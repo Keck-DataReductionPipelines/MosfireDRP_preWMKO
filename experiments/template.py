@@ -5,6 +5,11 @@
 
     Instructions
 
+    -1. Install DRP as per wiki instructions. On ramekin you can avoid this
+    step. mospy must work properly to continue.
+
+    0. Copy this file to the "outdir", rename the file [mask]_[band].py
+
     1. Check lines under the comment "Check paths" and modify the input and
     output dirs. 
 
@@ -39,12 +44,21 @@
 
     5. Change the A/B positions in the same way. If you have files from
     multiple nights, then you will need to use the python "extend" function.
+
+    6. Change the bad pixel mask path
     
-    6. Uncomment the step you would like to perform.
+    7. Uncomment the step you would like to perform.
         * Each step has an if False, which means it won't be executed.
         * You will have to perform each step sequentially!!
         * Some steps take a long time, one step is interactive, hence the need
           to if True the appropriate step
+
+    8. Excute this file with mospy [fname]. On ramekin:
+        ramekin% ~npk/mospy ______
+
+    9. If a step works, if False it and if True the next step. If it fails,
+    figure out what went wrong and contact npk! :)
+          
 
 
 '''
@@ -85,11 +99,16 @@ lname = "m120603_0310"
 As = ["m120603_%4.4i.fits" % i for i in range(310,330,2)]
 Bs = ["m120603_%4.4i.fits" % i for i in range(311,330,2)]
 
+# Change the bad pixel mask path
+Options.path_bpm = "/scr2/mosfire/badpixels/badpix_18may2012.fits"
+
 fs = lname + ".fits"
 mfits = IO.readmosfits(fname, wavlops)
 header, data, bs = mfits
 
 # Change if False to if True when you want to execute that step
+# On interactive step, make sure you attempt to quit&save after fitting one
+# slit!
 if False: Flats.handle_flats(flatnames, maskname, band, flatops)
 if False: Wavelength.fit_lambda_interactively(mfits, fname, maskname, wavlops)
 if False: Wavelength.fit_lambda(mfits, fname, maskname, wavlops)
