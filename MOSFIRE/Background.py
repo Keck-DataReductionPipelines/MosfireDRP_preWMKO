@@ -331,8 +331,8 @@ def background_subtract_helper(slitno):
     tick = time.time()
 
     # 1
-    top = np.int(edges[slitno]["top"](1024)) - 8
-    bottom = np.int(edges[slitno]["bottom"](1024)) + 8
+    top = np.int(edges[slitno]["top"](1024))  - 5
+    bottom = np.int(edges[slitno]["bottom"](1024)) + 5
     print "Background subtracting slit %i [%i,%i]" % (slitno, top, bottom)
 
     pix = np.arange(2048)
@@ -350,9 +350,10 @@ def background_subtract_helper(slitno):
 
     X,Y = np.meshgrid(xx,yy)
 
-    ls = lslit.flatten().filled(0)
-    ss = slit.flatten()
-    ys = Y.flatten()
+    train_roi = slice(5,-5)
+    ls = lslit[train_roi].flatten().filled(0)
+    ss = slit[train_roi].flatten()
+    ys = Y[train_roi].flatten()
 
     sort = np.argsort(ls)
     ls = ls[sort]
@@ -371,7 +372,7 @@ def background_subtract_helper(slitno):
 
     # 3
     pp = np.poly1d([1.0])
-    ss = (slit / pp(Y)).flatten()
+    ss = (slit[train_roi] / pp(Y[train_roi])).flatten()
     ss = ss[sort]
 
     knotstart = max(hpps[0], min(ls[OK])) + 8
@@ -397,12 +398,12 @@ def background_subtract_helper(slitno):
         oob = np.where((ll < knotstart) | (ll > knotend))
         model[oob] = np.median(ss)
         model = model.reshape(slit.shape)
-        model *= pp(Y)
 
         output = slit - model
 
         std = np.abs(output)/(np.sqrt(np.abs(model)+1))
-        tOK = (std < 30).flatten() & np.isfinite(std).flatten()
+        tOK = (std[train_roi] < 30).flatten() & \
+                np.isfinite(std[train_roi]).flatten()
         OK = OK & tOK[sort]
 
     return {"ok": True, "slitno": slitno, "bottom": bottom, "top": top,
