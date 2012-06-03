@@ -201,6 +201,9 @@ def fname_to_path(fname, options):
         "06": "jun", "07": "jul", "08": "aug", "09": "sep", "10": "oct",
         "11": "nov", "12": "dec"}
 
+    if len(fname) != 17:
+        raise Exception("The file name '%s' is not of correct length. It "
+                "must be of the form mYYmmdd_nnnn.fits" % fname)
     try:
         fdate = fname.split("m")[1][0:6]
         yr, mn, dy = "20" + fdate[0:2], fdate[2:4], int(fdate[4:6])
