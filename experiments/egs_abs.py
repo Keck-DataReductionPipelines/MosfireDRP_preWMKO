@@ -19,53 +19,48 @@ reload(IO)
 reload(Wavelength)
 reload(Background)
 
+# Check these
+flatops = Options.flat
+flatops["outdir"] = "/scr2/mosfire/secondlight/"
+flatops["indir"] = "/users/npk/desktop/"
+wavlops = Options.wavelength
+wavlops["outdir"] = flatops["outdir"]
+wavlops["indir"] = flatops["indir"]
 
 maskname = 'egs_abs'
 band = 'J'
 
+# Flat Names
+flatnames = []
+for flat in range(14,24): flatnames.append("m120507_%4.4i.fits" % flat)
 
-if False:
-    flatlist = range(14,24)
-    fs = []
-    for flat in flatlist:
-        fs.append("m120507_%4.4i.fits" % flat)
-
-    options = Options.flat
-    options["outdir"] = "/scr2/mosfire/secondlight/"
-    options["indir"] = "/users/npk/desktop/"
-    Flats.handle_flats(fs, maskname, band,  options)
-
-
-options = Options.wavelength
-options["outdir"] = "/scr2/mosfire/secondlight/"
-options["indir"] = "/users/npk/desktop/"
-
-
+# Use the file "lname" for wavelength calibration
 lname = "m120507_0230"
-fs = [lname + ".fits"]
-np.set_printoptions(precision=2)
+
+
+# Create A/B positions
+As = ["m120507_%4.4i.fits" % i for i in range(229,249,2)]
+Bs = ["m120507_%4.4i.fits" % i for i in range(230,249,2)]
+As.extend(["m120509_%4.4i.fits" % i for i in range(315,369,2)])
+Bs.extend(["m120509_%4.4i.fits" % i for i in range(316,369,2)])
+
 if False:
+    Flats.handle_flats(flatnames, maskname, band, flatops)
+
+if False:
+    fs = [lname + ".fits"]
     for fname in fs:
-        mfits = IO.readmosfits(fname, options)
+        mfits = IO.readmosfits(fname, wavlops)
         header, data, bs = mfits
 
         #Wavelength.fit_lambda_interactively(mfits, fname, maskname, options)
         #Wavelength.fit_lambda(mfits, fname, maskname, options)
-        Wavelength.apply_lambda_simple(mfits, fname, maskname, options)
+        Wavelength.apply_lambda_simple(mfits, fname, maskname, wavlops)
 
 if True:
-
-    As = ["m120507_%4.4i.fits" % i for i in range(229,249,2)]
-    Bs = ["m120507_%4.4i.fits" % i for i in range(230,249,2)]
-
-    As.extend(["m120509_%4.4i.fits" % i for i in range(315,369,2)])
-    Bs.extend(["m120509_%4.4i.fits" % i for i in range(316,369,2)])
-
-    Background.handle_background(As, Bs, lname, maskname,
-            band, options)
-
+    Background.handle_background(As, Bs, lname, maskname, band, wavlops)
 
 if True:
-    Rectify.handle_rectification(maskname, ["A", "B"], lname, band, options)
+    Rectify.handle_rectification(maskname, ["A", "B"], lname, band, wavlops)
 
 
