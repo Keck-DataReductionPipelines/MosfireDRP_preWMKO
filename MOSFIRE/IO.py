@@ -101,7 +101,7 @@ def load_lambdaslit(fnum, maskname, band, options):
 
     if ret[0]['maskname'] != maskname:
         print("The maskname for the edge file '%s' does not match "
-                "that in the edge file '%s'" % (maskname, meta['maskname']))
+                "that in the edge file '%s'" % (maskname, ret[0]['maskname']))
         print "Continuing"
 
     return readfits(fn, options)
