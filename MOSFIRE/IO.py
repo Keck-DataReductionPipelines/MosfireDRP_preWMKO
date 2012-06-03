@@ -140,6 +140,8 @@ def writefits(img, maskname, fname, options, header=None, bs=None,
 
     print "Wrote to '%s'" % (fn)
     hdu.writeto(fn)
+    try: os.system("gzip %s" % fn)
+    except: pass
 
 
 
