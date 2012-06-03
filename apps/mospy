@@ -29,5 +29,4 @@ else
 	endsw
 endif
 
-onintr int
-echo "Int"
+onintr -
