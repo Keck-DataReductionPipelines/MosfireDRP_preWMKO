@@ -31,7 +31,7 @@ def handle_rectification(maskname, nod_posns, lname, band_pass, options):
     for pos in nod_posns:
         II = IO.read_drpfits(maskname, "cnts_{0}_{1}.fits".format(band, pos),
                 options)
-        off = np.array((II[0]["decoff"], II[0]["raoff"]))
+        off = np.array((II[0]["decoff"], II[0]["raoff"]),dtype=np.float64)
 
         try: off0
         except: off0 = off
@@ -110,6 +110,9 @@ def r_interpol(ls, fs, ss, lfid, ffid):
     S = ss.shape
 
     output = np.zeros((len(ffid), len(lfid)))
+    
+    L = np.double(len(lfid))
+    lam_to_pix = II.interp1d(lfid, np.arange(L)/L)
 
     for i in xrange(len(ffid)):
         ll = ls[i,:] ; sp = ss[i,:]
@@ -121,7 +124,11 @@ def r_interpol(ls, fs, ss, lfid, ffid):
         output[i,:] = f(lfid)
     
     for i in xrange(len(lfid)):
-        fr = fs[:,i] ; sp = output[:,i]
+
+        pix = lam_to_pix([lfid[i]])[0]
+        fr = fs[:,np.round(pix*2048.)] 
+        sp = output[:,np.round(pix*len(lfid))]
+
         f = II.interp1d(fr, sp, bounds_error=False)
         output[:,i] = f(ffid)
 
@@ -162,9 +169,7 @@ def handle_rectification_helper(edgeno):
     minl = lmid[0] if lmid[0]>hpp[0] else hpp[0]
     maxl = lmid[-1] if lmid[-1]<hpp[1] else hpp[1]
 
-    fidl = fidl[np.where((fidl > minl) & (fidl < maxl))]
-    fun = np.poly1d(np.polyfit(np.arange(len(fidl)), fidl, 1))
-    fidl = fun(pix)
+    fidl = np.arange(minl, maxl, dl)
 
     epss = []
     ivss = []
