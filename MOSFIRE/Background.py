@@ -130,12 +130,15 @@ def imcombine(files, maskname, options, flat, outname=None):
     header.update("RN", "%1.3f e-" % RN)
 
     if outname is not None:
+        header.update("object", "{0}: electrons signal".format(maskname))
         IO.writefits(electrons, maskname, "cnts_" + outname, options,
                 header=header, overwrite=True)
 
+        header.update("object", "{0}: electrons^2 var".format(maskname))
         IO.writefits(var*itimes**2, maskname, "var_" + outname, options,
                 header=header, overwrite=True)
 
+        header.update("object", "{0}: itime s".format(maskname))
         IO.writefits(np.float32(itimes), maskname, "itimes_" + outname, options,
                 header=header, overwrite=True)
 
@@ -207,12 +210,19 @@ def handle_background(As, Bs, lamname, maskname, band_name, options):
         sky_sub_out[yroi, xroi] = sol["output"]
         sky_model_out[yroi, xroi] = sol["model"]
     
+    header.update("object", "{0}: electron/s".format(maskname))
     IO.writefits(data, maskname, "sub_%s_%s.fits" % (maskname, band),
             options, header=header, overwrite=True)
 
+    header.update("object", "{0}: electron/s".format(maskname))
     IO.writefits(sky_sub_out, maskname, "bsub_%s_%s.fits" % (maskname, band),
             options, header=header, overwrite=True)
 
+    header.update("object", "{0}: (s/electron)^2".format(maskname))
+    IO.writefits(ivar, maskname, "bsub_ivar_%s_%s.fits" % (maskname, band),
+            options, header=header, overwrite=True)
+
+    header.update("object", "{0}: electron/s".format(maskname))
     IO.writefits(sky_model_out, maskname, "bmod_%s_%s.fits" % (maskname, band),
             options, header=header, overwrite=True)
 
