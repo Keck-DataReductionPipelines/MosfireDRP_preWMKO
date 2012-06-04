@@ -67,16 +67,11 @@
 import os, time
 
 import MOSFIRE
-import warnings
 
 from MOSFIRE import Flats, Options, IO, Wavelength, Background, Detector, Rectify 
 import numpy as np, pylab as pl, pyfits as pf
 
-
-reload(Flats)
-reload(IO)
-reload(Wavelength)
-reload(Background)
+np.seterr(all='ignore')
 
 # Check paths
 flatops = Options.flat
@@ -102,7 +97,7 @@ Bs = ["m120603_%4.4i.fits" % i for i in range(311,330,2)]
 # Change the bad pixel mask path
 Options.path_bpm = "/scr2/mosfire/badpixels/badpix_18may2012.fits"
 
-fs = lname + ".fits"
+fname = lname + ".fits"
 mfits = IO.readmosfits(fname, wavlops)
 header, data, bs = mfits
 
