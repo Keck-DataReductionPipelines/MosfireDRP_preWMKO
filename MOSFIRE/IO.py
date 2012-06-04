@@ -104,6 +104,7 @@ def load_lambdaslit(fnum, maskname, band, options):
                 "that in the edge file '%s'" % (maskname, ret[0]['maskname']))
         print "Continuing"
 
+    
     return readfits(fn, options)
 
 def writefits(img, maskname, fname, options, header=None, bs=None,
@@ -140,8 +141,6 @@ def writefits(img, maskname, fname, options, header=None, bs=None,
 
     print "Wrote to '%s'" % (fn)
     hdu.writeto(fn)
-    try: os.system("gzip %s" % fn)
-    except: pass
 
 
 
