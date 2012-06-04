@@ -110,7 +110,7 @@ def imcombine(files, maskname, options, flat, outname=None):
         print "%s %s[%s]/%s %5.1f" % (fname, maskname, patternid,
             header['filter'], np.mean(itimes[i]))
 
-    electrons = np.array(ADUs) * Detector.gain
+    electrons = np.array(ADUs) * Detector.gain  / flat
     el_per_sec = electrons / itimes
 
     output = np.zeros((2048, 2048))
@@ -139,7 +139,7 @@ def imcombine(files, maskname, options, flat, outname=None):
     numreads = header["READS0"]
     RN = Detector.RN / np.sqrt(numreads)
 
-    var = (electrons/flat + RN**2) / itimes**2
+    var = (electrons + RN**2) / itimes**2
 
 
     if header.has_key("RN"): raise Exception("RN already populated in header")
