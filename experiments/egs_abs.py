@@ -32,7 +32,7 @@ band = 'J'
 
 # Flat Names
 flatnames = []
-for flat in range(14,24): flatnames.append("m120507_%4.4i.fits" % flat)
+for flat in range(17,27): flatnames.append("m120602_%4.4i.fits" % flat)
 
 # Use the file "lname" for wavelength calibration
 lname = "m120507_0230"
@@ -44,7 +44,7 @@ Bs = ["m120507_%4.4i.fits" % i for i in range(230,249,2)]
 As.extend(["m120509_%4.4i.fits" % i for i in range(315,369,2)])
 Bs.extend(["m120509_%4.4i.fits" % i for i in range(316,369,2)])
 
-if False:
+if True:
     Flats.handle_flats(flatnames, maskname, band, flatops)
 
 if False:
@@ -57,10 +57,10 @@ if False:
         #Wavelength.fit_lambda(mfits, fname, maskname, options)
         Wavelength.apply_lambda_simple(mfits, fname, maskname, wavlops)
 
-if True:
+if False:
     Background.handle_background(As, Bs, lname, maskname, band, wavlops)
 
-if True:
+if False:
     Rectify.handle_rectification(maskname, ["A", "B"], lname, band, wavlops)
 
 
