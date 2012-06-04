@@ -483,7 +483,6 @@ def find_and_fit_edges(data, header, bs, options):
     result["top"] = np.poly1d([y])
 
     slitno = 1
-    hpps = Wavelength.estimate_half_power_points(slitno, header, bs)
 
     for target in xrange(len(ssl) - 1):
 
