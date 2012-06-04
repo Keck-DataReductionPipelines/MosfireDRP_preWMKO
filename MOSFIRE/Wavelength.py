@@ -569,7 +569,6 @@ def estimate_half_power_points(slitno, header, bs):
     pix = np.arange(2048.)
     ll = wavelength_model(parguess, pix)
 
-
     hpp = Filters.hpp[band]
     return [ np.argmin(np.abs(ll-hpp[0])), np.argmin(np.abs(ll-hpp[1])) ]
 
@@ -1088,7 +1087,8 @@ class InteractiveSolution:
         pl.plot(self.ll, self.spec, linestyle='steps-mid')
 
         if self.MAD is None:
-            pl.title("[%i] Press 'f' to fit" % self.slitno)
+            pl.title("[%i] Press 'z' to zoom, 'x' to unzoom, 'c' to shift, " 
+                    "'f' to fit. 'h' for help" % self.slitno)
         else:
             name = self.bs.ssl[self.slitno-1]["Target_Name"]
 
@@ -1222,11 +1222,11 @@ class InteractiveSolution:
 
         print kp, x, y
 
-        actions_mouseless = {".": self.fastforward, "d": self.nextobject, "a":
+        actions_mouseless = {".": self.fastforward, "n": self.nextobject, "p":
                 self.prevobject, "q": self.quit, "r": self.reset, "f":
                 self.fit_event}
 
-        actions = { "c": self.shift, "e": self.drop_point,
+        actions = { "c": self.shift, "d": self.drop_point,
                 "z": self.zoom, "x": self.unzoom, "s": self.savefig}
 
         if (kp == 'h') or (kp == '?'):
