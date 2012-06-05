@@ -14,15 +14,26 @@ from scipy import interpolate as II
 import pdb
 
 import MOSFIRE
-from MOSFIRE import CSU, Fit, IO, Options, Filters, Detector
+from MOSFIRE import CSU, Fit, IO, Options, Filters, Detector, Wavelength
 
 
 
-def handle_rectification(maskname, nod_posns, lname, band_pass, options):
-    global edges, dats, ivars, shifts, lambdas, band
+def handle_rectification(maskname, nod_posns, wavenames, band_pass, options):
+    global edges, dats, ivars, shifts, lambdas, band, fidl
 
     band = band_pass
+    lname = Wavelength.filelist_to_wavename(wavenames, band_pass, maskname,
+            options).rstrip(".fits")
 
+    orders = {"Y": 6, "J": 5, "H": 4, "K": 3}
+    order = orders[band]
+    d = 1e3/110.5 # Groove spacing in micron
+    pixelsize, focal_length = 18.0, 250e3 # micron
+    scale = pixelsize/focal_length
+    dlambda = scale * d / order * 10000
+
+    hpp = Filters.hpp[band]
+    fidl = np.arange(hpp[0], hpp[1], dlambda)
 
     lambdas = IO.load_lambdaslit(lname, maskname, band, options)
     edges, meta = IO.load_edges(maskname, band, options)
@@ -53,12 +64,16 @@ def handle_rectification(maskname, nod_posns, lname, band_pass, options):
     EPS[0].update("ORIGFILE", fname)
 
     tock = time.time()
+    sols = range(len(edges)-1,-1,-1)
     p = Pool()
-    solutions = p.map(handle_rectification_helper, xrange(len(edges)))
+    solutions = p.map(handle_rectification_helper, sols)
     p.close()
     tick = time.time()
     print "-----> Mask took %i. Writing to disk." % (tick-tock)
 
+
+    output = np.zeros((1, len(fidl)))
+    snrs = np.zeros((1, len(fidl)))
     for i in xrange(len(solutions)):
         solution = solutions[i]
         header = EPS[0].copy()
@@ -90,14 +105,28 @@ def handle_rectification(maskname, nod_posns, lname, band_pass, options):
         header.update("cd2_2", 1)
 
 
+        # TODO: 15:-1 is a hack. there is a deeper problem that needs fixing.
+        img = solution["eps_img"][15:-1]
+        ivar = solution["iv_img"][15:-1]
+
+        output  = np.append(output, img, 0)
+        snrs = np.append(snrs, img*np.sqrt(ivar), 0)
+
         IO.writefits(solution["eps_img"], maskname,
                 "eps_{0}_S{1:02g}.fits".format(band, i+1), options,
                 overwrite=True, header=header)
 
+        
         IO.writefits(solution["iv_img"], maskname,
                 "ivar_{0}_S{1:02g}.fits".format(band, i+1), options,
                 overwrite=True, header=header)
 
+    header.update("OBJECT", "{0}/{1}".format(maskname, band))
+
+    IO.writefits(output, maskname, "eps_mask_{0}.fits".format(band), options,
+        overwrite=True, header=header)
+    IO.writefits(snrs, maskname, "snrs_mask_{0}.fits".format(band), options,
+        overwrite=True, header=header)
 
 def r_interpol(ls, fs, ss, lfid, ffid):
     '''Interpolate the data ss(ls, fs) onto a grid that looks like 
@@ -136,7 +165,7 @@ def r_interpol(ls, fs, ss, lfid, ffid):
 
 
 def handle_rectification_helper(edgeno):
-    global edges, dats, ivars, shifts, lambdas, band
+    global edges, dats, ivars, shifts, lambdas, band, fidl
 
     pix = np.arange(2048)
     
@@ -162,14 +191,11 @@ def handle_rectification_helper(edgeno):
 
     fidf = fracs[:,1024]
     lmid = ll[ll.shape[0]/2,:]
-    dl = np.median(np.diff(lmid))
     hpp = Filters.hpp[band]
-    fidl = lmid
 
     minl = lmid[0] if lmid[0]>hpp[0] else hpp[0]
     maxl = lmid[-1] if lmid[-1]<hpp[1] else hpp[1]
 
-    fidl = np.arange(minl, maxl, dl)
 
     epss = []
     ivss = []
