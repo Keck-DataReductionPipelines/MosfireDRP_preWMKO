@@ -209,10 +209,7 @@ def save_ds9_edges(results, options):
 
             sy = top(sx) + 1
             ey = top(ex) + 1
-            if i == 10: txt=res["Target_Name"]
-            else: txt=""
 
-            ds9 += "line(%f, %f, %f, %f) # fixed=1 edit=0 move=0 rotate=0 delete=0 text={%s}\n" % (sx, sy, ex, ey, txt)
             ds9 += "line(%f, %f, %f, %f) # fixed=1 edit=0 move=0 rotate=0 delete=0\n" % (sx, sy, ex, ey)
 
             if i == W/2:
@@ -223,7 +220,10 @@ def save_ds9_edges(results, options):
 
             sy = bottom(sx) + 1
             ey = bottom(ex) + 1
-            ds9 += "line(%f, %f, %f, %f) # fixed=1 edit=0 move=0 rotate=0 delete=0 color=blue\n" % (sx, sy, ex, ey)
+            if i == 10: txt=res["Target_Name"]
+            else: txt=""
+
+            ds9 += "line(%f, %f, %f, %f) # fixed=1 edit=0 move=0 rotate=0 delete=0 color=blue text={%s}\n" % (sx, sy, ex, ey, txt)
 
         # Vertical line indicating half power points
         try:
