@@ -10,7 +10,9 @@ import pylab as pl
 
 
 # Following is to correct for old/new version of stsci python
-try: import pytools.nmpfit as mpfit
+try: 
+    import pytools
+    import pytools.nmpfit as mpfit
 except ImportError: import stsci.tools.nmpfit as mpfit
 
 import unittest
