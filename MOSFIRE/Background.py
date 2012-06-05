@@ -14,7 +14,7 @@ from scipy import interpolate as II
 import pdb
 
 import MOSFIRE
-from MOSFIRE import CSU, Fit, IO, Options, Filters, Detector
+from MOSFIRE import CSU, Fit, IO, Options, Filters, Detector, Wavelength
 
 #from IPython.Shell import IPShellEmbed
 #ipshell = IPShellEmbed()
@@ -91,6 +91,7 @@ def imcombine(files, maskname, options, flat, outname=None):
                             thishdr["frameid"]))
 
         patternid = thishdr["frameid"]
+
 
         if maskname is not None:
             if maskname != thishdr["maskname"]:
@@ -184,12 +185,14 @@ def merge_headers(h1, h2):
 
 
 
-def handle_background(As, Bs, lamname, maskname, band_name, options): 
+def handle_background(As, Bs, wavenames, maskname, band_name, options): 
     
     global header, bs, edges, data, ivar, lam, sky_sub_out, sky_model_out, band
 
     band = band_name
 
+    lamname = Wavelength.filelist_to_wavename(wavenames, band_name, maskname,
+            options).rstrip(".fits")
     
     flatname = os.path.join(maskname, "pixelflat_2d_%s.fits" % band_name)
     hdr, flat = IO.read_drpfits(maskname, 
@@ -200,6 +203,7 @@ def handle_background(As, Bs, lamname, maskname, band_name, options):
 
     hdrA, ratesA, varA, bsA = imcombine(As, maskname, options, 
             flat, outname="%s_A.fits" % band_name)
+
     hdrB, ratesB, varB, bsB = imcombine(Bs, maskname, options, 
             flat, outname="%s_B.fits" % band_name)
 

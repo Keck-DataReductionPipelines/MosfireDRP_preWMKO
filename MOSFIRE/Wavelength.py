@@ -62,7 +62,7 @@ from matplotlib.widgets import Button
 from numpy.polynomial import chebyshev as CV
 
 
-from MOSFIRE import CSU, Fit, IO, Options, Filters
+from MOSFIRE import CSU, Fit, IO, Options, Filters, Detector
 
 #from IPython.Shell import IPShellEmbed
 #ipshell = IPShellEmbed()
@@ -90,6 +90,80 @@ except:
 # Glue code
 #
 
+def mask_band_to_fname(maskname, bandname, options):
+
+    return os.path.joint(options["outdir"], maskname, "lambda_%s_comb.fits" %
+            bandname)
+
+def filelist_to_wavename(files, band, maskname, options):
+    start = files[0].split('/')[-1].rstrip(".fits")
+    end = files[-1].split('/')[-1].rstrip(".fits").split("_")[1]
+    name = "wave_stack_{0}_{1}-{2}.fits".format(band, start, end)
+
+    return name
+
+
+def filelist_to_path(files, band, maskname, options):
+    outf = os.path.join(options["outdir"], maskname,
+            filelist_to_wavename(files, band, maskname, options))
+
+    return outf
+
+def imcombine(files, maskname, bandname, options):
+    
+    Flat = IO.load_flat(maskname, bandname, options)
+    flat = Flat[1]
+    flat = flat.filled(np.nan)
+
+    ADUs = np.zeros((len(files), 2048, 2048))
+    prevssl = None
+    prevmn = None
+    patternid = None
+    maskname = None
+    header = None
+
+    for i in xrange(len(files)):
+        fname = files[i]
+        thishdr, data, bs = IO.readmosfits(fname, options)
+        ADUs[i,:,:] = data.filled(np.nan)/flat
+
+        if thishdr["aborted"]:
+            raise Exception("Img '%s' was aborted and should not be used" %
+                    fname)
+
+        if prevssl is not None:
+            if len(prevssl) != len(bs.ssl):
+                # todo Improve these checks
+                raise Exception("The stack of input files seems to be of "
+                        "different masks")
+        prevssl = bs.ssl
+
+        if maskname is not None:
+            if maskname != thishdr["maskname"]:
+                raise Exception("The stack should be of CSU mask '%s' frames "
+                        "only but contains a frame of '%s'." % (maskname,
+                        thishdr["maskname"]))
+
+        maskname = thishdr["maskname"]
+
+        if thishdr["BUNIT"] != "ADU per coadd":
+            raise Exception("The units of '%s' are not in ADU per coadd and "
+                    "this violates an assumption of the DRP. Some new code " 
+                    "is needed in the DRP to handle the new units of "
+                    "'%s'." % (fname, thishdr["BUNIT"]))
+
+        ''' Error checking is complete'''
+        print "%s %s/%s" % (fname, maskname, thishdr['filter'])
+
+    electrons = np.median(np.array(ADUs) * Detector.gain, axis=0)
+
+    outf = filelist_to_path(files, band, maskname, options)
+
+    hdu = pf.PrimaryHDU(electrons)
+    try: os.remove(outf)
+    except IOError: pass
+    hdu.writeto(outf)
+
     
 def handle_lambdas(filelist, maskname, options):
     """handle_lambdas is the entry point to the Wavelengths module. """
@@ -104,21 +178,26 @@ def handle_lambdas(filelist, maskname, options):
         fit_lambda(mfits, fname, maskname, options)
         apply_lambda(mfits, fname, maskname, options)
 
-def fit_lambda(mfits, fname, maskname, options):
+def fit_lambda(maskname, bandname, wavenames, options):
     """Fit the two-dimensional wavelength solution to each science slit"""
     global bs, data, lamout, center_solutions, edgedata
     np.seterr(all="ignore")
     
-    fnum = fname.rstrip(".fits")
-    path = os.path.join(options["outdir"], maskname)
-    fn = os.path.join(path, "lambda_coeffs_{0}.npy".format(fnum))
+    wavename = filelist_to_wavename(wavenames, bandname, maskname,
+            options).rstrip(".fits")
+
+    fn = os.path.join(options["outdir"], maskname,
+            "lambda_coeffs_{0}.npy".format(wavename))
 
     print "%s] Writing to: %s" % (maskname, fn)
 
-    (header, data, bs) = mfits
-    band = header['filter'].rstrip()
+    wavepath = filelist_to_path(wavenames, bandname, maskname,
+            options)
+    drop, data = IO.readfits(wavepath, use_bpm=True)
+    header, drop,bs = IO.readmosfits(wavenames[0], options)
+    fnum = wavename.rstrip(".fits")
     center_solutions = IO.load_lambdacenter(fnum, maskname, options)
-    edgedata, metadata = IO.load_edges(maskname, band, options)
+    edgedata, metadata = IO.load_edges(maskname, bandname, options)
     
     solutions = []
     lamout = np.zeros(shape=(2048, 2048), dtype=np.float32)
@@ -173,40 +252,23 @@ def fit_lambda_helper(slitno):
 
     return sol
 
-def fit_slit_interactively(mfits, fname, maskname, options):
-    """fit the two-dimensional wavelength solution to each science slit"""
 
-    path = os.path.join(options["outdir"], maskname)
-    fn = os.path.join(path, "lambda_outwards_coeffs_{0}.npy".format(
-        fname.replace(".fits","")))
-
-    (header, data, bs) = mfits
-    fnum = fname.rstrip(".fits")
-    band = header['Filter'].rstrip()
-    Ld = IO.load_lambdadata(fnum, maskname, band, options)
-    
-    try: solutions = np.load(fn)
-    except IOError: solutions = None
-
-    fig = pl.figure(1,figsize=(11,8))
-    pl.ion()
-    II = InteractiveOutwardSolution(fig, mfits, Ld, options, 1,
-            solutions=solutions)
-    pl.show()
-
-    print "save to: ", fn
-    np.save(fn, np.array(II.solutions))
-
-
-def fit_lambda_interactively(mfits, fname, maskname, options):
+def fit_lambda_interactively(maskname, band, wavenames, options):
     """Fit the one-dimensional wavelength solution to each science slit"""
     np.seterr(all="ignore")
-    
-    path = os.path.join(options["outdir"], maskname)
-    fn = os.path.join(path, "lambda_center_coeffs_{0}.npy".format(
-        fname.replace(".fits","")))
 
-    (header, data, bs) = mfits
+    input_f = filelist_to_path(wavenames, band, maskname, options)
+    mfits = IO.readfits(input_f, use_bpm=True)
+    (drop, data) = mfits
+    (header, drop, bs) = IO.readmosfits(wavenames[0], options)
+
+    mfits = header, data, bs
+
+    path = os.path.join(options["outdir"], maskname)
+
+    name = filelist_to_wavename(wavenames, band, maskname, options)
+    fn = os.path.join(path, "lambda_center_coeffs_{0}.npy".format(name))
+
     linelist = pick_linelist(header)
     
     try: solutions = np.load(fn)
@@ -223,26 +285,28 @@ def fit_lambda_interactively(mfits, fname, maskname, options):
     pl.show()
 
     print "save to: ", fn
-    np.save(fn, np.array(II.solutions))
+    np.save(fn.rstrip(".fits"), np.array(II.solutions))
 
 
-def apply_lambda_simple(mfits, fname, maskname, options):
+def apply_lambda_simple(maskname, bandname, wavenames, options):
     """Convert solutions into final output products. This is the function that
     should be used for now."""
 
-    (header, data, bs) = mfits
+    wavename = filelist_to_wavename(wavenames, bandname, maskname,
+            options).rstrip(".fits")
 
-    data = data.filled(np.median(data))
-
-    band = header['filter'].rstrip()
-    bmap = {"Y": 6, "J": 5, "H": 4, "K": 3}
-    order = bmap[band]
-
-    fnum = fname.rstrip(".fits")
+    wavepath = filelist_to_path(wavenames, bandname, maskname,
+            options)
+    drop, data = IO.readfits(wavepath, use_bpm=True)
+    header, drop, bs = IO.readmosfits(wavenames[0], options)
+    data = data.filled(0)
 
     path = os.path.join(options["outdir"], maskname)
-    slitedges, edgeinfo = IO.load_edges(maskname, band, options)
-    Ld = IO.load_lambdadata(fnum, maskname, band, options)
+    slitedges, edgeinfo = IO.load_edges(maskname, bandname, options)
+    Ld = IO.load_lambdadata(wavename, maskname, bandname, options)
+
+    bmap = {"Y": 6, "J": 5, "H": 4, "K": 3}
+    order = bmap[bandname]
 
     lines = pick_linelist(header)
 
@@ -272,22 +336,23 @@ def apply_lambda_simple(mfits, fname, maskname, options):
 
     header = pf.Header()
     header.update("maskname", maskname)
-    header.update("filter", band)
-    header.update("object", "Wavelengths {0}/{1}".format(maskname, band))
+    header.update("filter", bandname)
+    header.update("object", "Wavelengths {0}/{1}".format(maskname, bandname))
 
-    IO.writefits(lams, maskname, "lambda_solution_{0}".format(fname), 
+    wavename = wavename.rstrip(".fits")
+    IO.writefits(lams, maskname, "lambda_solution_{0}.fits".format(wavename), 
             options, overwrite=True, header=header)
                 
 
     print("{0}: writing sigs".format(maskname))
-    header.update("object", "Sigmas {0}/{1}".format(maskname, band))
-    IO.writefits(sigs, maskname, "sigs_solution_{0}".format(fname), 
+    header.update("object", "Sigmas {0}/{1}".format(maskname, bandname))
+    IO.writefits(sigs, maskname, "sigs_solution_{0}.fits".format(wavename), 
             options, overwrite=True, header=header)
 
     print("{0}: rectifying".format(maskname))
     dlam = np.ma.median(np.diff(lams[1024,:]))
     print dlam
-    hpp = Filters.hpp[band] 
+    hpp = Filters.hpp[bandname] 
     ll_fid = np.arange(hpp[0], hpp[1], dlam)
     nspec = len(ll_fid)
     print nspec
@@ -302,77 +367,9 @@ def apply_lambda_simple(mfits, fname, maskname, options):
         rectified[i,:] = f(ll_fid)
 
 
-    IO.writefits(rectified, maskname, "rectified_{0}".format(fname), 
+    IO.writefits(rectified, maskname, "rectified_{0}.fits".format(wavename), 
             options, overwrite=True)
     
-def apply_lambda(mfits, fname, maskname, options):
-    """Use a two dimensional fit across the slit to produce a wavelength
-    solution. This code is now OBSOLETE and will be removed on a future
-    revision"""
-
-    (header, data, bs) = mfits
-
-    data = data.filled(np.median(data))
-
-    band = header['filter'].rstrip()
-    bmap = {"Y": 6, "J": 5, "H": 4, "K": 3}
-    order = bmap[band]
-
-    fnum = fname.rstrip(".fits")
-
-    path = os.path.join(options["outdir"], maskname)
-    slitedegs, edgeinfo = IO.load_edges(maskname, band, options)
-    #lambdadata = IO.load_lambdamodel(fnum, maskname, band, options)
-    lambdadata = IO.load_lambdaoutwards(fnum, maskname, band, options)
-    Ld = IO.load_lambdadata(fnum, maskname, band, options)
-
-    # write lambda
-    lams = np.zeros((2048, 2048), dtype=np.float32)
-    xx = np.arange(2048)
-
-    for i in xrange(len(bs.ssl)):
-        edges = slitedges[i]
-        top = edges["top"](xx)
-        bottom = edges["bottom"](xx)
-        px = np.arange(np.min(bottom), np.max(top))
-
-        for j in px:
-            try:
-                lams[j,:] = fit_to_lambda(lambdadata, xx, j)
-            except NoSuchFit:
-                continue
-
-    print("{0}: writing lambda".format(maskname))
-    hdu = pf.PrimaryHDU(lams)
-    fn = os.path.join(path, "lambda_solution_{0}".format(fname))
-    try: os.remove(fn)
-    except: pass
-    hdu.writeto(fn)
-
-    print("{0}: rectifying".format(maskname))
-    dlam = np.ma.median(np.diff(lams[1024,:]))
-    hpp = Filters.hpp[band] 
-    ll_fid = np.arange(hpp[0], hpp[1], dlam)
-    nspec = len(ll_fid)
-
-    rectified = np.zeros((2048, nspec), dtype=np.float32)
-
-    for i in xrange(2048):
-        ll = lams[i,:]
-        ss = data[i,:]
-
-        f = interp1d(ll, ss, bounds_error=False)
-
-        rectified[i,:] = f(ll_fid)
-
-
-    hdu = pf.PrimaryHDU(rectified)
-    fn = os.path.join(path, "rectified_{0}".format(fname))
-    try: os.remove(fn)
-    except: pass
-    hdu.writeto(fn)
-    
-
 #
 # Fitting Methods
 #   
@@ -957,6 +954,11 @@ class InteractiveSolution:
         self.fig = fig
 
         self.pix = np.arange(2048)
+        band = self.header["filter"].rstrip()
+        self.xrng = Filters.hpp[band][:]
+        self.band = band
+        self.xrng[0] *= 0.99
+        self.xrng[1] /= 0.99
 
         if solutions is None:
             self.solutions = range(len(self.bs.ssl))
@@ -1005,12 +1007,6 @@ class InteractiveSolution:
 
         self.ll = CV.chebval(self.pix, self.cfit)
 
-        self.xrng = [min(self.ll) * .99, max(self.ll)*1/.99]
-        band = self.header["filter"].rstrip()
-        self.xlim = Filters.hpp[band][:]
-        self.xlim[0] *= 0.93
-        self.xlim[1] /= 0.93
-
         self.redraw()
 
     def draw_found_lines(self):
@@ -1031,6 +1027,7 @@ class InteractiveSolution:
                         size=10)
 
             pl.subplot(2,1,2)
+            pl.xlim(self.xlim)
             pl.grid(True)
             pl.axhline(0.1)
             pl.axhline(-0.1)
@@ -1103,7 +1100,8 @@ class InteractiveSolution:
         pl.subplot(2,1,1)
         xmin, xmax, ymin, ymax = pl.axis()
         pl.xlim(self.xlim)
-        pl.ylim([-1000, ymax*.8])
+        if self.band == 'Y': pl.ylim([-100, 1000])
+        else: pl.ylim([-1000, ymax*.8])
         
         self.draw_done()
 
@@ -1321,40 +1319,6 @@ def fit_wavelength_solution(data, parguess, lines, options,
         print("%3i: Could not find parameters" % slitno)
         return [[], parguess, None, []]
 
-
-def fit_mask_model(mfits, fname, maskname, options_local):
-    """Fit the two-dimensional wavelength solution to mask"""
-    global coeffs, data, linelist, options
-
-    options = options_local
-
-    (header, data, bs) = mfits
-    band = header['filter'].rstrip()
-    fnum = fname.rstrip(".fits")
-
-    coeffs = IO.load_lambdadata(fnum, maskname, band, options)
-    linelist = pick_linelist(header)
-    
-    solutions = []
-
-    tock = time.time()
-
-    p = Pool()
-    solutions = p.map(construct_model, range(1,len(bs.ssl)))
-    p.close()
-
-    tick = time.time()
-
-    print "-----> Mask took %i" % (tick-tock)
-
-    path = os.path.join(options["outdir"], maskname)
-    fn = os.path.join(path, "lambda_mask_coeffs_{0}.npy".format(fnum))
-
-    try: os.remove(fn)
-    except: pass
-    np.save(fn, solutions)
-
-    return solutions
 
 def construct_model(slitno):
     """Given a matrix of Chebyshev polynomials describing the wavelength
@@ -1597,25 +1561,6 @@ def fit_to_lambda(fits, pix_lambda, pix_spatial, slitno=None):
     cs = fit_to_coefficients(fits, pix_spatial, slitno=slitno)
 
     return CV.chebval(pix_lambda, cs) 
-
-def fit_mask(pars, pixel_set, ys):
-    """Fit mask model function to the whole mask"""
-    merit_fun = Fit.mpfit_residuals(mask_model)
-    pars.extend(np.zeros(len(pixel_set)))
-    pars = np.array(pars)
-
-    parinfo = []
-    for par in pars:
-        parinfo.append({"fixed": 0, "value": par, "limited": [0, 0], 
-            "limits": [0, 0], "step": 1e-2})
-
-    parinfo[0]["step"] = 0.002
-    parinfo[1]["step"] = 1e-5
-    parinfo[2]["step"] = 1e-10
-    parinfo[3]["step"] = 1
-
-    return Fit.mpfit_do(merit_fun, pixel_set, ys, parinfo)
-
 
 
 # Model Functions
@@ -1953,7 +1898,6 @@ if __name__ == "__main__":
         px.append(c['2d']['positions'])
         ys.append(c['2d']['coeffs'][:,0])
 
-    ff = fit_mask([1., 0., 0., 1024.], px, np.concatenate(ys))
 
 
 

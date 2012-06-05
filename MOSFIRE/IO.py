@@ -62,10 +62,11 @@ def load_lambdacenter(fnum, maskname, options):
 
     return ld
 
-def load_lambdadata(fnum, maskname, band, options):
+def load_lambdadata(wavename, maskname, band, options):
     ''' Load the wavelength coefficient functions '''
-    path = os.path.join(options["outdir"], maskname)
-    fn = os.path.join(path, "lambda_coeffs_{0}.npy".format(fnum))
+
+    fn = os.path.join(options["outdir"], maskname,
+            "lambda_coeffs_{0}.npy".format(wavename))
 
     ld = np.load(fn)
 
@@ -87,6 +88,13 @@ def load_lambdamodel(fnum, maskname, band, options):
 
     ld = np.load(fn)
     return ld
+
+def load_flat(maskname, band, options):
+    path = os.path.join(options["outdir"], maskname)
+    fn = os.path.join(path, "pixelflat_2d_{0}.fits".format(band))
+
+    return readfits(fn, use_bpm=True)
+
 
 def load_lambdaslit(fnum, maskname, band, options):
     ''' Load the wavelength coefficient functions '''
