@@ -114,19 +114,20 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options):
 
         IO.writefits(solution["eps_img"], maskname,
                 "eps_{0}_S{1:02g}.fits".format(band, i+1), options,
-                overwrite=True, header=header)
+                overwrite=True, header=header, lossy_compress=True)
 
         
         IO.writefits(solution["iv_img"], maskname,
                 "ivar_{0}_S{1:02g}.fits".format(band, i+1), options,
-                overwrite=True, header=header)
+                overwrite=True, header=header, lossy_compress=True)
 
     header.update("OBJECT", "{0}/{1}".format(maskname, band))
 
-    IO.writefits(output, maskname, "eps_mask_{0}.fits".format(band), options,
-        overwrite=True, header=header)
-    IO.writefits(snrs, maskname, "snrs_mask_{0}.fits".format(band), options,
-        overwrite=True, header=header)
+    IO.writefits(output, maskname, "eps_{0}_{1}.fits".format(maskname, band),
+            options, overwrite=True, header=header, lossy_compress=True)
+
+    IO.writefits(snrs, maskname, "snrs_{0}_{1}.fits".format(maskname, band),
+            options, overwrite=True, header=header, lossy_compress=True)
 
 def r_interpol(ls, fs, ss, lfid, ffid):
     '''Interpolate the data ss(ls, fs) onto a grid that looks like 

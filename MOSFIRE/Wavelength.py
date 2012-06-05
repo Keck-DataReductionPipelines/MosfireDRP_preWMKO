@@ -347,7 +347,7 @@ def apply_lambda_simple(maskname, bandname, wavenames, options):
     print("{0}: writing sigs".format(maskname))
     header.update("object", "Sigmas {0}/{1}".format(maskname, bandname))
     IO.writefits(sigs, maskname, "sigs_solution_{0}.fits".format(wavename), 
-            options, overwrite=True, header=header)
+            options, overwrite=True, header=header, lossy_compress=True)
 
     print("{0}: rectifying".format(maskname))
     dlam = np.ma.median(np.diff(lams[1024,:]))
@@ -368,7 +368,7 @@ def apply_lambda_simple(maskname, bandname, wavenames, options):
 
 
     IO.writefits(rectified, maskname, "rectified_{0}.fits".format(wavename), 
-            options, overwrite=True)
+            options, overwrite=True, lossy_compress=True)
     
 #
 # Fitting Methods

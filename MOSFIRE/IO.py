@@ -116,10 +116,14 @@ def load_lambdaslit(fnum, maskname, band, options):
     return readfits(fn, options)
 
 def writefits(img, maskname, fname, options, header=None, bs=None,
-        overwrite=False):
+        overwrite=False, lossy_compress=False):
     '''Convenience wrapper to write MOSFIRE drp-friendly FITS files'''
 
-    hdu = pf.PrimaryHDU(img)
+    if lossy_compress:
+        hdu = pf.PrimaryHDU(floatcompress(img))
+    else:
+        hdu = pf.PrimaryHDU(img)
+
     path = os.path.join(options["outdir"], maskname)
     if not os.path.exists(path):
         print("Output directory '%s' does not exist. The DRP will attempt" 
@@ -150,12 +154,18 @@ def writefits(img, maskname, fname, options, header=None, bs=None,
     print "Wrote to '%s'" % (fn)
     hdu.writeto(fn)
 
+    if lossy_compress: os.system("gzip --force {0}".format(fn))
+
 
 
 def readfits(path, use_bpm=False):
     '''Read a fits file from path and return a tuple of (header, data, 
     Target List, Science Slit List (SSL), Mechanical Slit List (MSL),
     Alignment Slit List (ASL)).'''
+
+    if not os.path.exists(path) and not os.path.exists(path+".gz"):
+        raise Exception("The file at path '%s' does not exist." % path)
+
     hdulist = pf.open(path)
     header = hdulist[0].header
     data = hdulist[0].data
@@ -177,6 +187,9 @@ def read_drpfits(maskname, fname, options):
     '''Read a fits file written by the DRP'''
 
     path = os.path.join(options["outdir"], maskname, fname)
+
+    if not os.path.exists(path) and not os.path.exists(path + ".gz"):
+        raise Exception("File '%s' does not exist" % path)
 
     hdulist = pf.open(path)
     output = []
@@ -315,6 +328,23 @@ def parse_header_for_bars(header):
 
     return np.array(poss)
 
+
+def floatcompress(data, ndig=14):
+    '''Adapted from Finkbeiner IDL routine floatcompress'''
+
+    t = data.dtype
+    if not ((t == 'float32') or (t == 'float64')):
+        raise Exception("Only works on floating point numbers")
+
+    wzer = np.where(data == 0)
+    data[wzer] = 1.0
+
+    log2 = np.ceil(np.log(np.abs(data)) / np.log(2.0))
+    mant = np.round(data/2.0**(log2 - ndig))/2.0**ndig
+    out = mant*2.0**log2
+
+    out[wzer] = 0.0
+    return out
 
 def imcombine(filelist, out, options, bpmask=None, reject="none", nlow=None,
         nhigh=None):

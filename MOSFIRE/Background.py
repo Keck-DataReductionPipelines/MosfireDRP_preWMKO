@@ -156,12 +156,12 @@ def imcombine(files, maskname, options, flat, outname=None):
         header.update("object", "{0}: electrons^2 var".format(maskname))
         header.update("bunit", "ELECTRONS^2")
         IO.writefits(var*itimes**2, maskname, "var_" + outname, options,
-                header=header, overwrite=True)
+                header=header, overwrite=True, lossy_compress=True)
 
         header.update("object", "{0}: itime s".format(maskname))
         header.update("bunit", "SECOND")
         IO.writefits(np.float32(itimes), maskname, "itimes_" + outname, options,
-                header=header, overwrite=True)
+                header=header, overwrite=True, lossy_compress=True)
 
     return header, el_per_sec, var, bs
 
@@ -237,7 +237,7 @@ def handle_background(As, Bs, wavenames, maskname, band_name, options):
     header.update("object", "{0}: electron/s".format(maskname))
     header.update("bunit", "ELECTRONS/S")
     IO.writefits(data, maskname, "sub_%s_%s.fits" % (maskname, band),
-            options, header=header, overwrite=True)
+            options, header=header, overwrite=True, lossy_compress=True)
 
     header.update("object", "{0}: electron/s".format(maskname))
     header.update("bunit", "ELECTRONS/S")
@@ -247,12 +247,12 @@ def handle_background(As, Bs, wavenames, maskname, band_name, options):
     header.update("object", "{0}: (s/electron)^2".format(maskname))
     header.update("bunit", "(S/ELECTRONS)^2")
     IO.writefits(ivar, maskname, "bsub_ivar_%s_%s.fits" % (maskname, band),
-            options, header=header, overwrite=True)
+            options, header=header, overwrite=True, lossy_compress=True)
 
     header.update("object", "{0}: electron/s".format(maskname))
     header.update("bunit", "ELECTRONS/S")
     IO.writefits(sky_model_out, maskname, "bmod_%s_%s.fits" % (maskname, band),
-            options, header=header, overwrite=True)
+            options, header=header, overwrite=True, lossy_compress=True)
 
     '''Now create rectified solutions'''
     dlam = np.median(np.diff(lam[1][1024,:]))
