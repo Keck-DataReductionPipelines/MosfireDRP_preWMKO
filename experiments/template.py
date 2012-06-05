@@ -93,21 +93,19 @@ lname = "m120603_0310"
 # Create A/B positions
 As = ["m120603_%4.4i.fits" % i for i in range(310,330,2)]
 Bs = ["m120603_%4.4i.fits" % i for i in range(311,330,2)]
+alls = As ; alls.extend(Bs)
 
 # Change the bad pixel mask path
 Options.path_bpm = "/scr2/mosfire/badpixels/badpix_18may2012.fits"
-
-fname = lname + ".fits"
-mfits = IO.readmosfits(fname, wavlops)
-header, data, bs = mfits
 
 # Change if False to if True when you want to execute that step
 # On interactive step, make sure you attempt to quit&save after fitting one
 # slit!
 if False: Flats.handle_flats(flatnames, maskname, band, flatops)
-if False: Wavelength.fit_lambda_interactively(mfits, fname, maskname, wavlops)
-if False: Wavelength.fit_lambda(mfits, fname, maskname, wavlops)
-if False: Wavelength.apply_lambda_simple(mfits, fname, maskname, wavlops)
+if False: Wavelength.imcombine(alls, maskname, wavlops)
+if False: Wavelength.fit_lambda_interactively(maskname, band, wavlops)
+if False: Wavelength.fit_lambda(maskname, band, wavlops)
+if False: Wavelength.apply_lambda_simple(maskname, band, wavlops)
 if False: Background.handle_background(As, Bs, lname, maskname, band, wavlops)
 if False: Rectify.handle_rectification(maskname, ["A", "B"], lname, band,
         wavlops)
