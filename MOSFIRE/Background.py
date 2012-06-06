@@ -304,16 +304,17 @@ def handle_background(As, Bs, wavenames, maskname, band_name, options):
 
     header.update("object", "rectified [eps]")
     IO.writefits(rectified, maskname, "rectified_%s.fits" % band_name, options,
-            header=header, overwrite=True)
+            header=header, overwrite=True, lossy_compress=True)
 
     header.update("object", "rectified ivar [1/eps^2]")
     IO.writefits(rectified_ivar, maskname, "rectified_ivar_%s.fits" %
-            band_name, options, header=header, overwrite=True)
+            band_name, options, header=header, overwrite=True,
+            lossy_compress=True)
 
     header.update("object", "rectified snr")
     IO.writefits(rectified*np.sqrt(rectified_ivar), maskname,
             "rectified_sn_%s.fits" % band_name, options, header=header,
-            overwrite=True)
+            overwrite=True, lossy_compress=True)
 
 
 
