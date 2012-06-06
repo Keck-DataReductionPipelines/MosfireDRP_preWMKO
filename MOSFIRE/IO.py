@@ -163,7 +163,10 @@ def readfits(path, use_bpm=False):
     Target List, Science Slit List (SSL), Mechanical Slit List (MSL),
     Alignment Slit List (ASL)).'''
 
-    if not os.path.exists(path) and not os.path.exists(path+".gz"):
+    if os.path.exists(path + ".gz"):
+        path = path + ".gz"
+
+    if not os.path.exists(path):
         raise Exception("The file at path '%s' does not exist." % path)
 
     hdulist = pf.open(path)
@@ -188,8 +191,11 @@ def read_drpfits(maskname, fname, options):
 
     path = os.path.join(options["outdir"], maskname, fname)
 
-    if not os.path.exists(path) and not os.path.exists(path + ".gz"):
-        raise Exception("File '%s' does not exist" % path)
+    if os.path.exists(path + ".gz"):
+        path = path + ".gz"
+
+    if not os.path.exists(path):
+        raise Exception("The file at path '%s' does not exist." % path)
 
     hdulist = pf.open(path)
     output = []
