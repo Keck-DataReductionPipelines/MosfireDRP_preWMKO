@@ -20,7 +20,7 @@ npix = 2048
 flat = {"outdir": "/scr2/mosfire/secondlight/",
         "indir": "/users/npk/desktop",
         "version": 1, 
-        "edge-order": 5, # Polynomial order for edge of slit 
+        "edge-order": 4, # Polynomial order for edge of slit 
         "edge-fit-width": 20,
         "flat-field-order": 7 # Order of polynomial for fitting the flat field profile
 }
