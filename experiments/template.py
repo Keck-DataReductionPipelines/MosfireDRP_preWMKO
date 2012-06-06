@@ -81,33 +81,51 @@ wavlops = Options.wavelength
 wavlops["outdir"] = flatops["outdir"]
 wavlops["indir"] = flatops["indir"]
 
-maskname = 'CHANGE'
-band = 'CHANGE'
 
-# Flat Names
-flatnames = ["m120603_%4.4i.fits" % i for i in range(58, 68)]
+# THE FULL MASKNAME is needed. This is a bug, but I'm not sure how to fix it
+# exactly.
+maskname = 'Q1603_msfr_1_upside_shift3_star2_full'
+band = 'H'
 
-# Use the file "lname" for wavelength calibration
-lname = "m120603_0310"
+# Flat Names m120602_0123.fits
+flatnames = ["m120602_%4.4i.fits" % i for i in range(124, 130)]
 
-# Create A/B positions
-As = ["m120603_%4.4i.fits" % i for i in range(310,330,2)]
-Bs = ["m120603_%4.4i.fits" % i for i in range(311,330,2)]
-alls = As ; alls.extend(Bs)
+# Create A/B positions for each observation
+As1 = ["m120604_%4.4i.fits" % i for i in range(608,648,2)]
+Bs1 = ["m120604_%4.4i.fits" % i for i in range(609,648,2)]
+wavenames1 = As1[:] ; wavenames1.extend(Bs1)
+
+As2 = ["m120604_%4.4i.fits" % i for i in range(591,604,2)]
+Bs2 = ["m120604_%4.4i.fits" % i for i in range(592,604,2)]
+wavenames2 = As2[:] ; wavenames2.extend(Bs2)
 
 # Change the bad pixel mask path
-Options.path_bpm = "/scr2/mosfire/badpixels/badpix_18may2012.fits"
+# Options.path_bpm = "/scr2/mosfire/badpixels/badpix_18may2012.fits"
 
 # Change if False to if True when you want to execute that step
 # On interactive step, make sure you attempt to quit&save after fitting one
 # slit!
 if False: Flats.handle_flats(flatnames, maskname, band, flatops)
-if False: Wavelength.imcombine(alls, maskname, wavlops)
-if False: Wavelength.fit_lambda_interactively(maskname, band, wavlops)
-if False: Wavelength.fit_lambda(maskname, band, wavlops)
-if False: Wavelength.apply_lambda_simple(maskname, band, wavlops)
-if False: Background.handle_background(As, Bs, lname, maskname, band, wavlops)
-if False: Rectify.handle_rectification(maskname, ["A", "B"], lname, band,
+if False: Wavelength.imcombine(wavenames1, maskname, band, wavlops)
+if False: Wavelength.imcombine(wavenames2, maskname, band, wavlops)
+
+# only one interactive fit is needed
+if False: Wavelength.fit_lambda_interactively(maskname, band, wavenames1,
+        wavlops)
+
+#                               mask     band  to fit       guess      options
+if False: Wavelength.fit_lambda(maskname, band, wavenames1, wavenames1, wavlops)
+if False: Wavelength.fit_lambda(maskname, band, wavenames2, wavenames1, wavlops)
+
+if False: Wavelength.apply_lambda_simple(maskname, band, wavenames1, wavlops)
+if False: Wavelength.apply_lambda_simple(maskname, band, wavenames2, wavlops)
+
+As = As1[:]
+Bs = Bs1[:]
+As.extend(As2)
+Bs.extend(Bs2)
+if True: Background.handle_background(As, Bs, wavenames1, maskname, band, wavlops)
+if True: Rectify.handle_rectification(maskname, ["A", "B"], wavenames1, band,
         wavlops)
 
 
