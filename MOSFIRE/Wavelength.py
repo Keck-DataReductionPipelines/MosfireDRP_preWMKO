@@ -158,7 +158,7 @@ def imcombine(files, maskname, bandname, options):
     electrons = np.median(np.array(ADUs) * Detector.gain, axis=0)
 
     wavename = filelist_to_wavename(files, bandname, maskname, options)
-    IO.writefits(electrons, maskname, wavename, options)
+    IO.writefits(electrons, maskname, wavename, options, overwrite=True)
 
     
 def handle_lambdas(filelist, maskname, options):
@@ -231,8 +231,8 @@ def fit_lambda_helper(slitno):
     linelist = center_solutions[slitidx]["linelist"]
 
     start  = center_solutions[slitidx]["extract_pos"]
-    bottom = np.ceil(edge["bottom"](1024))+5
-    top    = np.ceil(edge["top"](1024))-5
+    bottom = np.ceil(edge["bottom"](1024))+2
+    top    = np.ceil(edge["top"](1024))-2
 
     print("* Fitting Slit %s from %i to %i" % (bs.ssl[slitno]["Target_Name"],
         bottom, top))
@@ -244,7 +244,7 @@ def fit_lambda_helper(slitno):
     sol = {"slitno": slitno, "center_sol": np.array(sol_1d[1]), "2d":
         sol_2d, "lines": np.array(linelist)}
     
-    print "%i] TOOK: %i" % (slitno, time.time()-tick)
+    print "S%2.2i] TOOK: %i s" % (slitno, time.time()-tick)
 
     return sol
 
