@@ -157,28 +157,30 @@ def make_pixel_flat(data, results, options, outfile, inputs):
 
         x2048 = np.arange(Options.npix)
         v = np.poly1d(np.polyfit(xs,v,
-            options['flat-field-order']))(x2048).ravel()
+            options['flat-field-order']))(xs).ravel()
 
         for i in np.arange(bottom-1, top+1):
-            flat[i,:] = v
+            flat[i,hpps[0]:hpps[1]] = v
 
     print "Producing Pixel Flat..."
-    for r in range(len(results)-2):
-        first = results[r]
-        second = results[r+1]
+    for r in range(len(results)-1):
+        theslit = results[r]
 
-        tf = first["bottom"]
-        bf = second["top"]
+        try:
+            bf = theslit["bottom"]
+            tf = theslit["top"]
+        except:
+            pdb.set_trace()
 
-        for i in range(Options.npix):
+        for i in range(hpps[0], hpps[1]):
             top = np.floor(tf(i))
             bottom = np.ceil(bf(i))
             
             data[top:bottom, i] = flat[top:bottom,i]
 
-    lowsn = data<225
-    flat[lowsn] = data[lowsn]
     hdu.data = (data/flat).astype(np.float32)
+    bad = np.abs(hdu.data-1.0) > 0.5
+    hdu.data[bad] = 1.0
     hdu.data = hdu.data.filled(1)
     if os.path.exists(outfile):
             os.remove(outfile)
@@ -263,13 +265,12 @@ def combine(flatlist, maskname, band, options):
     IO.imcombine(flatlist, out, options, reject="minmax", nlow=1, nhigh=1)
 
 
-def find_edge_pair(data, y, roi_width, hpps):
+def find_edge_pair(data, y, roi_width):
     '''
     find_edge_pair finds the edge of a slit pair in a flat
 
     data[2048x2048]: a well illuminated flat field [DN]
     y: guess of slit edge position [pix]
-    hpps[2]: estimate of of spectral half power points [pix]
 
     Moves along the edge of a slit image
             - At each location along the slit edge, determines
@@ -289,8 +290,10 @@ def find_edge_pair(data, y, roi_width, hpps):
         spatial direction; select_roi is used for this.
     3: Fit a two-sided error function Fit.residual_disjoint_pair
         on the vertical cross cut derived in step 2.
-    4: If the fit fails, store it in the missing list, otherwise
-        store the position and fitted values in xposs, yposs, and widths.
+    4: If the fit fails, store it in the missing list
+        - else if the top fit is good, store the top values in top vector
+        - else if the bottom fit is good, store the bottom values in bottom
+          vector.
     5: In the vertical cross-cut, there is a minimum value. This minimum
         value is stored as a measure of scattered light.
 
@@ -304,11 +307,15 @@ def find_edge_pair(data, y, roi_width, hpps):
         return v
 
 
-    yposs = []
-    widths = []
-    xposs = []
-    xposs_missing = []
-    scatters = []
+
+    xposs_top = []
+    yposs_top = []
+    xposs_top_missing = []
+
+    xposs_bot = []
+    yposs_bot = []
+    xposs_bot_missing = []
+    yposs_bot_scatters = []
 
     #1 
     rng = np.linspace(10, 2040, 50).astype(np.int)
@@ -320,8 +327,9 @@ def find_edge_pair(data, y, roi_width, hpps):
 
         # TODO: The number 450 below is hardcoded and essentially made up.
         # A smarter piece of code belongs here.
-        if (np.median(v) < 450) or (xp < hpps[0]) or (xp > hpps[1]):
-            xposs_missing.append(xp)
+        if (np.median(v) < 450):
+            xposs_top_missing.append(xp)
+            xposs_bot_missing.append(xp)
             continue
 
         #3
@@ -331,36 +339,43 @@ def find_edge_pair(data, y, roi_width, hpps):
         if fit_ok:
             (sigma, offset, mult1, mult2, add, width) = ff[0]
 
-            xposs.append(xp)
-            yposs.append(offset - roi_width)
-            widths.append(width)
+            xposs_top.append(xp)
+            yposs_top.append(y - roi_width + offset + width)
+
+            xposs_bot.append(xp)
+            yposs_bot.append(y - roi_width + offset)
 
             between = offset + width/2
             if 0 < between < len(v)-1:
                 start = np.max([0, between-2])
                 stop = np.min([len(v),between+2])
-                scatters.append(np.min(v[start:stop])) # 5
+                yposs_bot_scatters.append(np.min(v[start:stop])) # 5
 
                 if False:
                     pl.figure(2)
                     pl.clf()
                     tmppix = np.arange(y-roi_width, y+roi_width)
                     tmpx = np.arange(len(v))
+                    pl.axvline(y - roi_width + offset + width, color='red')
+                    pl.axvline(y - roi_width + offset, color='red')
                     pl.scatter(tmppix, v)
                     pl.plot(tmppix, Fit.fit_disjoint_pair(ff[0], tmpx))
+                    pl.axhline(yposs_bot_scatters[-1])
                     pl.draw()
 
             else:
-                scatters.append(np.nan)
+                yposs_bot_scatters.append(np.nan)
 
         else:
-            xposs_missing.append(xp)
+            xposs_bot_missing.append(xp)
+            xposs_top_missing.append(xp)
             print "Skipping: %i" % (xp)
 
     
-    return map(np.array, (xposs, xposs_missing, yposs, widths, scatters))
+    return map(np.array, (xposs_bot, xposs_bot_missing, yposs_bot, xposs_top,
+        xposs_top_missing, yposs_top, yposs_bot_scatters))
 
-def fit_edge_poly(xposs, xposs_missing, yposs, widths, order):
+def fit_edge_poly(xposs, xposs_missing, yposs, order):
     '''
     fit_edge_poly fits a polynomial to the measured slit edges.
     This polynomial is used to extract spectra.
@@ -370,19 +385,14 @@ def fit_edge_poly(xposs, xposs_missing, yposs, widths, order):
 
     input-
     xposs, yposs [N]: The x and y positions of the slit edge [pix]
-    widths [N]: the offset from end of one slit to beginning of another 
-            [pix]
     order: the polynomial order
     '''
 
     # First fit low order polynomial to fill in missing data
     fun = np.poly1d(Fit.polyfit_clip(xposs, yposs, 2))
-    wfun = np.poly1d(Fit.polyfit_clip(xposs, widths, 2))
-
 
     xposs = np.append(xposs, xposs_missing)
     yposs = np.append(yposs, fun(xposs_missing))
-    widths = np.append(widths, wfun(xposs_missing))
 
     # Remove any fits that deviate wildly from the 2nd order polynomial
     ok = np.abs(yposs - fun(xposs)) < 1
@@ -391,7 +401,6 @@ def fit_edge_poly(xposs, xposs_missing, yposs, widths, order):
 
     # Now refit to user requested order
     fun = np.poly1d(Fit.polyfit_clip(xposs[ok], yposs[ok], order))
-    wfun = np.poly1d(Fit.polyfit_clip(xposs[ok], widths[ok], order))
     res = fun(xposs[ok]) - yposs[ok]
     sd = np.std(res)
     ok = np.abs(res) < 2*sd
@@ -399,13 +408,14 @@ def fit_edge_poly(xposs, xposs_missing, yposs, widths, order):
 
     # Check to see if the slit edge funciton is sane, 
     # if it's not, then we fix it.
-    if np.abs(fun(0) - fun(2048)) > 15:
+    pix = np.arange(2048)
+    V = fun(pix)
+    if np.abs(V.max() - V.min()) > 10:
         print "Forcing a horizontal slit edge"
         fun = np.poly1d(np.median(yposs[ok]))
-        wfun = np.poly1d(np.median(widths[ok]))
 
 
-    return (fun, wfun, res, sd, ok)
+    return (fun, res, sd, ok)
 
 
 
@@ -482,68 +492,202 @@ def find_and_fit_edges(data, header, bs, options):
     # 1
     result["top"] = np.poly1d([y])
 
-    slitno = 1
+    ''' Nomenclature here is confusing:
+        
+        ----- Edge  -- Top of current slit, bottom of prev slit
+        . o ' Data
+        ===== Data
+        .;.;' Data
+        ----- Edge  -- Bottom of current slit, top of next slit
+    '''
 
-    for target in xrange(len(ssl) - 1):
+    topfun = np.poly1d([y])
+    xposs_top_this = np.arange(10,2000,100)
+    yposs_top_this = topfun(xposs_top_this)
+
+    for target in xrange(len(ssl)):
 
         y -= DY * numslits[target]
+        y = max(y, 1)
 
-        slitno += numslits[target]
-
-        print("%2.2i] Finding Slit Edges for %s starting at %4.0i. Slit "
+        print("%2.2i] Finding Slit Edges for %s ending at %4.0i. Slit "
                 "composed of %i CSU slits" % ( target,
                     ssl[target]["Target_Name"], y, numslits[target]))
 
-        tock = time.clock()
+        ''' First deal with the current slit '''
+        hpps = Wavelength.estimate_half_power_points(
+                bs.scislit_to_csuslit(target+1)[0], header, bs)
 
-        hpps = Wavelength.estimate_half_power_points(slitno, header, bs)
+        if y == 1:
+            xposs_bot = [1024]
+            xposs_bot_missing = []
+            yposs_bot = [4.25]
+            botfun = np.poly1d(yposs_bot)
+        else:
+            (xposs_top_next, xposs_top_next_missing, yposs_top_next, xposs_bot,
+                xposs_bot_missing, yposs_bot, scatter_bot_this) = find_edge_pair(
+                    data, y, options["edge-fit-width"])
 
-        (xposs, xposs_missing, yposs, widths, scatters) = \
-                        find_edge_pair(data, y, 
-                                        options["edge-fit-width"], hpps)
+            ok = np.where((xposs_bot > hpps[0]) & (xposs_bot < hpps[1]))
+            ok2 = np.where((xposs_bot_missing > hpps[0]) & (xposs_bot_missing <
+                hpps[1]))
+            xposs_bot = xposs_bot[ok]
+            xposs_bot_missing = xposs_bot_missing[ok2]
+            yposs_bot = yposs_bot[ok]
+            (botfun, bot_res, botsd, botok) =  fit_edge_poly(xposs_bot,
+                    xposs_bot_missing, yposs_bot, options["edge-order"])
 
-        (fun, wfun, res, sd, ok) = fit_edge_poly(xposs, 
-                        xposs_missing, yposs, widths, 
-                        options["edge-order"])
-
-        bottom = fun.c.copy() 
-        top = wfun.c.copy() + fun.c.copy()
-        bottom[-1] += y 
-        top[-1] += y 
+        bot = botfun.c.copy() 
+        top = topfun.c.copy()
 
         #4
-        result["xposs"] = xposs
-        result["yposs"] = yposs
-        result["bottom"] = np.poly1d(bottom)
-        result["sd"] = sd
+        result = {}
+        result["Target_Name"] = ssl[target]["Target_Name"]
+        result["xposs_top"] = xposs_top_this
+        result["yposs_top"] = yposs_top_this
+        result["xposs_bot"] = xposs_bot
+        result["yposs_bot"] = yposs_bot
+        result["top"] = np.poly1d(top)
+        result["bottom"] = np.poly1d(bot)
+        result["hpps"] = hpps
         result["ok"] = ok
-        result["scatter"] = scatters
-
         results.append(result)
 
         #5
-        result = {}
-        result["Target_Name"] = ssl[target+1]["Target_Name"]
-        result["top"] = np.poly1d(top)
+        if y == 1:
+            break
+            
 
-        hpps = Wavelength.estimate_half_power_points(slitno, header, bs)
-        result["hpps"] = hpps
+        hpps_next = Wavelength.estimate_half_power_points(
+                bs.scislit_to_csuslit(target+2)[0],
+                    header, bs)
 
-        tic = time.clock()
+        ok = np.where((xposs_top_next > hpps_next[0]) & (xposs_top_next <
+            hpps_next[1]))
+        ok2 = np.where((xposs_top_next_missing > hpps_next[0]) &
+            (xposs_top_next_missing < hpps_next[1]))
 
-        print("    Clipped Resid Sigma: %5.3f P2V: %5.3f .... %4.2f s elapsed" % 
-            (np.std(res[ok]), res[ok].max()-res[ok].min(),tic-tock))
+        xposs_top_next = xposs_top_next[ok]
+        xposs_top_next_missing = xposs_top_next_missing[ok2]
+        yposs_top_next = yposs_top_next[ok]
 
+        (topfun, topres, topsd, ok) = fit_edge_poly(xposs_top_next,
+                xposs_top_next_missing, yposs_top_next, options["edge-order"])
 
-    #6
-    result["bottom"] = np.poly1d([3])
-    result["hpps"] = hpps
-    results.append(result)
+        xposs_top_this = xposs_top_next
+        xposs_top_this_missing = xposs_top_next_missing
+        yposs_top_this = yposs_top_next
 
     results.append({"version": options["version"]})
 
     return results
 
+class FitCheck:
+    flat = None
+    bs = None
+    edges = None
+    cutout = None # Is at most 2 edges x 46 slits x 11 pix or 1112 pixels
+    
+    def __init__(self, maskname, bandname, options, fig):
+
+        self.fig = fig
+        self.flat = IO.read_drpfits(maskname, "combflat_2d_%s.fits" % bandname,
+                options)
+
+        self.edges, meta = IO.load_edges(maskname, bandname, options)
+
+        self.edgeno=2
+        self.cid = self.fig.canvas.mpl_connect('key_press_event', self)
+
+        self.draw()
+
+
+    def draw(self):
+
+        print self.edgeno
+
+        pos = 0
+        dy = 8
+        edgeno = self.edgeno
+        edge = self.edges[edgeno]
+        edgeprev = self.edges[edgeno-1]
+        p = np.round(edge["top"](1024))
+        top = min(p+2*dy, 2048)
+        bot = min(p-2*dy, 2048)
+        self.cutout = self.flat[1][bot:top,:].copy()
+
+        pl.figure(1)
+        pl.clf()
+        start = 0
+        dy = 512
+        for i in xrange(2048/dy):
+            pl.subplot(2048/dy,1,i+1)
+            pl.xlim(start, start+dy)
+
+            if i == 0: pl.title("edge %i] %s|%s" % (edgeno,
+                edgeprev["Target_Name"], edge["Target_Name"]))
+
+
+            pl.subplots_adjust(left=.07,right=.99,bottom=.05,top=.95)
+
+            pl.imshow(self.flat[1][bot:top,start:start+dy], extent=(start,
+                start+dy, bot, top), cmap='Greys', vmin=2000, vmax=6000)
+
+            pix = np.arange(start, start+dy)
+            pl.plot(pix, edge["top"](pix), 'r', linewidth=1)
+            pl.plot(pix, edgeprev["bottom"](pix), 'r', linewidth=1)
+            pl.plot(edge["xposs_top"], edge["yposs_top"], 'o')
+            pl.plot(edgeprev["xposs_bot"], edgeprev["yposs_bot"], 'o')
+
+
+            hpp = edge["hpps"]
+            pl.axvline(hpp[0],ymax=.5, color='blue', linewidth=5)
+            pl.axvline(hpp[1],ymax=.5, color='red', linewidth=5)
+
+            hpp = edgeprev["hpps"]
+            pl.axvline(hpp[0],ymin=.5,color='blue', linewidth=5)
+            pl.axvline(hpp[1],ymin=.5,color='red', linewidth=5)
+
+
+            if False:
+                L = top-bot
+                Lx = len(edge["xposs"])
+                for i in xrange(Lx):
+                    xp = edge["xposs"][i]
+                    frac1 = (edge["top"](xp)-bot-1)/L
+                    pl.axvline(xp,ymin=frac1)
+
+                for xp in edgeprev["xposs"]: 
+                    frac2 = (edgeprev["bottom"](xp)-bot)/L
+                    pl.axvline(xp,ymax=frac2)
+
+            start += dy
+
+    def __call__(self, event):
+        kp = event.key
+        x = event.xdata
+        y = event.ydata
+
+        print kp
+
+        if kp == 'n': 
+            self.edgeno += 1
+
+            if self.edgeno > len(self.edges):
+                self.edgeno = len(self.edges)
+                print "done"
+            else:
+                self.draw()
+
+        if kp == 'p': 
+            self.edgeno -= 1
+            if self.edgeno < 2:
+                self.edgeno = 2
+                print "Beginning" 
+            else:
+                self.draw()
+
+    
 
 class TestFlatsFunctions(unittest.TestCase):
     def setUp(self):
