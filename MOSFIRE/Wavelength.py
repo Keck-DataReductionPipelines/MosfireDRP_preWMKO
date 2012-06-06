@@ -174,12 +174,15 @@ def handle_lambdas(filelist, maskname, options):
         fit_lambda(mfits, fname, maskname, options)
         apply_lambda(mfits, fname, maskname, options)
 
-def fit_lambda(maskname, bandname, wavenames, options):
+def fit_lambda(maskname, bandname, wavenames, guessnames, options):
     """Fit the two-dimensional wavelength solution to each science slit"""
     global bs, data, lamout, center_solutions, edgedata
     np.seterr(all="ignore")
     
     wavename = filelist_to_wavename(wavenames, bandname, maskname,
+            options).rstrip(".fits")
+
+    guessname = filelist_to_wavename(guessnames, bandname, maskname,
             options).rstrip(".fits")
 
     fn = os.path.join(options["outdir"], maskname,
@@ -191,7 +194,8 @@ def fit_lambda(maskname, bandname, wavenames, options):
             options)
     drop, data = IO.readfits(wavepath, use_bpm=True)
     header, drop,bs = IO.readmosfits(wavenames[0], options)
-    fnum = wavename.rstrip(".fits")
+
+    fnum = guessname
     center_solutions = IO.load_lambdacenter(fnum, maskname, options)
     edgedata, metadata = IO.load_edges(maskname, bandname, options)
     
@@ -263,7 +267,8 @@ def fit_lambda_interactively(maskname, band, wavenames, options):
     path = os.path.join(options["outdir"], maskname)
 
     name = filelist_to_wavename(wavenames, band, maskname, options)
-    fn = os.path.join(path, "lambda_center_coeffs_{0}.npy".format(name))
+    fn = os.path.join(path,
+    "lambda_center_coeffs_{0}.npy".format(name.rstrip(".fits")))
 
     linelist = pick_linelist(header)
     
@@ -277,11 +282,11 @@ def fit_lambda_interactively(maskname, band, wavenames, options):
     fig = pl.figure(1,figsize=(16,8))
     pl.ion()
     II = InteractiveSolution(fig, mfits, linelist, options, 1,
-            solutions=solutions)
+        solutions=solutions)
     pl.show()
 
     print "save to: ", fn
-    np.save(fn.rstrip(".fits"), np.array(II.solutions))
+    np.save(fn.rstrip(".fits")+".np", np.array(II.solutions))
 
 
 def apply_lambda_simple(maskname, bandname, wavenames, options):
