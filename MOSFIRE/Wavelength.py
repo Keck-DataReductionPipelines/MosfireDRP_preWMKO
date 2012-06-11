@@ -308,14 +308,16 @@ def fit_lambda_interactively(maskname, band, wavenames, options):
 
     linelist = pick_linelist(header)
     
-    try: solutions = np.load(fn)
+    try: 
+        solutions = np.load(fn)
+        print "Soltuions loaded from: ", fn
     except IOError: solutions = None
 
     lamout = np.zeros(shape=(2048, 2048), dtype=np.float32)
 
     tock = time.time()
     
-    outfilename = fn.rstrip(".fits") + ".np"
+    outfilename = fn
     fig = pl.figure(1,figsize=(16,8))
     pl.ion()
     II = InteractiveSolution(fig, mfits, linelist, options, 1,
