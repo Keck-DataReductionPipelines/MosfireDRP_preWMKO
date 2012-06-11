@@ -323,7 +323,7 @@ def fit_lambda_interactively(maskname, band, wavenames, options):
     pl.show()
 
     print "save to: ", fn
-    np.save(fn.rstrip(".fits")+".np", np.array(II.solutions))
+    np.save(outfilename, np.array(II.solutions))
 
 
 def apply_lambda_simple(maskname, bandname, wavenames, options):
@@ -1042,7 +1042,9 @@ class InteractiveSolution:
 
     def quit(self, x, y):
         """Quit and save the results """
+        print "Interactive off"
         pl.ioff()
+        print "Closing figure"
         pl.close(self.fig)
 
     def reset(self, x, y):
