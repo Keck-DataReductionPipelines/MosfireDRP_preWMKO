@@ -50,7 +50,7 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options):
         shift = np.sqrt((off[0]-off0[0])**2 + (off[1]-off0[1])**2) * \
                 180./np.pi * 3600.0 
 
-        if shift > 3: shift = 3.0
+        #if shift > 3: shift = 3.0
         shifts.append(shift)
         print "Position {0} shift: {1:2.2f} as".format(pos, shift)
     
