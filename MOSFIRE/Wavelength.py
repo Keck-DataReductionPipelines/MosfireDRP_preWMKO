@@ -1044,11 +1044,9 @@ class InteractiveSolution:
 
     def quit(self, x, y):
         """Quit and save the results """
-        print "Interactive off"
-        pl.ioff()
         print "Closing figure"
         pl.close(self.fig)
-        print "... closed"
+
 
     def reset(self, x, y):
         """Reset the fitting performed on this object """
