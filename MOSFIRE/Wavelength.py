@@ -1029,9 +1029,9 @@ class InteractiveSolution:
         if self.slitno > len(self.bs.ssl): 
             self.done = True
             self.slitno -= 1
-        else:
-            print "Saving to: ", self.outfilename
-            np.save(self.outfilename, np.array(self.solutions))
+
+        print "Saving to: ", self.outfilename
+        np.save(self.outfilename, np.array(self.solutions))
 
         self.setup()
 
