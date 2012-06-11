@@ -152,13 +152,49 @@ def imcombine(files, maskname, bandname, options):
                     "is needed in the DRP to handle the new units of "
                     "'%s'." % (fname, thishdr["BUNIT"]))
 
+        ''' Construct Header'''
+        if header is None:
+            header = thishdr
+        header.update("imfno%2.2i" % (i), fname, "-------------------")
+
+        for key in header.keys():
+            val = header[key]
+
+            if thishdr.has_key(key):
+                if val != thishdr[key]:
+                    newkey = "hierarch " + key + ("_img%2.2i" % i)
+                    header.update(newkey.rstrip(), thishdr[key])
+
+        ''' Now handle error checking'''
+
+        if maskname is not None:
+            if thishdr["maskname"] != maskname:
+                raise Exception("File %s uses mask '%s' but the stack is of '%s'" %
+                    (fname, thishdr["maskname"], maskname))
+
+        for key in header.keys():
+            val = header[key]
+
+            if thishdr.has_key(key):
+                if val != thishdr[key]:
+                    newkey = "hierarch " + key + ("_img%2.2i" % i)
+                    header.update(newkey.rstrip(), thishdr[key])
+
+        ''' Now handle error checking'''
+
+        if maskname is not None:
+            if thishdr["maskname"] != maskname:
+                raise Exception("File %s uses mask '%s' but the stack is of '%s'" %
+                    (fname, thishdr["maskname"], maskname))
+
         ''' Error checking is complete'''
         print "%s %s/%s" % (fname, maskname, thishdr['filter'])
 
     electrons = np.median(np.array(ADUs) * Detector.gain, axis=0)
 
     wavename = filelist_to_wavename(files, bandname, maskname, options)
-    IO.writefits(electrons, maskname, wavename, options, overwrite=True)
+    IO.writefits(electrons, maskname, wavename, options, overwrite=True,
+            header=header)
 
     
 def handle_lambdas(filelist, maskname, options):
@@ -279,10 +315,11 @@ def fit_lambda_interactively(maskname, band, wavenames, options):
 
     tock = time.time()
     
+    outfilename = fn.rstrip(".fits") + ".np"
     fig = pl.figure(1,figsize=(16,8))
     pl.ion()
     II = InteractiveSolution(fig, mfits, linelist, options, 1,
-        solutions=solutions)
+        outfilename, solutions=solutions, )
     pl.show()
 
     print "save to: ", fn
@@ -776,7 +813,8 @@ class InteractiveSolution:
     first_time = True
 
 
-    def __init__(self, fig, mfits, linelist, options, slitno, solutions=None):
+    def __init__(self, fig, mfits, linelist, options, slitno, outfilename, 
+            solutions=None):
         self.header = mfits[0]
         self.data = mfits[1]
         self.bs = mfits[2]
@@ -784,6 +822,7 @@ class InteractiveSolution:
         self.linelist0 = linelist
         self.slitno = slitno
         self.fig = fig
+        self.outfilename = outfilename
 
         self.pix = np.arange(2048)
         band = self.header["filter"].rstrip()
@@ -986,6 +1025,9 @@ class InteractiveSolution:
         if self.slitno > len(self.bs.ssl): 
             self.done = True
             self.slitno -= 1
+        else:
+            print "Saving to: ", self.outfilename
+            np.save(self.outfilename, np.array(self.solutions))
 
         self.setup()
 
