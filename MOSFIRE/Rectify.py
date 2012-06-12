@@ -53,7 +53,9 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options):
         try: off0
         except: off0 = off
 
-        shifts.append(off - off0)
+        shift = off - off0
+
+        shifts.append(shift)
         print "Position {0} shift: {1:2.2f} as".format(pos, shift)
     
     fname = "bsub_{0}_{1}.fits".format(maskname, band)
