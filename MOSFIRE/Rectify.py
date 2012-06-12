@@ -43,15 +43,17 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options):
         II = IO.read_drpfits(maskname, "cnts_{0}_{1}.fits".format(band, pos),
                 options)
         off = np.array((II[0]["decoff"], II[0]["raoff"]),dtype=np.float64)
+        if II[0].has_key("yoffset"):
+            off = II[0]["yoffset"]
+        else:
+            # Deal with data taken during commissioning
+            if II[0]["frameid"] == 'A': off = 0.0
+            else: off = 3.0
 
         try: off0
         except: off0 = off
 
-        shift = np.sqrt((off[0]-off0[0])**2 + (off[1]-off0[1])**2) * \
-                180./np.pi * 3600.0 
-
-        #if shift > 3: shift = 3.0
-        shifts.append(shift)
+        shifts.append(off - off0)
         print "Position {0} shift: {1:2.2f} as".format(pos, shift)
     
     fname = "bsub_{0}_{1}.fits".format(maskname, band)
