@@ -45,7 +45,7 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
                 options)
         off = np.array((II[0]["decoff"], II[0]["raoff"]),dtype=np.float64)
         if II[0].has_key("yoffset"):
-            off = II[0]["yoffset"]
+            off = -II[0]["yoffset"]
         else:
             # Deal with data taken during commissioning
             if II[0]["frameid"] == 'A': off = 0.0
