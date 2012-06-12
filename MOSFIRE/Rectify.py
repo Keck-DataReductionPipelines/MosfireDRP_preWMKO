@@ -18,7 +18,8 @@ from MOSFIRE import CSU, Fit, IO, Options, Filters, Detector, Wavelength
 
 
 
-def handle_rectification(maskname, nod_posns, wavenames, band_pass, options):
+def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
+        commissioning_shift=3.0):
     global edges, dats, ivars, shifts, lambdas, band, fidl
 
     band = band_pass
@@ -48,7 +49,7 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options):
         else:
             # Deal with data taken during commissioning
             if II[0]["frameid"] == 'A': off = 0.0
-            else: off = 3.0
+            else: off = comissioning_shift
 
         try: off0
         except: off0 = off
