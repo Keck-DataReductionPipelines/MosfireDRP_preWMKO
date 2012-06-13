@@ -914,18 +914,6 @@ class InteractiveSolution:
             pl.xlim(self.xlim)
 
 
-    def sweep(self):
-        """
-
-        plan: 
-        1. Xcor outwards to figure out the curvature of the sepctra and guess
-        where to pull out lines from.
-        2. pull out lines at xcor'd positions
-        3. refit w/ 2d chebyshev
-
-        """
-
-
 
     def draw_done(self):
         if not self.done: 
@@ -1119,15 +1107,8 @@ class InteractiveSolution:
         if x is None: return
         if y is None: return
 
-
         if actions.has_key(kp):
             actions[kp](x, y)
-
-        if kp == 'o':
-            self.sweep()
-
-
-
 
 def fit_wavelength_solution(data, parguess, lines, options, 
         slitno, search_num=145, fixed=False):
