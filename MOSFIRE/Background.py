@@ -138,6 +138,7 @@ def imcombine(files, maskname, options, flat, outname=None):
 
     ''' Now handle variance '''
     numreads = header["READS0"]
+    header.update
     RN = Detector.RN / np.sqrt(numreads)
 
     var = (electrons + RN**2) / itimes**2
@@ -148,9 +149,9 @@ def imcombine(files, maskname, options, flat, outname=None):
 
 
     if outname is not None:
-        header.update("object", "{0}: electrons signal".format(maskname))
+        header.update("object", "{0}: electrons/s signal".format(maskname))
         header.update("bunit", "ELECTRONS")
-        IO.writefits(electrons, maskname, "cnts_" + outname, options,
+        IO.writefits(electrons, maskname, "eps_" + outname, options,
                 header=header, overwrite=True)
 
         header.update("object", "{0}: electrons^2 var".format(maskname))
@@ -317,8 +318,6 @@ def handle_background(As, Bs, wavenames, maskname, band_name, options):
             overwrite=True, lossy_compress=True)
 
 
-
-
 def background_subtract_helper(slitno):
     '''
 
@@ -369,6 +368,8 @@ def background_subtract_helper(slitno):
     ys = Y[train_roi].flatten()
 
     dl = np.median(np.diff(lslit[lslit.shape[0]/2,:]))
+    if dl == 0:
+        return {"ok": False}
 
     sort = np.argsort(ls)
     ls = ls[sort]
