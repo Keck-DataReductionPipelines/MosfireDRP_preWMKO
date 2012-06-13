@@ -11,14 +11,21 @@ npk April 18th 2011
 
 '''
 
+import getpass
+import os
 
 __version__ = 0.1
 
 
 npix = 2048
 
-flat = {"outdir": "/scr2/mosfire/secondlight/",
-        "indir": "/users/npk/desktop",
+indir = "/scr2/mosfire"
+outdir = "/scr2/{0}/mosfire_redux".format(getpass.getuser())
+path_bpm = "/scr2/mosfire/badpixels/badpix_08may2012.fits"
+
+flat = {
+        "indir": indir,
+        "outdir": outdir,
         "version": 1, 
         "edge-order": 4, # Polynomial order for edge of slit 
         "edge-fit-width": 20,
@@ -26,9 +33,10 @@ flat = {"outdir": "/scr2/mosfire/secondlight/",
 }
 
 
-wavelength = {"outdir": flat["outdir"],
-        "indir": flat["indir"],
-        "datadir" : "/Users/npk/Dropbox/MOSFIRE/code/data",
+wavelength = {
+        "indir": indir,
+        "outdir": outdir,
+        "datadir" : os.path.join(os.environ["MOSPATH"], "code", "data"),
         "version": 1,
         #"fractional-wavelength-search": 0.9988, # used in determining oned wavelength solutions
         "fractional-wavelength-search": 0.99935, # used in determining oned wavelength solutions
@@ -37,4 +45,3 @@ wavelength = {"outdir": flat["outdir"],
 }
 
 
-path_bpm = "/users/npk/desktop/2012may08/badpix_18may2012.fits"
