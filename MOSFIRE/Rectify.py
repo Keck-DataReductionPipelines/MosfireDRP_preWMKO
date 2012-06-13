@@ -49,7 +49,7 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
         else:
             # Deal with data taken during commissioning
             if II[0]["frameid"] == 'A': off = 0.0
-            else: off = comissioning_shift
+            else: off = commissioning_shift
 
         try: off0
         except: off0 = off
