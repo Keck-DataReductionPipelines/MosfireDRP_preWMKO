@@ -41,7 +41,7 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
 
     shifts = []
     for pos in nod_posns:
-        II = IO.read_drpfits(maskname, "cnts_{0}_{1}.fits".format(band, pos),
+        II = IO.read_drpfits(maskname, "eps_{0}_{1}.fits".format(band, pos),
                 options)
         off = np.array((II[0]["decoff"], II[0]["raoff"]),dtype=np.float64)
         if II[0].has_key("yoffset"):
