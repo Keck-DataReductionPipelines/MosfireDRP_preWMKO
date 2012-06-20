@@ -46,11 +46,6 @@ def load_edges(maskname, band, options):
                 "that in the edge file '%s'" % (maskname, meta['maskname']))
         print "Continuing"
 
-    if meta["band"] != band:
-        raise Exception("The bandname for the edgefile does not match that "
-                "requested. This may not be a problem, but will require "
-                "you to inspect the data first.")
-
     return edges, meta
 
 def load_lambdacenter(fnum, maskname, options):
