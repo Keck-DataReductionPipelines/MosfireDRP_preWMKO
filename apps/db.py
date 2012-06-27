@@ -1,6 +1,7 @@
 
 
 import time
+import traceback
 import getpass
 import os
 import pdb
@@ -109,9 +110,14 @@ def make():
 
 
             insert_sql = insert_sql[:-1] + ") values (" + vals[:-1] + ")"
-            c.execute(insert_sql, tuple(values))
-
-            
+            try:
+                c.execute(insert_sql, tuple(values))
+            except:
+                print "Query failed on:"
+                print insert_sql
+                traceback.print_exc()
+                sys.exit()
+                 
 
     db.commit()
 
