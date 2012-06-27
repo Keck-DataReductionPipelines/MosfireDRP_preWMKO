@@ -6,6 +6,7 @@ import os
 import pdb
 import sqlite3
 import sys
+import textwrap
 
 from operator import itemgetter
 from itertools import groupby
@@ -196,7 +197,7 @@ np.seterr(all="ignore")
 
 maskname = '{maskname}'
 band = '{band}'
-num_dates ='{num_dates}'
+num_dates = {num_dates}
 
 flatframes = {flatnames}
 sciframes = {sciframes}
@@ -206,8 +207,8 @@ flatops = Options.flat
 waveops = Options.wavelength
 
 Flats.handle_flats(flatnames, maskname, band, flatops)
-{wavecombine}
 
+{wavecombine}
 
 
 '''
@@ -215,6 +216,32 @@ Flats.handle_flats(flatnames, maskname, band, flatops)
 def plan_to_python(plans):
     '''Convert the python list/dictionary created by masks() into a python
     script'''
+
+
+    '''
+    A plan is a structure that looks something like
+
+    Plan {
+        filter -> Filter name (string)
+        maskname -> maskname (string)
+        flatlist -> 
+                    ["YYmmDD_####"...] list of flats
+        dates -> [{
+            date -> YYmmDD (string)
+            observations -> [{
+                observation -> (a,b) (tuple of file number range)
+                offsets [{
+                    "name" -> ["YYmmDD_####" ...] list of sci frames at offset
+                                                    "name"
+                }]
+            }]
+        }]
+    }
+
+
+    This function unpacks the above structure into a python program that will
+    produce a data reduction plan file.
+    '''
 
     
     for plan in plans:
@@ -230,19 +257,35 @@ def plan_to_python(plans):
         waves = []
         scis = []
         for date in plan["dates"]:  
-            for offset in date["offsets"]:
-                if offset is 'Unknown':
-                    print "??"
-                else:
-                    print date['offsets'][offset]
+            for observation in date["observations"]:
+                obs_wave = []
+                obs_sci = {}
+                offsets = observation["offsets"].keys()
 
 
+                if (len(offsets) == 1) and offsets[0] is 'Unknown':
+                    fnames = observation["offsets"]['Unknown']['fname']
+                    obs_sci["A"] = fnames[0:-1:2]
+                    obs_sci["B"] = fnames[1:-1:2]
+                    
+                for offset in offsets:
+                    fnames = observation["offsets"][offset]['fname']
+                    obs_sci[offset] = fnames
+                    obs_wave.extend(fnames)
+
+                scis.append(obs_sci)
+                waves.append(obs_wave)
 
 
-        res = {"uid": getpass.getuser(), "createdate": time.asctime(),
-                "maskname": plan["maskname"], "band": plan["filter"],
-                "flatnames": plan["flatlist"], "sciframes": '', "wavenames": '',
-                "wavecombine": '', 'num_dates': num_dates}
+        res = { "uid": getpass.getuser(), 
+                "createdate": time.asctime(),
+                "maskname": plan["maskname"], 
+                "band": plan["filter"],
+                "flatnames": plan["flatlist"], 
+                "sciframes": scis,
+                "wavenames": waves, 
+                "wavecombine": '', 
+                "num_dates": num_dates}
 
         print plan_file.format(**res)
         
@@ -312,8 +355,10 @@ def masks():
                 nums = [int(S[2]) for S in FRAMES]
                 observations = find_continuous(nums)
 
+
+                this_date["observations"] = []
                 for observation in observations:
-                    this_date["observation"] = observation
+                    this_observation = {"observation": observation}
                     offsets = {}
                     for frame in FRAMES:
                         path, fdate, number, yoffset, itime = frame
@@ -330,19 +375,20 @@ def masks():
                             offsets[yoffset]["itime"] = itime
                             offsets[yoffset]["start/stop"] = observation
 
-                        this_date["offsets"] = offsets
+                        this_observation["offsets"] = offsets
+                    this_date["observations"].append(this_observation)
 
-
-                for k,v in this_date["offsets"].iteritems():
-                    print("\tOffset {0:5s} has {1:3g} frames ({2}-{3}) "
+                for observation in this_date["observations"]:
+                    for k,v in observation["offsets"].iteritems():
+                        print("\tOffset {0:5s} has {1:3g} frames ({2}-{3}) "
                             "total exptime is {4:5g} s".format(k,
                                 len(v["fname"]), v["start/stop"][0],
                                 v["start/stop"][1], v["itime"]))
+
                 this_plan["dates"].append(this_date)
 
             plans.append(this_plan)
             plan_to_python(plans) 
-        wave
 
 
 
