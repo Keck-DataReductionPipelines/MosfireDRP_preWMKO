@@ -155,7 +155,8 @@ def imcombine(files, maskname, bandname, options):
         ''' Construct Header'''
         if header is None:
             header = thishdr
-        header.update("imfno%2.2i" % (i), fname, "-------------------")
+
+        header.update("imfno%2.2i" % (i), fname)
 
         for key in header.keys():
             val = header[key]
@@ -310,7 +311,7 @@ def fit_lambda_interactively(maskname, band, wavenames, options):
     
     try: 
         solutions = np.load(fn)
-        print "Soltuions loaded from: ", fn
+        print "Solutions loaded from: ", fn
     except IOError: solutions = None
 
     lamout = np.zeros(shape=(2048, 2048), dtype=np.float32)

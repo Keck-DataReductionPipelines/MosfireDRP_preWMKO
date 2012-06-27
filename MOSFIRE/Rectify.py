@@ -26,6 +26,8 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
     lname = Wavelength.filelist_to_wavename(wavenames, band_pass, maskname,
             options).rstrip(".fits")
 
+    suffix = lname.lstrip("wave_stack_%s_" % band_pass)
+
     orders = {"Y": 6, "J": 5, "H": 4, "K": 3}
     order = orders[band]
     d = 1e3/110.5 # Groove spacing in micron
@@ -41,8 +43,10 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
 
     shifts = []
     for pos in nod_posns:
-        II = IO.read_drpfits(maskname, "eps_{0}_{1}.fits".format(band, pos),
-                options)
+
+        II = IO.read_drpfits(maskname, "eps_{0}_{1}_{2}.fits".format(band,
+            suffix, pos), options)
+
         off = np.array((II[0]["decoff"], II[0]["raoff"]),dtype=np.float64)
         if II[0].has_key("yoffset"):
             off = -II[0]["yoffset"]
@@ -59,9 +63,10 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
         shifts.append(shift)
         print "Position {0} shift: {1:2.2f} as".format(pos, shift)
     
-    fname = "bsub_{0}_{1}.fits".format(maskname, band)
+    fname = "bsub_{0}_{1}_{2}.fits".format(maskname, band, suffix)
     EPS = IO.read_drpfits(maskname, fname, options)
-    fname = "bsub_ivar_{0}_{1}.fits".format(maskname, band)
+
+    fname = "bsub_ivar_{0}_{1}_{2}.fits".format(maskname, band, suffix)
     IVAR = IO.read_drpfits(maskname, fname, options)
 
     dats = EPS
@@ -118,21 +123,23 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
         snrs = np.append(snrs, img*np.sqrt(ivar), 0)
 
         IO.writefits(solution["eps_img"], maskname,
-                "eps_{0}_S{1:02g}.fits".format(band, i+1), options,
+                "eps_{0}_{1}_S{2:02g}.fits".format(band, suffix, i+1), options,
                 overwrite=True, header=header, lossy_compress=True)
 
         
         IO.writefits(solution["iv_img"], maskname,
-                "ivar_{0}_S{1:02g}.fits".format(band, i+1), options,
+                "ivar_{0}_{1}_S{2:02g}.fits".format(band, suffix, i+1), options,
                 overwrite=True, header=header, lossy_compress=True)
 
     header.update("OBJECT", "{0}/{1}".format(maskname, band))
 
-    IO.writefits(output, maskname, "eps_{0}_{1}.fits".format(maskname, band),
-            options, overwrite=True, header=header, lossy_compress=True)
+    IO.writefits(output, maskname, "eps_{0}_{1}_{2}.fits".format(maskname,
+        suffix, band), options, overwrite=True, header=header,
+        lossy_compress=True)
 
-    IO.writefits(snrs, maskname, "snrs_{0}_{1}.fits".format(maskname, band),
-            options, overwrite=True, header=header, lossy_compress=True)
+    IO.writefits(snrs, maskname, "snrs_{0}_{1}_{2}.fits".format(maskname,
+        suffix, band), options, overwrite=True, header=header,
+        lossy_compress=True)
 
 def r_interpol(ls, fs, ss, lfid, ffid):
     '''Interpolate the data ss(ls, fs) onto a grid that looks like 

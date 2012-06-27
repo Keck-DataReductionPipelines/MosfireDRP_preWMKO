@@ -151,18 +151,21 @@ def imcombine(files, maskname, options, flat, outname=None):
     if outname is not None:
         header.update("object", "{0}: electrons/s signal".format(maskname))
         header.update("bunit", "ELECTRONS")
-        IO.writefits(electrons, maskname, "eps_" + outname, options,
-                header=header, overwrite=True)
+
+        IO.writefits(electrons, maskname, "eps_%s" % (outname),
+                options, header=header, overwrite=True)
 
         header.update("object", "{0}: electrons^2 var".format(maskname))
         header.update("bunit", "ELECTRONS^2")
-        IO.writefits(var*itimes**2, maskname, "var_" + outname, options,
-                header=header, overwrite=True, lossy_compress=True)
+
+        IO.writefits(var*itimes**2, maskname, "var_%s" % (outname),
+                options, header=header, overwrite=True, lossy_compress=True)
 
         header.update("object", "{0}: itime s".format(maskname))
         header.update("bunit", "SECOND")
-        IO.writefits(np.float32(itimes), maskname, "itimes_" + outname, options,
-                header=header, overwrite=True, lossy_compress=True)
+
+        IO.writefits(np.float32(itimes), maskname, "itimes_%s" % (outname),
+                options, header=header, overwrite=True, lossy_compress=True)
 
     return header, el_per_sec, var, bs
 
@@ -195,6 +198,8 @@ def handle_background(As, Bs, wavenames, maskname, band_name, options):
     lamname = Wavelength.filelist_to_wavename(wavenames, band_name, maskname,
             options).rstrip(".fits")
     
+    suffix = lamname.lstrip("wave_stack_%s_" % band_name)
+    
     flatname = os.path.join(maskname, "pixelflat_2d_%s.fits" % band_name)
     hdr, flat = IO.read_drpfits(maskname, 
             "pixelflat_2d_%s.fits" % (band_name), options)
@@ -203,10 +208,10 @@ def handle_background(As, Bs, wavenames, maskname, band_name, options):
         raise Exception("Flat seems poorly behaved.")
 
     hdrA, ratesA, varA, bsA = imcombine(As, maskname, options, 
-            flat, outname="%s_A.fits" % band_name)
+            flat, outname="%s_%s_A.fits" % (band_name, suffix))
 
     hdrB, ratesB, varB, bsB = imcombine(Bs, maskname, options, 
-            flat, outname="%s_B.fits" % band_name)
+            flat, outname="%s_%s_B.fits" % (band_name, suffix))
 
     header = merge_headers(hdrA, hdrB)
 
@@ -237,23 +242,26 @@ def handle_background(As, Bs, wavenames, maskname, band_name, options):
     
     header.update("object", "{0}: electron/s".format(maskname))
     header.update("bunit", "ELECTRONS/S")
-    IO.writefits(data, maskname, "sub_%s_%s.fits" % (maskname, band),
-            options, header=header, overwrite=True, lossy_compress=True)
+
+    IO.writefits(data, maskname, "sub_%s_%s_%s.fits" % (maskname, band,
+        suffix), options, header=header, overwrite=True, lossy_compress=True)
 
     header.update("object", "{0}: electron/s".format(maskname))
     header.update("bunit", "ELECTRONS/S")
-    IO.writefits(sky_sub_out, maskname, "bsub_%s_%s.fits" % (maskname, band),
-            options, header=header, overwrite=True)
+    IO.writefits(sky_sub_out, maskname, "bsub_%s_%s_%s.fits" % (maskname, band,
+        suffix), options, header=header, overwrite=True)
 
     header.update("object", "{0}: (s/electron)^2".format(maskname))
     header.update("bunit", "(S/ELECTRONS)^2")
-    IO.writefits(ivar, maskname, "bsub_ivar_%s_%s.fits" % (maskname, band),
-            options, header=header, overwrite=True, lossy_compress=True)
+    IO.writefits(ivar, maskname, "bsub_ivar_%s_%s_%s.fits" % (maskname, band,
+        suffix), options, header=header, overwrite=True, lossy_compress=True)
 
     header.update("object", "{0}: electron/s".format(maskname))
     header.update("bunit", "ELECTRONS/S")
-    IO.writefits(sky_model_out, maskname, "bmod_%s_%s.fits" % (maskname, band),
-            options, header=header, overwrite=True, lossy_compress=True)
+
+    IO.writefits(sky_model_out, maskname, "bmod_%s_%s_%s.fits" % (maskname,
+        band, suffix), options, header=header, overwrite=True,
+        lossy_compress=True)
 
     '''Now create rectified solutions'''
     dlam = np.median(np.diff(lam[1][1024,:]))
@@ -304,18 +312,19 @@ def handle_background(As, Bs, wavenames, maskname, band_name, options):
 
 
     header.update("object", "rectified [eps]")
-    IO.writefits(rectified, maskname, "rectified_%s.fits" % band_name, options,
-            header=header, overwrite=True, lossy_compress=True)
+    IO.writefits(rectified, maskname, "rectified_%s_%s.fits" % (band_name,
+        suffix), options, header=header, overwrite=True, lossy_compress=True)
 
     header.update("object", "rectified ivar [1/eps^2]")
-    IO.writefits(rectified_ivar, maskname, "rectified_ivar_%s.fits" %
-            band_name, options, header=header, overwrite=True,
+    IO.writefits(rectified_ivar, maskname, "rectified_ivar_%s_%s.fits" %
+            (band_name, suffix), options, header=header, overwrite=True,
             lossy_compress=True)
 
     header.update("object", "rectified snr")
+
     IO.writefits(rectified*np.sqrt(rectified_ivar), maskname,
-            "rectified_sn_%s.fits" % band_name, options, header=header,
-            overwrite=True, lossy_compress=True)
+            "rectified_sn_%s%s.fits" % (band_name, suffix), options,
+            header=header, overwrite=True, lossy_compress=True)
 
 
 def background_subtract_helper(slitno):

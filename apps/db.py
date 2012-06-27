@@ -4,6 +4,7 @@ import time
 import getpass
 import os
 import pdb
+import pprint
 import sqlite3
 import sys
 import textwrap
@@ -72,14 +73,19 @@ def make():
             num = db.execute('select count(*) from files where path = "%s"' %
                     p).fetchall()
             if num[0][0] > 0: 
-                print("Skipping: " + p)
+                print("Skipping: " + p + " [already in db]")
                 continue
             print(p)
 
             hdr = IO.readheader(p)
 
-            fdate = file.split("_")[0][1:]
-            number = file.split("_")[1][:-5]
+            try:
+                fdate = file.split("_")[0][1:]
+                number = file.split("_")[1][:-5]
+            except:
+                print("Skipping: " + p)
+                continue
+
             insert_sql = "insert into files(path,fdate,number,"
             vals = "?,?,?,"
             values = [p, fdate, number]
@@ -188,7 +194,7 @@ plan_file ='''
 import os, time
 import MOSFIRE
 
-from MOSFIRE import Background, Detector Flats, IO, Options, Rectify
+from MOSFIRE import Background, Detector, Flats, IO, Options, Rectify
 from MOSFIRE import Wavelength
 
 import numpy as np, pylab as pl, pyfits as pf
@@ -199,8 +205,10 @@ maskname = '{maskname}'
 band = '{band}'
 num_dates = {num_dates}
 
-flatframes = {flatnames}
+flatnames = {flatnames}
+
 sciframes = {sciframes}
+
 wavenames = {wavenames}
 
 flatops = Options.flat
@@ -247,11 +255,13 @@ def plan_to_python(plans):
     for plan in plans:
         fname = plan_to_fname(plan)
         if os.path.exists(fname):
-            print("Plan '%s' already exists, remove the plan file " 
-                    "to overwrite" % fname)
+            #print("Plan '%s' already exists, remove the plan file " 
+                    #"to overwrite" % fname)
+            os.remove(fname)
+            #REMOVE COMMENT BELOW:
+            #continue
 
-            continue
-
+        outf = open(fname, "w")
         num_dates = len(plan["dates"])
 
         waves = []
@@ -277,6 +287,37 @@ def plan_to_python(plans):
                 waves.append(obs_wave)
 
 
+        wavecombine = ""
+        for i in xrange(len(waves)):
+            wavecombine = "Wavelength.imcombine(wavenames[%i], maskname, " \
+                "band, waveops)\n" % (i)
+            if i == 0:
+                wavecombine += "Wavelength.fit_lambda_interactively(" \
+                    "maskname, band, wavenames[0], waveops)\n"
+
+            wavecombine += "Wavelength.fit_lambda(" \
+                    "maskname, band, wavenames[%i], wavenames[0], " \
+                    " waveops)\n" % i
+
+            wavecombine += "Wavelength.apply_lambda_simple(maskname, band, " \
+                    " wavenames[%i], waveops)\n" % i
+
+            pos = scis[0].keys()
+            if len(pos) != 2:
+                print "Only handling A/B subtraction currently"
+                continue
+
+            wavecombine += \
+                    "Background.handle_background(sciframes[%i]['%s'], " \
+                    "sciframes[%i]['%s'], wavenames[%i], maskname, band, " \
+                    "waveops)\n" % (i, pos[0], i, pos[1], i)
+
+            wavecombine += \
+                    "Rectify.handle_rectification(maskname, ['A', 'B'], " \
+                    "wavenames[%i], band, waveops)" % (i)
+
+            wavecombine += "\n"
+
         res = { "uid": getpass.getuser(), 
                 "createdate": time.asctime(),
                 "maskname": plan["maskname"], 
@@ -284,10 +325,11 @@ def plan_to_python(plans):
                 "flatnames": plan["flatlist"], 
                 "sciframes": scis,
                 "wavenames": waves, 
-                "wavecombine": '', 
+                "wavecombine": wavecombine, 
                 "num_dates": num_dates}
 
-        print plan_file.format(**res)
+        outf.write(plan_file.format(**res))
+        outf.close()
         
 
 
@@ -337,7 +379,8 @@ def masks():
             print "%i flats on %i nights " % (len(FL), len(set([str(S[1]) for
                 S in FL])))
 
-            this_plan["flatlist"] = [str("%s_%4.4i" % (f[1],f[2])) for f in FL]
+            this_plan["flatlist"] = [str("m%s_%4.4i.fits" % (f[1],f[2])) for f
+                    in FL]
             
 
             DATES = sql_for_mask_filter_spectra(db, maskname, filter)
@@ -365,13 +408,18 @@ def masks():
                         if yoffset is None: yoffset = "Unknown"
 
                         if offsets.has_key(yoffset):
-                            offsets[yoffset]["fname"].append("%s_%4.4i" %
-                                    (fdate,number))
+
+                            offsets[yoffset]["fname"].append(
+                                    str("m%s_%4.4i.fits" % (fdate,number)))
+
                             offsets[yoffset]["itime"] += itime
                         else:
                             offsets[yoffset] = {}
-                            offsets[yoffset]["fname"] = ["%s_%4.4i" % (fdate,
-                                number)]
+
+                            offsets[yoffset]["fname"] = [
+                                    str("m%s_%4.4i.fits" %
+                                    (fdate, number))]
+
                             offsets[yoffset]["itime"] = itime
                             offsets[yoffset]["start/stop"] = observation
 
