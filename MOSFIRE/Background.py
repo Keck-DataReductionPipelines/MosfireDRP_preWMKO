@@ -264,7 +264,7 @@ def handle_background(As, Bs, wavenames, maskname, band_name, options):
         lossy_compress=True)
 
     '''Now create rectified solutions'''
-    dlam = np.median(np.diff(lam[1][1024,:]))
+    dlam = Wavelength.grating_results(band)
     hpp = np.array(Filters.hpp[band]) 
     ll_fid = np.arange(hpp[0], hpp[1], dlam)
     nspec = len(ll_fid)
@@ -323,7 +323,7 @@ def handle_background(As, Bs, wavenames, maskname, band_name, options):
     header.update("object", "rectified snr")
 
     IO.writefits(rectified*np.sqrt(rectified_ivar), maskname,
-            "rectified_sn_%s%s.fits" % (band_name, suffix), options,
+            "rectified_sn_%s_%s.fits" % (band_name, suffix), options,
             header=header, overwrite=True, lossy_compress=True)
 
 
