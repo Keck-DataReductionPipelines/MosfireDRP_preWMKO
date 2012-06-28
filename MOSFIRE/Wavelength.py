@@ -103,6 +103,18 @@ def filelist_to_wavename(files, band, maskname, options):
     return name
 
 
+def grating_results(band):
+    '''returns the dlambda/dpixel in angstrom for a band'''
+    orders = {"Y": 6, "J": 5, "H": 4, "K": 3}
+    order = orders[band]
+    d = 1e3/110.5 # Groove spacing in micron
+    pixelsize, focal_length = 18.0, 250e3 # micron
+    scale = pixelsize/focal_length
+    dlambda = scale * d / order * 10000
+
+    return dlambda
+
+
 def filelist_to_path(files, band, maskname, options):
     outf = os.path.join(options["outdir"], maskname,
             filelist_to_wavename(files, band, maskname, options))
@@ -507,9 +519,10 @@ def pick_linelist(header):
              13421.579])
 
     if band == 'K':
+        #drop: 19751.3895, 19736.4099
         lines = np.array([
         19518.4784 , 19593.2626 , 19618.5719 , 19642.4493 , 19678.046 ,
-        19701.6455 , 19736.4099 , 19751.3895 , 19771.9063 , 19839.7764 ,
+        19701.6455 , 19771.9063 , 19839.7764 ,
         20008.0235 , 20193.1799 , 20275.9409 , 20339.697 , 20412.7192 ,
          20499.237 , 20563.6072 , 20729.032 , 20860.2122 , 20909.5976 ,
         21176.5323 , 21249.5368 , 21279.1406 , 21507.1875 , 21537.4185 ,
