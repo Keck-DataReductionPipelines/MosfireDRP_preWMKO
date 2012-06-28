@@ -200,7 +200,7 @@ plan_file ='''
 import os, time
 import MOSFIRE
 
-from MOSFIRE import Background, Detector, Flats, IO, Options, Rectify
+from MOSFIRE import Background, Combine, Detector, Flats, IO, Options, Rectify
 from MOSFIRE import Wavelength
 
 import numpy as np, pylab as pl, pyfits as pf
@@ -223,6 +223,8 @@ waveops = Options.wavelength
 Flats.handle_flats(flatnames, maskname, band, flatops)
 
 {wavecombine}
+
+Combine.handle_combine(wavenames, maskname, band, waveops)
 
 
 '''
@@ -283,11 +285,12 @@ def plan_to_python(plans):
                     fnames = observation["offsets"]['Unknown']['fname']
                     obs_sci["A"] = fnames[0:-1:2]
                     obs_sci["B"] = fnames[1:-1:2]
-                    
-                for offset in offsets:
-                    fnames = observation["offsets"][offset]['fname']
-                    obs_sci[offset] = fnames
                     obs_wave.extend(fnames)
+                else:
+                    for offset in offsets:
+                        fnames = observation["offsets"][offset]['fname']
+                        obs_sci[offset] = fnames
+                        obs_wave.extend(fnames)
 
                 scis.append(obs_sci)
                 waves.append(obs_wave)
@@ -295,7 +298,7 @@ def plan_to_python(plans):
 
         wavecombine = ""
         for i in xrange(len(waves)):
-            wavecombine = "Wavelength.imcombine(wavenames[%i], maskname, " \
+            wavecombine += "Wavelength.imcombine(wavenames[%i], maskname, " \
                 "band, waveops)\n" % (i)
             if i == 0:
                 wavecombine += "Wavelength.fit_lambda_interactively(" \
@@ -308,7 +311,7 @@ def plan_to_python(plans):
             wavecombine += "Wavelength.apply_lambda_simple(maskname, band, " \
                     " wavenames[%i], waveops)\n" % i
 
-            pos = scis[0].keys()
+            pos = scis[i].keys()
             if len(pos) != 2:
                 print "Only handling A/B subtraction currently"
                 continue
@@ -323,6 +326,7 @@ def plan_to_python(plans):
                     "wavenames[%i], band, waveops)" % (i)
 
             wavecombine += "\n"
+
 
         res = { "uid": getpass.getuser(), 
                 "createdate": time.asctime(),
