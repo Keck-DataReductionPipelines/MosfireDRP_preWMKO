@@ -363,17 +363,21 @@ def imcombine(filelist, out, options, bpmask=None, reject="none", nlow=None,
     pars = iraf.imcombine.getParList()
     iraf.imcombine.unlearn()
 
+    path = os.path.join(options['outdir'] , "flatcombine.lst")
+    f = open(path, "w")
+    for file in filelist:
+        f.write(file + "\n")
+    f.close()
+
     s = ("%s," * len(filelist))[0:-1]
     s = s % tuple(filelist)
+
     if reject == 'minmax':
-        iraf.imcombine.nlow = 1
-        iraf.imcombine.nhigh = 1
-        t = iraf.imcombine(s, out, Stdin=filelist, Stdout=1,
-            reject=reject, masktype='badvalue', maskvalue=1, nlow=nlow,
-            nhigh=nhigh)
+        t = iraf.imcombine("@%s" % path, out, #Stdin=filelist, Stdout=1,
+            reject=reject, nlow=nlow, nhigh=nhigh)
     else:
         t = iraf.imcombine(s, out, Stdin=filelist, Stdout=1,
-            reject=reject, masktype='badvalue', maskvalue=1)
+            reject=reject)
 
     iraf.imcombine.setParList(pars)
 
