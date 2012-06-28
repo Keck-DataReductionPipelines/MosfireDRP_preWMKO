@@ -28,12 +28,7 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
 
     suffix = lname.lstrip("wave_stack_%s_" % band_pass)
 
-    orders = {"Y": 6, "J": 5, "H": 4, "K": 3}
-    order = orders[band]
-    d = 1e3/110.5 # Groove spacing in micron
-    pixelsize, focal_length = 18.0, 250e3 # micron
-    scale = pixelsize/focal_length
-    dlambda = scale * d / order * 10000
+    dlambda = Wavelength.grating_results(band)
 
     hpp = Filters.hpp[band]
     fidl = np.arange(hpp[0], hpp[1], dlambda)
