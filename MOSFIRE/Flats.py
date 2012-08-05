@@ -523,6 +523,7 @@ def find_and_fit_edges(data, header, bs, options):
             xposs_bot_missing = []
             yposs_bot = [4.25]
             botfun = np.poly1d(yposs_bot)
+            ok = np.where((xposs_bot > hpps[0]) & (xposs_bot < hpps[1]))
         else:
             (xposs_top_next, xposs_top_next_missing, yposs_top_next, xposs_bot,
                 xposs_bot_missing, yposs_bot, scatter_bot_this) = find_edge_pair(
