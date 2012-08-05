@@ -211,9 +211,7 @@ class Barset:
         def is_alignment_slit(slit):
             return (np.float(slit["Target_Priority"]) < 0)
 
-        # if a long slit, convert the mechanical slit list into a science
-        # slit list. The code in the following if statement is essentially a
-        # HACK to populate a field.
+        # If len(ssl) == 0 then the header is for a long slit
         if len(ssl) == 0:
             self.long_slit = True
 
@@ -225,21 +223,14 @@ class Barset:
             for mech_slit in msl:
                 mech_slit["Target_in_Slit"] = "long"
 
-            if (stop-start) == numslits:
-                self.ssl = np.array([("long", (stop-start)*7.6)],
-                    dtype=[("Target_Name", "S10"), ("Slit_length", "S10")])
-                self.scislit_to_slit = [ np.arange(start,stop) ]
-            else:
-                self.ssl = np.array([
-                    ("none", start * 7.6),
-                    ("long", (stop-start)*7.6),
-                    ("none", (numslits-stop)*7.6)],
-                    dtype=[("Target_Name", "S10"), ("Slit_length", "S10")])
-
-                self.scislit_to_slit = [ np.arange(1,start),
-                    np.arange(start,stop),
-                    np.arange(stop, numslits+1) ]
-
+            self.ssl = np.array([("1", "??", "??", "??", "??", "??", "??", msl[0]['Slit_width'],
+                (stop-start+1)*7.6, "0", "long", "0")],
+                dtype= [ ('Slit_Number', '|S2'), 
+                ('Slit_RA_Hours', '|S2'), ('Slit_RA_Minutes', '|S2'), ('Slit_RA_Seconds', '|S5'),
+                ('Slit_Dec_Degrees', '|S3'), ('Slit_Dec_Minutes', '|S2'), ('Slit_Dec_Seconds', '|S5'), 
+                ('Slit_width', '|S5'), ('Slit_length', '|S5'), ('Target_to_center_of_slit_distance', '|S5'), 
+                ('Target_Name', '|S80'), ('Target_Priority', '|S1')])
+            self.scislit_to_slit = [ np.arange(start,stop) ]
             ssl = None
 
         # Create a map between scislit number and mechanical slit
