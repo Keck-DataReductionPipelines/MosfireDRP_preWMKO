@@ -125,19 +125,19 @@ def imcombine(files, maskname, bandname, options):
     
     Flat = IO.load_flat(maskname, bandname, options)
     flat = Flat[1]
-    flat = flat.filled(np.nan)
+    flat = flat.filled(1.0)
 
     ADUs = np.zeros((len(files), 2048, 2048))
     prevssl = None
     prevmn = None
     patternid = None
-    maskname = None
     header = None
 
     for i in xrange(len(files)):
         fname = files[i]
         thishdr, data, bs = IO.readmosfits(fname, options)
-        ADUs[i,:,:] = data.filled(np.nan)/flat
+        #ADUs[i,:,:] = data.filled(0)/flat
+        ADUs[i,:,:] = data.filled(0)
 
         if thishdr["aborted"]:
             raise Exception("Img '%s' was aborted and should not be used" %
@@ -152,11 +152,8 @@ def imcombine(files, maskname, bandname, options):
 
         if maskname is not None:
             if maskname != thishdr["maskname"]:
-                raise Exception("The stack should be of CSU mask '%s' frames "
-                        "only but contains a frame of '%s'." % (maskname,
-                        thishdr["maskname"]))
-
-        maskname = thishdr["maskname"]
+                print("Maskname specified ({0}) does not match header maskname "
+                    " ({1}).".format(maskname, thishdr["maskname"]))
 
         if thishdr["BUNIT"] != "ADU per coadd":
             raise Exception("The units of '%s' are not in ADU per coadd and "
@@ -182,7 +179,7 @@ def imcombine(files, maskname, bandname, options):
 
         if maskname is not None:
             if thishdr["maskname"] != maskname:
-                raise Exception("File %s uses mask '%s' but the stack is of '%s'" %
+                print("File %s uses mask '%s' but the stack is of '%s'" %
                     (fname, thishdr["maskname"], maskname))
 
         for key in header.keys():
@@ -197,7 +194,7 @@ def imcombine(files, maskname, bandname, options):
 
         if maskname is not None:
             if thishdr["maskname"] != maskname:
-                raise Exception("File %s uses mask '%s' but the stack is of '%s'" %
+                print("File %s uses mask '%s' but the stack is of '%s'" %
                     (fname, thishdr["maskname"], maskname))
 
         ''' Error checking is complete'''
@@ -210,20 +207,12 @@ def imcombine(files, maskname, bandname, options):
             header=header)
 
     
-def handle_lambdas(filelist, maskname, options):
-    """handle_lambdas is the entry point to the Wavelengths module. """
-    
-    path = os.path.join(options["outdir"], maskname)
-    if not os.path.exists(path):
-        raise Exception("Output directory '%s' does not exist. This " 
-                "directory should exist." % path)
-
-    for fname in filelist:
-        mfits = IO.readmosfits(fname, options)
-        fit_lambda(mfits, fname, maskname, options)
-        apply_lambda(mfits, fname, maskname, options)
-
-def fit_lambda(maskname, bandname, wavenames, guessnames, options):
+def fit_lambda(maskname, 
+        bandname, 
+        wavenames, 
+        guessnames, 
+        options,
+        longslit=None):
     """Fit the two-dimensional wavelength solution to each science slit"""
     global bs, data, lamout, center_solutions, edgedata
     np.seterr(all="ignore")
@@ -247,15 +236,31 @@ def fit_lambda(maskname, bandname, wavenames, guessnames, options):
     fnum = guessname
     center_solutions = IO.load_lambdacenter(fnum, maskname, options)
     edgedata, metadata = IO.load_edges(maskname, bandname, options)
+
+    if longslit is not None:
+        ''' If a longslit, fool extraction range '''
+
+        bot,top = longslit['yrange']
+        edgedata[0]["xposs_bot"] = [1024]
+        edgedata[0]["yposs_bot"] = [bot]
+        edgedata[0]["bottom"] = np.poly1d([bot])
+
+        edgedata[0]["xposs_top"] = [1024]
+        edgedata[0]["yposs_top"] = [top]
+        edgedata[0]["top"] = np.poly1d([top])
+
     
     solutions = []
     lamout = np.zeros(shape=(2048, 2048), dtype=np.float32)
 
     tock = time.time()
 
-    p = Pool()
-    solutions = p.map(fit_lambda_helper, range(len(bs.ssl)))
-    p.close()
+    if False:
+        p = Pool()
+        solutions = p.map(fit_lambda_helper, range(len(bs.ssl)))
+        p.close()
+    else:
+        solutions = map(fit_lambda_helper, range(len(bs.ssl)))
 
     tick = time.time()
 
@@ -289,7 +294,6 @@ def fit_lambda_helper(slitno):
 
     print("* Fitting Slit %s from %i to %i" % (bs.ssl[slitno]["Target_Name"],
         bottom, top))
-
 
     sol_2d = fit_outwards_refit(data, bs, sol_1d, linelist, Options.wavelength,
             start, bottom, top, slitno)
@@ -343,7 +347,8 @@ def fit_lambda_interactively(maskname, band, wavenames, options):
     np.save(outfilename, np.array(II.solutions))
 
 
-def apply_lambda_simple(maskname, bandname, wavenames, options):
+def apply_lambda_simple(maskname, bandname, wavenames, options,
+        longslit=None):
     """Convert solutions into final output products. This is the function that
     should be used for now."""
 
@@ -359,6 +364,21 @@ def apply_lambda_simple(maskname, bandname, wavenames, options):
     path = os.path.join(options["outdir"], maskname)
     slitedges, edgeinfo = IO.load_edges(maskname, bandname, options)
     Ld = IO.load_lambdadata(wavename, maskname, bandname, options)
+
+    if longslit is not None:
+        ''' If a longslit, fool extraction range '''
+
+        bot,top = longslit['yrange']
+        slitedges[0]["xposs_bot"] = [1024]
+        slitedges[0]["yposs_bot"] = [bot]
+        slitedges[0]["bottom"] = np.poly1d([bot])
+
+        slitedges[0]["xposs_top"] = [1024]
+        slitedges[0]["yposs_top"] = [top]
+        slitedges[0]["top"] = np.poly1d([top])
+
+        pdb.set_trace()
+
 
     bmap = {"Y": 6, "J": 5, "H": 4, "K": 3}
     order = bmap[bandname]
@@ -688,9 +708,7 @@ def find_known_lines(lines, ll, spec, options):
             sxs.append(inf)
             continue
 
-
         istd = 1/np.sqrt(np.abs(spec[roi].data))
-        istd[spec[roi].mask] = 0
 
         lsf = Fit.mpfitpeak(pix[roi], spec[roi].data,
                 error=istd)
@@ -966,8 +984,8 @@ class InteractiveSolution:
         else:
             name = self.bs.ssl[self.slitno-1]["Target_Name"]
 
-            pl.title(u"[%i,%s] Best fit STD: %0.2f $\AA$, MAD: %0.2f $\AA$: " \
-                     % (self.slitno, name, self.STD, self.MAD))
+            pl.title(u"[%i,%s, p%i] Best fit STD: %0.2f $\AA$, MAD: %0.2f $\AA$: " \
+                     % (self.slitno, name, self.extract_pos,self.STD, self.MAD))
 
         pl.ioff()
         self.draw_vertical_line_marks()
@@ -1289,47 +1307,12 @@ def construct_model(slitno):
                 np.zeros(len(positions[ok])), "positions": positions[ok]}
 
 
-def fit_outwards_xcor(data, bs, sol_1d, lines, options, start, bottom, top,
-        slitno):
-
-    lags = np.arange(-10,10)
-    pix = np.arange(2048.)
-    linelist = lines
-
-
-    def sweep(positions):
-        
-        DXS = []
-        SIGMAS = []
-        for position in positions:
-            yhere = position
-            print yhere
-
-            cfit = sol_1d[1]
-
-            spec_here = np.ma.median(data[yhere-1:yhere+1, :], axis=0)
-            spec_here = spec_here.filled(0)
-            shift = Fit.xcor_peak(spec_here, spec0, lags)
-            ll_here = CV.chebval(pix - shift, cfit)
-
-            [dxs, sigmas] = xcor_known_lines(linelist,
-                ll_here, spec_here, spec0, options)
-            
-            DXS.append(dxs)
-            SIGMAS.append(sigmas)
-
-    positions = np.arange(bottom, top, 1)
-    spec0 = np.ma.median(data[start-1:start+1, :], axis=0)
-    spec0 = spec0.filled(0)
-    params = sweep(positions)
-
-    return params
 #
 # Two dimensional wavelength fitting
 #
 def fit_outwards_refit(data, bs, sol_1d, lines, options, start, bottom, top,
         slitno):
-    lags = np.arange(-8,8)
+    lags = np.arange(-25,25)
     pix = np.arange(2048.)
     linelist = lines
 
@@ -1337,7 +1320,7 @@ def fit_outwards_refit(data, bs, sol_1d, lines, options, start, bottom, top,
         """Return chebyshev fit to a pixel column """
 
         cfit = sol_1d[1]
-        spec_here = np.ma.median(data[yhere-1:yhere+1, :], axis=0)
+        spec_here = np.ma.median(data[yhere-2:yhere+2, :], axis=0)
         shift = Fit.xcor_peak(spec_here, spec0, lags)
         ll_here = CV.chebval(pix - shift, cfit)
         
@@ -1347,8 +1330,10 @@ def fit_outwards_refit(data, bs, sol_1d, lines, options, start, bottom, top,
         [delt, cfit, lines] = fit_chebyshev_to_lines(xs, sxs,
                 linelist, options)
 
-        print "resid ang S%2.2i @ p%4.0i: %1.2f rms %1.2f mad" % \
-                (slitno+1, yhere, np.std(delt), np.median(np.abs(delt)))
+
+        if np.std(delt) < .01: pdb.set_trace()
+        print "resid ang S%2.2i @ p%4.0i: %1.2f rms %1.2f mad [shift%2.0f]" % \
+                (slitno+1, yhere, np.std(delt), np.median(np.abs(delt)), shift)
 
         return cfit, delt
 
@@ -1377,6 +1362,8 @@ def fit_outwards_refit(data, bs, sol_1d, lines, options, start, bottom, top,
 
     pix = np.arange(2048.)
 
+    positions = np.concatenate((np.arange(start, top, 1), 
+        np.arange(start-1,bottom,-1)))
     positions = np.arange(bottom, top, 1)
     spec0 = np.ma.median(data[start-1:start+1, :], axis=0)
     params = sweep(positions)
