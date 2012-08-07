@@ -6,6 +6,7 @@ import getpass
 import os
 import pdb
 import pprint
+import sets
 import sqlite3
 import sys
 import textwrap
@@ -342,6 +343,60 @@ def plan_to_python(plans):
         outf.close()
         
 
+def longslits():
+    """List all longslits"""
+
+    if len(sys.argv) == 4:
+        db = load_db()
+        fdate = int(sys.argv[3])
+
+        cur = db.execute("""
+            select object, path, fdate, number, filter, yoffset, maskname, 
+                gratmode, itime, el
+            from files
+            where substr(maskname,0,8) == 'LONGSLIT' and fdate = "{0}"
+            order by number
+            """.format(fdate, fdate))
+
+        ress = cur.fetchall()
+        if len(ress) == 0:
+            raise("No such objects")
+
+        print("{0}".format(ress[0][-1]))
+        print("{0}".format(object))
+        print("{0:6s} {1:6s} {2:3s} {3:6s} {4:4s} {5:15s}".format("type", "date", "num", 
+            "band", "offset", "object"))
+        objs = {}
+        for res in ress:
+            obj, path, fdate, number, filter, yoffset, maskname, gratmode, exptime, el = res
+            guess = '?'
+            if gratmode == 'imaging':
+                guess = "align"
+            elif filter == 'Dark':
+                guess = 'dark'
+            elif filter == 'Moving':
+                guess = 'bad'
+            elif len(obj) > 4 and obj[0:4] == 'Flat':
+                guess = 'flat'
+                key = "flat_{0}".format(filter)
+            else:
+                guess = "sci"
+                key = "{0}_{1}".format(obj,filter)
+
+            if guess == 'flat' or guess == 'sci':
+                if objs.has_key(key):
+                    objs[key].append(path)
+                else:
+                    objs[key] = [path]
+
+            print("{0:6s} {1:6s} {2:3g} {3:6s} {4:5.1f} {5:15s}".format(guess, res[2], 
+                res[3], res[4], float(res[5]), obj))
+
+        print("")
+        print("--- SUMMARY ---")
+        for key, value in objs.iteritems():
+            print("{0:10s}: {1:5g} frames".format(key, len(value)))
+    
 
 def masks():
     """List all slit masks"""
@@ -453,7 +508,7 @@ def masks():
 
                 
 
-commands = [make, masks]
+commands = [make, masks, longslits]
 def usage():
     print """
 Commands: """
@@ -474,6 +529,8 @@ if __name__ == '__main__':
         make()
     if sys.argv[2] == 'masks':
         masks()
+    if sys.argv[2] == 'longslits':
+        longslits()
 
     else:
         usage()
