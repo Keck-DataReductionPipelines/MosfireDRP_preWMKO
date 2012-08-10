@@ -200,6 +200,7 @@ def imcombine(files, maskname, bandname, options):
         ''' Error checking is complete'''
         print "%s %s/%s" % (fname, maskname, thishdr['filter'])
 
+    header.update("frameid", "median")
     electrons = np.median(np.array(ADUs) * Detector.gain, axis=0)
 
     wavename = filelist_to_wavename(files, bandname, maskname, options)
