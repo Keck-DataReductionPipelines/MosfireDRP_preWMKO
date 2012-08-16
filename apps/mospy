@@ -23,6 +23,9 @@ else
 		case "what":
 			\python ${MOSPATH}/apps/what.py $*
 			breaksw
+        case "audit":
+            \python ${MOSPATH}/apps/audit.py $*
+            breaksw
         case "db":
             \python ${MOSPATH}/apps/db.py $*
             breaksw
