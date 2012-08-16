@@ -359,8 +359,11 @@ def longslits():
             """.format(fdate, fdate))
 
         ress = cur.fetchall()
+        print ress
+
         if len(ress) == 0:
-            raise("No such objects")
+            raise Exception("No such objects")
+            return
 
         print("{0}".format(ress[0][-1]))
         print("{0}".format(object))
