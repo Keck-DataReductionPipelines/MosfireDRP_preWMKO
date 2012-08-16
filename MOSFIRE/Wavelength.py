@@ -51,6 +51,7 @@ npk   May  4 2011
 import logging
 from multiprocessing import Pool
 import os
+import itertools
 import time
 
 import numpy as np
@@ -58,6 +59,8 @@ import pyfits as pf
 import pylab as pl
 
 from scipy.interpolate import interp1d
+from scipy import signal 
+from scipy import optimize
 from matplotlib.widgets import Button
 from numpy.polynomial import chebyshev as CV
 
@@ -348,8 +351,63 @@ def fit_lambda_interactively(maskname, band, wavenames, options):
     np.save(outfilename, np.array(II.solutions))
 
 
+def polyfit2d(f, x, y, unc=1.0, orderx=1,ordery=1):
+    """Fit a polynomial surface to 2D data, assuming the axes are
+    independent of each other.
+
+    Evaluate the fit via:
+      f = np.polyval(polyy, y) + np.polyval(polyx, x)
+
+    Usage:
+      polyx, polyy, cov = polyfit2d(f, x, y, unc=None, bad=None)
+
+    Input:
+      f = an array of values to fit
+      x, y = the coordinates for each value of v
+
+    Optional inputs:
+      unc = the uncertainties, either one for each value of v or a
+            single value for all values; if set to None, then the
+            stdev of v is used (an inaccurate measurement of the
+            uncertainty, to be sure)
+      orderx = the polynomial order (for one dimension) of the fitting
+              function
+      ordery = same as above
+              
+
+    Return value:
+     polyx, polyy = the polynomial coefficients (same format as
+                    polyfit)
+     cov = the covariance matrix
+
+    v1.0.0 Written by Michael S. Kelley, UMD, Mar 2009
+    modified 13 aug 2012 by NPK, Caltech
+    """
+
+    # the fitting function
+    def chi(p, y, x, f, unc, orderx, ordery):
+        cy = p[:1+ordery]
+        cx = p[1+orderx:]
+        model = np.zeros(f.shape) + np.polyval(cy, y) + np.polyval(cx, x)
+        chi = (f - model) / unc
+        return chi
+
+    # run the fit
+    lsq = optimize.leastsq
+    guess = np.zeros((orderx + 1)*(ordery+1))
+    result = lsq(chi, guess, args=(y, x, f, unc, orderx, ordery), 
+        full_output=True)
+    fit = result[0]
+    cov = result[1]
+    cy = fit[:1+ordery]
+    cx = fit[1+orderx:]
+
+    return (cx, cy, cov)
+
+
+
 def apply_lambda_simple(maskname, bandname, wavenames, options,
-        longslit=None):
+        longslit=None, smooth=False):
     """Convert solutions into final output products. This is the function that
     should be used for now."""
 
@@ -378,8 +436,6 @@ def apply_lambda_simple(maskname, bandname, wavenames, options,
         slitedges[0]["yposs_top"] = [top]
         slitedges[0]["top"] = np.poly1d([top])
 
-        pdb.set_trace()
-
 
     bmap = {"Y": 6, "J": 5, "H": 4, "K": 3}
     order = bmap[bandname]
@@ -390,22 +446,54 @@ def apply_lambda_simple(maskname, bandname, wavenames, options,
     lams = np.zeros((2048, 2048), dtype=np.float32)
     sigs = np.zeros((2048, 2048), dtype=np.float)
     xx = np.arange(2048)
+    xsamp = np.array(np.linspace(0, 2047, 10), dtype=np.int)
     
     xypairs = []
+
+    xs = []
+    ys = []
+    zs = []
     for i in xrange(len(Ld)):
-        lp = Ld[i]["2d"]["positions"]
+        lp = Ld[i]["2d"]["positions"].astype(np.int)
         lc = Ld[i]["2d"]["coeffs"]
         lm = Ld[i]["2d"]["lambdaMAD"]
-        print "2d wavelengths: Slit %i/%i" % (i, len(Ld))
+        print "2d wavelengths: Slit %i/%i" % (i+1, len(Ld))
 
         prev = 0
         for j in xrange(len(lp)):
             sigs[lp[j],:] = lm[j]
-            if lm[j] < 0.1:
+
+            if lm[j] < 0.18:
                 prev = lams[lp[j],:] = CV.chebval(xx, lc[j])
                 prevcoeff = lc[j]
+                xs.extend(np.ones(len(xsamp)) * lp[j])
+                ys.extend(xsamp)
+                zs.extend(lams[lp[j], xsamp])
             else:
                 lams[lp[j],:] = prev
+
+        if smooth == True:
+            xr = np.arange(len(lp))
+
+            for i in xr:
+                ff = np.poly1d(Fit.polyfit_clip(xr, lams[lp, i], 3))
+                d = lams[lp,i] - ff(xr)
+                lams[lp, i] = ff(xr)
+
+
+        if False == True:
+            xs,ys,zs = map(np.array, [xs,ys,zs])
+            print "smoothing"
+
+            polyx, polyy, cov = polyfit2d(np.array(zs,dtype=np.double),
+                    np.array(ys, dtype=np.double),
+                    np.array(xs, dtype=np.double),
+                    orderx=3,ordery=3)
+
+            xx, yy = np.array(np.meshgrid(np.arange(2048), lp),
+                    dtype=np.double)
+
+            M = lams[lp,:] = np.polyval(polyy, yy) + np.polyval(polyx, xx)
 
 
     print("{0}: writing lambda".format(maskname))
@@ -427,11 +515,9 @@ def apply_lambda_simple(maskname, bandname, wavenames, options,
 
     print("{0}: rectifying".format(maskname))
     dlam = np.ma.median(np.diff(lams[1024,:]))
-    print dlam
     hpp = Filters.hpp[bandname] 
     ll_fid = np.arange(hpp[0], hpp[1], dlam)
     nspec = len(ll_fid)
-    print nspec
 
     rectified = np.zeros((2048, nspec), dtype=np.float32)
 
@@ -443,8 +529,31 @@ def apply_lambda_simple(maskname, bandname, wavenames, options,
         rectified[i,:] = f(ll_fid)
 
 
+    header.update("object", "Rectified wave FIXME")
+    header.update("wat0_001", "system=world")
+    header.update("wat1_001", "wtype=linear")
+    header.update("wat2_001", "wtype=linear")
+    header.update("dispaxis", 1)
+    header.update("dclog1", "Transform")
+    header.update("dc-flag", 0)
+    header.update("ctype1", "AWAV")
+    header.update("cunit1", "Angstrom")
+    header.update("crval1", ll_fid[0])
+    header.update("crval2", 0)
+    header.update("crpix1", 1)
+    header.update("crpix2", 1)
+    header.update("cdelt1", 1)
+    header.update("cdelt2", 1)
+    header.update("cname1", "angstrom")
+    header.update("cname2", "pixel")
+    header.update("cd1_1", dlam)
+    header.update("cd1_2", 0)
+    header.update("cd2_1", 0)
+    header.update("cd2_2", 1)
+
+
     IO.writefits(rectified, maskname, "rectified_{0}.fits".format(wavename), 
-            options, overwrite=True, lossy_compress=True)
+            options, overwrite=True, lossy_compress=True, header=header)
     
 #
 # Fitting Methods
@@ -698,7 +807,7 @@ def find_known_lines(lines, ll, spec, options):
     sxs = []
     sigmas = []
 
-    pix = np.arange(2048.)
+    pix = np.arange(len(spec))
 
     for lam in lines:
         f = options["fractional-wavelength-search"]
