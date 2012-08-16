@@ -67,7 +67,7 @@ def audit(filename):
     pl.ylim([0, data.shape[0]])
     pl.xlabel("Spectral pixel")
     pl.ylabel("Spatial pixel")
-    pl.title("Night sky line deviation from solution")
+    pl.title("Night sky line deviation from solution [pixel]")
     pl.colorbar()
 
     pl.savefig("audit.pdf")
