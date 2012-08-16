@@ -259,7 +259,7 @@ def fit_lambda(maskname,
 
     tock = time.time()
 
-    if False:
+    if True:
         p = Pool()
         solutions = p.map(fit_lambda_helper, range(len(bs.ssl)))
         p.close()
@@ -475,7 +475,7 @@ def apply_lambda_simple(maskname, bandname, wavenames, options,
         if smooth == True:
             xr = np.arange(len(lp))
 
-            for i in xr:
+            for i in xrange(lams.shape[1]):
                 ff = np.poly1d(Fit.polyfit_clip(xr, lams[lp, i], 3))
                 d = lams[lp,i] - ff(xr)
                 lams[lp, i] = ff(xr)
