@@ -347,6 +347,17 @@ def floatcompress(data, ndig=14):
     out[wzer] = 0.0
     return out
 
+def imarith(operand1, op, operand2, result):
+    from pyraf import iraf
+    iraf.images()
+
+    pars = iraf.imarith.getParList()
+    iraf.imcombine.unlearn()
+
+    iraf.imarith(operand1=operand1, op=op, operand2=operand2, result=result)
+
+    iraf.imarith.setParList(pars)
+
 def imcombine(filelist, out, options, bpmask=None, reject="none", nlow=None,
         nhigh=None):
 
