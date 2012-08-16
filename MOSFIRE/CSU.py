@@ -218,7 +218,7 @@ class Barset:
             start = np.int(msl[0]["Slit_Number"])
             stop = np.int(msl[-1]["Slit_Number"])
 
-            print "Long slit has %i elements" % (stop-start)
+            #print "Long slit has %i elements" % (stop-start)
 
             for mech_slit in msl:
                 mech_slit["Target_in_Slit"] = "long"
