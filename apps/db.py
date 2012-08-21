@@ -451,7 +451,7 @@ def longslits():
     res = {
         "uid": getpass.getuser(), 
         "createdate": time.asctime(),
-        'maskname': fdate,
+        'maskname': "longslit_%s" % (fdate),
         'band' : 'fixme',
         'flatnames': "['m%s_%%4.4i.fits' %% i for i in range(a,b)]" % (fdate),
         'longnames': "['m%s_%%4.4i.fits' %% i for i in range(c,d)]" % (fdate),
