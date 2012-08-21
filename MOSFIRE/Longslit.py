@@ -129,6 +129,11 @@ def go(maskname,
         rectify(path, dname, lamdat, A, B, maskname, band, wavoptions,
                 longoptions)
         print dname
+
+    path, dname = imdiff(B, A, maskname, band, wavoptions)
+    print dname
+    rectify(path, dname, lamdat, B, A, maskname, band, wavoptions,
+            longoptions)
     
     fname = os.path.join(path, wavename + ".fits")
     B = IO.readfits(fname)
@@ -138,4 +143,8 @@ def go(maskname,
         imdiff(A, B, maskname, band, wavoptions)
         rectify(path, dname, lamdat, A, B, maskname, band, wavoptions,
             longoptions)
+    imdiff(B, A, maskname, band, wavoptions)
+    rectify(path, dname, lamdat, B, A, maskname, band, wavoptions,
+            longoptions)
+
 
