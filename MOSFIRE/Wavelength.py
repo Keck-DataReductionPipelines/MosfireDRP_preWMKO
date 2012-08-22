@@ -407,7 +407,7 @@ def polyfit2d(f, x, y, unc=1.0, orderx=1,ordery=1):
 
 
 def apply_lambda_simple(maskname, bandname, wavenames, options,
-        longslit=None, smooth=False):
+        longslit=None, smooth=True):
     """Convert solutions into final output products. This is the function that
     should be used for now."""
 
@@ -1441,7 +1441,7 @@ def fit_outwards_refit(data, bs, sol_1d, lines, options, start, bottom, top,
                 linelist, options)
 
 
-        if np.std(delt) < .01: pdb.set_trace()
+        #if np.std(delt) < .01: pdb.set_trace()
         print "resid ang S%2.2i @ p%4.0i: %1.2f rms %1.2f mad [shift%2.0f]" % \
                 (slitno+1, yhere, np.std(delt), np.median(np.abs(delt)), shift)
 
