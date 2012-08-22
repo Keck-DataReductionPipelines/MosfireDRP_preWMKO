@@ -44,7 +44,7 @@ def imcombine(files, maskname, options, flat, outname=None):
         fname = files[i]
         thishdr, data, bs = IO.readmosfits(fname, options)
         itimes[i,:,:] *= thishdr["truitime"]
-        ADUs[i,:,:] = data.filled(0)
+        ADUs[i,:,:] = data.filled(0.0) 
 
         ''' Construct Header'''
         if header is None:
@@ -120,15 +120,16 @@ def imcombine(files, maskname, options, flat, outname=None):
 
     if len(files) > 2:
         # TODO: Improve cosmic ray rejection code
+        print "Min/max CRR"
         srt = np.argsort(el_per_sec,axis=0)
         shp = el_per_sec.shape
         sti = np.ogrid[0:shp[0], 0:shp[1], 0:shp[2]]
 
         electrons = electrons[srt, sti[1], sti[2]]
-        electrons = np.sum(electrons[0:-1,:,:], axis=0)
-
         itimes = itimes[srt, sti[1], sti[2]]
-        itimes = np.sum(itimes[0:-1,:,:], axis=0)
+
+        electrons = np.sum(electrons[1:-1,:,:], axis=0)
+        itimes = np.sum(itimes[1:-1,:,:], axis=0)
 
     else:
         electrons = np.sum(electrons, axis=0)
@@ -400,8 +401,8 @@ def background_subtract_helper(slitno):
     ss = (slit[train_roi] / pp(Y[train_roi])).flatten()
     ss = ss[sort]
 
-    knotstart = max(hpps[0], min(ls[OK])) + 8
-    knotend = min(hpps[1], max(ls[OK])) - 8
+    knotstart = max(hpps[0], min(ls[OK])) + 5
+    knotend = min(hpps[1], max(ls[OK])) - 5
 
 
     for i in range(3):
@@ -428,8 +429,9 @@ def background_subtract_helper(slitno):
         output = slit - model
 
         std = np.abs(output)/(np.sqrt(np.abs(model)+1))
-        tOK = (std[train_roi] < 30).flatten() & \
-                np.isfinite(std[train_roi]).flatten()
+
+        tOK = (std[train_roi] < 10).flatten() & \
+                np.isfinite(std[train_roi]).flatten()  
         OK = OK & tOK[sort]
 
     return {"ok": True, "slitno": slitno, "bottom": bottom, "top": top,
