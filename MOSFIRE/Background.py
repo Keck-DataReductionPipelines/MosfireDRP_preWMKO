@@ -353,8 +353,8 @@ def background_subtract_helper(slitno):
     tick = time.time()
 
     # 1
-    top = np.int(edges[slitno]["top"](1024))  - 5
-    bottom = np.int(edges[slitno]["bottom"](1024)) + 5
+    top = np.int(edges[slitno]["top"](1024))  
+    bottom = np.int(edges[slitno]["bottom"](1024)) 
     print "Background subtracting slit %i [%i,%i]" % (slitno, top, bottom)
 
     pix = np.arange(2048)
