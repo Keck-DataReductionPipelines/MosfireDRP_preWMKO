@@ -70,15 +70,16 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
 
     tock = time.time()
     sols = range(len(edges)-1,-1,-1)
+
     p = Pool()
     solutions = p.map(handle_rectification_helper, sols)
     p.close()
     tick = time.time()
     print "-----> Mask took %i. Writing to disk." % (tick-tock)
 
-
     output = np.zeros((1, len(fidl)))
     snrs = np.zeros((1, len(fidl)))
+    fracs = np.zeros((1, len(fidl)))
     for i in xrange(len(solutions)):
         solution = solutions[i]
         header = EPS[0].copy()
@@ -110,9 +111,8 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
         header.update("cd2_2", 1)
 
 
-        # TODO: 15:-1 is a hack. there is a deeper problem that needs fixing.
-        img = solution["eps_img"][15:-1]
-        ivar = solution["iv_img"][15:-1]
+        img = solution["eps_img"]
+        ivar = solution["iv_img"]
 
         output  = np.append(output, img, 0)
         snrs = np.append(snrs, img*np.sqrt(ivar), 0)
@@ -136,39 +136,51 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
         suffix, band), options, overwrite=True, header=header,
         lossy_compress=True)
 
-def r_interpol(ls, fs, ss, lfid, ffid):
-    '''Interpolate the data ss(ls, fs) onto a grid that looks like 
-    
-    ^ ffid
-    |
-    o---> lfid
+    IO.writefits(fracs, maskname, "fracs_{0}_{1}_{2}.fits".format(maskname,
+        suffix, band), options, overwrite=True, header=header,
+        lossy_compress=True)
+
+def r_interpol(ls, ss, lfid, shift_pix=0, pad=[0,0]):
+    '''
+    Interpolate the data ss(ls, fs) onto a fiducial wavelength vector.
+    ls[n_spatial, n_lam] - wavelength array
+    ss[n_spatial, n_lam] - corresponding data array
+    lfid[n_lam] - wavelength fiducial to interpolate onto
+    shift_pix - # of pixels to shift in spatial direction
+    pad - # of pixels to pad in spatial direction
     '''
 
     S = ss.shape
 
-    output = np.zeros((len(ffid), len(lfid)))
-    
-    L = np.double(len(lfid))
-    lam_to_pix = II.interp1d(lfid, np.arange(L)/L)
+    output = np.zeros((np.int(S[0]+pad[0]+pad[1]), len(lfid)))
 
-    for i in xrange(len(ffid)):
+    L = np.double(len(lfid))
+    
+    # First interpolate onto a common wavelength grid
+    for i in xrange(S[0]):
+
         ll = ls[i,:] ; sp = ss[i,:]
         ok = np.where(ll>1000)[0]
 
         if len(ok) < 100: continue
 
-        f = II.interp1d(ll[ok], sp[ok], bounds_error=False)
-        output[i,:] = f(lfid)
+        f = II.interp1d(ll[ok], sp[ok], bounds_error=False, fill_value = 0.0)
+        output[i+pad[0],:] = f(lfid)
+
+    # Now shift in the spatial direciton
+    if np.abs(shift_pix) > 1e-4:
+        if np.abs(shift_pix - np.int(shift_pix)) < 1e-4:
+            output = np.roll(output, -shift, axis=0)
+        else:
+            y = np.arange(output.shape[0])
+            for i in xrange(S[1]):
+
+                f = II.interp1d(y, output[:, i], bounds_error=False, fill_value
+                        = 0.0)
+
+                output[:,i] = f(y-shift_pix)
+            
     
-    for i in xrange(len(lfid)):
-
-        pix = lam_to_pix([lfid[i]])[0]
-        fr = fs[:,np.round(pix*2048.)] 
-        sp = output[:,np.round(pix*len(lfid))]
-
-        f = II.interp1d(fr, sp, bounds_error=False)
-        output[:,i] = f(ffid)
-
     return output
 
 
@@ -185,14 +197,16 @@ def handle_rectification_helper(edgeno):
     bots = edge["bottom"](pix)
 
     lenas = (tops[1024] - bots[1024]) * 0.18
-    mxshift = np.ceil(np.max(shifts)/0.18)
+    mxshift = np.int(np.ceil(np.max(shifts)/0.18))
+    mnshift = np.int(np.floor(np.min(shifts)/0.18))
 
     top = min(np.floor(np.min(tops)) + mxshift, 2048)
-    bot = max(np.ceil(np.max(bots)) - mxshift, 0)
+    bot = max(np.ceil(np.max(bots)) - mnshift, 0)
 
     slopes = 1.0/(tops-bots)
     X,Y = np.mgrid[bot:top, 0:2048]
-    fracs = (X.copy() - bots) * slopes
+    fracs = (X-bots) * slopes
+
     ll = lambdas[1].data[bot:top, :]
     eps = dats[1][bot:top, :]
     ivs = ivars[1][bot:top, :]
@@ -209,16 +223,20 @@ def handle_rectification_helper(edgeno):
     ivss = []
     sign = 1
     for shift in shifts:
-        epss.append(sign * r_interpol(ll, fracs, eps, 
-            fidl, fidf - shift/lenas))
 
-        ivss.append(r_interpol(ll, fracs, ivs, 
-            fidl, fidf - shift/lenas))
+        output = r_interpol(ll, eps, fidl, shift_pix=shift/0.18, pad=[mnshift,
+            mxshift])
+        epss.append(sign * output)
+
+        output = r_interpol(ll, ivs, 
+            fidl, shift_pix=shift/0.18, pad=[mnshift, mxshift])
+        ivss.append(output)
 
         sign *= -1
 
     eps_img = np.sum(epss, axis=0)
     iv_img = 1/np.sum(1/np.array(ivss), axis=0)
+
 
     return {"eps_img": eps_img, "iv_img": iv_img, "lambda": fidl,
             "Target_Name": edge["Target_Name"], "slitno": edgeno+1, "frac":
