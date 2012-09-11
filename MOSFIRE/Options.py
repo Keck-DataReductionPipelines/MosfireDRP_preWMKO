@@ -14,7 +14,7 @@ npk April 18th 2011
 import getpass
 import os
 
-__version__ = 0.1
+__version__ = 2.0
 
 
 npix = 2048
@@ -37,7 +37,7 @@ wavelength = {
         "indir": indir,
         "outdir": outdir,
         "datadir" : os.path.join(os.environ["MOSPATH"], "code", "data"),
-        "version": 1,
+        "version": 2,
         #"fractional-wavelength-search": 0.9988, # used in determining oned wavelength solutions
         "fractional-wavelength-search": 0.99935, # used in determining oned wavelength solutions
         "chebyshev-degree": 5, # polynomial order for fitting wavelengths
