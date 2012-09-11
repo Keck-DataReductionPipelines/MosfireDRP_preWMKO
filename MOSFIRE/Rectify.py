@@ -221,7 +221,7 @@ def handle_rectification_helper(edgeno):
 
     epss = []
     ivss = []
-    sign = 1
+    sign = -1
     for shift in shifts:
 
         output = r_interpol(ll, eps, fidl, shift_pix=shift/0.18, pad=[mnshift,
