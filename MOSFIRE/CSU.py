@@ -213,6 +213,7 @@ class Barset:
 
         # If len(ssl) == 0 then the header is for a long slit
         if len(ssl) == 0:
+        
             self.long_slit = True
 
             start = np.int(msl[0]["Slit_Number"])
