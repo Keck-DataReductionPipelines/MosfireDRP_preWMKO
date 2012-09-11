@@ -21,7 +21,7 @@ npix = 2048
 
 indir = "/scr2/mosfire"
 outdir = "/scr2/{0}/mosfire_redux".format(getpass.getuser())
-path_bpm = "/scr2/mosfire/badpixels/badpix_08may2012.fits"
+path_bpm = "/scr2/mosfire/badpixels/badpix_10sep2012.fits"
 
 flat = {
         "indir": indir,
