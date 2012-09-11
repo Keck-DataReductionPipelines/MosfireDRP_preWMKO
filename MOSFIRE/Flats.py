@@ -209,10 +209,26 @@ def save_ds9_edges(results, options):
             sx = x + 1
             ex = x + delt + 1
 
-            sy = top(sx) + 1
-            ey = top(ex) + 1
+            sy = top(sx) 
+            ey = top(ex) 
+
+            smid = (top(sx) - bottom(sx)) / 2. + bottom(sx)
+            emid = (top(ex) - bottom(ex)) / 2. + bottom(sx)
+
+            # three quarter point
+            stq = (top(sx) - bottom(sx)) * 3./4. + bottom(sx)
+            etq = (top(ex) - bottom(ex)) * 3./4. + bottom(sx)
+            # one quarter point
+            soq = (top(sx) - bottom(sx)) * 1./4. + bottom(sx)
+            eoq = (top(ex) - bottom(ex)) * 1./4. + bottom(sx)
+
+            ds9 += "line(%f, %f, %f, %f) # fixed=1 edit=0 move=0 rotate=0 delete=0 color=red\n" % (sx, smid, ex, emid)
+            ds9 += "line(%f, %f, %f, %f) # fixed=1 edit=0 move=0 rotate=0 delete=0 color=red\n" % (sx, stq, ex, etq)
+            ds9 += "line(%f, %f, %f, %f) # fixed=1 edit=0 move=0 rotate=0 delete=0 color=red\n" % (sx, soq, ex, eoq)
+
 
             ds9 += "line(%f, %f, %f, %f) # fixed=1 edit=0 move=0 rotate=0 delete=0\n" % (sx, sy, ex, ey)
+
 
             if i == W/2:
                     ds9 += " # text={S%2.0i (%s)}" % (S, 
@@ -480,7 +496,7 @@ def find_and_fit_edges(data, header, bs, options):
         dtype=np.float) / 7.6)
 
 
-    if np.sum(numslits) != CSU.numslits:
+    if (np.sum(numslits) != CSU.numslits) and (not bs.long_slit):
         raise Exception("The number of allocated CSU slits (%i) does not match "
                 " the number of possible slits (%i)." % (np.sum(numslits),
                     CSU.numslits))
@@ -559,8 +575,10 @@ def find_and_fit_edges(data, header, bs, options):
             break
             
 
+        next = target + 2
+        if next > len(ssl): next = len(ssl)
         hpps_next = Wavelength.estimate_half_power_points(
-                bs.scislit_to_csuslit(target+2)[0],
+                bs.scislit_to_csuslit(next)[0],
                     header, bs)
 
         ok = np.where((xposs_top_next > hpps_next[0]) & (xposs_top_next <
