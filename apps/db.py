@@ -399,18 +399,20 @@ def longslits():
         db = load_db()
         fdate = int(sys.argv[3])
 
-        cur = db.execute("""
+        query = """
             select object, path, fdate, number, filter, yoffset, maskname, 
                 gratmode, itime, el
             from files
             where substr(maskname,0,8) == 'LONGSLIT' and fdate = "{0}"
             order by number
-            """.format(fdate, fdate))
+            """.format(fdate, fdate)
+        
+        cur = db.execute(query)
 
         ress = cur.fetchall()
 
         if len(ress) == 0:
-            raise Exception("No such objects")
+            raise Exception("No such objects in database. Query:\n%s" % query)
             return
 
         print("{0}".format(ress[0][-1]))
@@ -440,8 +442,10 @@ def longslits():
                 else:
                     objs[key] = [path]
 
+            if res[5] is None: offset = -999
+            else: offset = float(res[5])
             print("{0:6s} {1:6s} {2:3g} {3:6s} {4:5.1f} {5:15s}".format(guess, res[2], 
-                res[3], res[4], float(res[5]), obj))
+                res[3], res[4], offset, obj))
 
         print("")
         print("--- SUMMARY ---")
