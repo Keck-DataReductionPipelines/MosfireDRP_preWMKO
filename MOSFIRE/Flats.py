@@ -492,14 +492,24 @@ def find_and_fit_edges(data, header, bs, options):
     slits = []
 
     top = [0., np.float(Options.npix)]
-    numslits = np.round(np.array(ssl["Slit_length"], 
-        dtype=np.float) / 7.6)
+
+    # Count and check that the # of objects in the SSL matches that of the MSL
+    # This is purely a safety check
+    numslits = np.zeros(len(ssl))
+    for i in xrange(len(ssl)):
+        slit = ssl[i]
+        M = np.where(slit["Target_Name"] == bs.msl["Target_in_Slit"])
+
+        numslits[i] = len(M[0])
+    numslits = np.array(numslits)
 
 
     if (np.sum(numslits) != CSU.numslits) and (not bs.long_slit):
         raise Exception("The number of allocated CSU slits (%i) does not match "
                 " the number of possible slits (%i)." % (np.sum(numslits),
                     CSU.numslits))
+
+    # now begin steps outline above
     results = []
     result = {}
 
