@@ -235,7 +235,8 @@ def handle_background(As, Bs, wavenames, maskname, band_name, options):
 
     xroi = slice(0,2048)
     for sol in solutions:
-        if not sol["ok"]: continue
+        if not sol["ok"]: 
+            continue
 
         yroi = slice(sol["bottom"], sol["top"])
         sky_sub_out[yroi, xroi] = sol["output"]
@@ -389,7 +390,7 @@ def background_subtract_helper(slitno):
 
     diff = np.append(np.diff(ls), False)
 
-    OK = (diff > 0.01) & (ls > hpps[0]) & (ls < hpps[1]) & (np.isfinite(ls)) \
+    OK = (diff > 0.001) & (ls > hpps[0]) & (ls < hpps[1]) & (np.isfinite(ls)) \
             & (np.isfinite(ss[sort]))
 
     if len(np.where(OK)[0]) < 1000:
@@ -416,7 +417,7 @@ def background_subtract_helper(slitno):
             try:
                 bspline = II.splrep(ls[OK], ss[OK], k=5, task=-1, t=knots)
             except:
-                "Could not construct spline on slit ", slitno
+                print "Could not construct spline on slit ", slitno
                 return {"ok": False}
 
         ll = lslit.flatten()
