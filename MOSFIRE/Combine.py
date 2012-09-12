@@ -90,20 +90,29 @@ def stack_rectified(wavenames, maskname, band, wavops):
     ivars = []
     sns = []
 
-    ls = [get_path(os.path.join(path, "rectified_%s_%s.fits") % (band,
-        suffix)) for suffix in suffixs]
-    imcombine(ls, maskname, "rectified_%s_%s.fits" % (maskname, band), 
-            wavops, 'rate')
+    try:
+        ls = [get_path(os.path.join(path, "rectified_%s_%s.fits") % (band,
+            suffix)) for suffix in suffixs]
+        imcombine(ls, maskname, "rectified_%s_%s.fits" % (maskname, band), 
+                wavops, 'rate')
+    except:
+        pass
 
-    ls = [get_path(os.path.join(path, "rectified_ivar_%s_%s.fits") % (band,
-        suffix)) for suffix in suffixs]
-    imcombine(ls, maskname, "rectified_ivar_%s_%s.fits" % (maskname, band), 
+    try:
+        ls = [get_path(os.path.join(path, "rectified_ivar_%s_%s.fits") % (band,
+            suffix)) for suffix in suffixs]
+        imcombine(ls, maskname, "rectified_ivar_%s_%s.fits" % (maskname, band), 
             wavops, 'ivar-rate')
+    except:
+        pass
 
-    ls = [get_path(os.path.join(path, "rectified_sn_%s_%s.fits") % (band,
-        suffix)) for suffix in suffixs]
-    imcombine(ls, maskname, "rectified_sn_%s_%s.fits" % (maskname, band), 
+    try:
+        ls = [get_path(os.path.join(path, "rectified_sn_%s_%s.fits") % (band,
+            suffix)) for suffix in suffixs]
+        imcombine(ls, maskname, "rectified_sn_%s_%s.fits" % (maskname, band), 
             wavops, 'sn-rate')
+    except:
+        pass
 
 
 
@@ -132,9 +141,13 @@ def rename_files(wavenames, maskname, band, wavops):
             "rectified_sn_%s%s.fits"]
 
     for fname in fnames:
-        a = get_path(os.path.join(path, fname % (band, "_" + suffix)))
-        b = os.path.join(path, fname % (band, "")) + gz(a)
-        os.rename(a, b)
+        try:
+            a = get_path(os.path.join(path, fname % (band, "_" + suffix)))
+            b = os.path.join(path, fname % (band, "")) + gz(a)
+            os.rename(a, b)
+        except: 
+            print "Ignoring renaming of: ", fname
+            pass
     
 
     edges = IO.load_edges(maskname, band, wavops)
