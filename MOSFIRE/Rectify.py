@@ -79,7 +79,6 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
 
     output = np.zeros((1, len(fidl)))
     snrs = np.zeros((1, len(fidl)))
-    fracs = np.zeros((1, len(fidl)))
     for i in xrange(len(solutions)):
         solution = solutions[i]
         header = EPS[0].copy()
@@ -87,7 +86,6 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
         header.update("OBJECT", "{0}".format(solution["Target_Name"]))
 
         ll = solution["lambda"]
-        ff = solution["frac"]
 
         header.update("wat0_001", "system=world")
         header.update("wat1_001", "wtype=linear")
@@ -114,8 +112,11 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
         img = solution["eps_img"]
         ivar = solution["iv_img"]
 
+        S = output.shape
         output  = np.append(output, img, 0)
+        output = np.append(output, np.nan*np.zeros((3,S[1])), 0)
         snrs = np.append(snrs, img*np.sqrt(ivar), 0)
+        snrs = np.append(snrs, np.nan*np.zeros((3,S[1])), 0)
 
         IO.writefits(solution["eps_img"], maskname,
                 "eps_{0}_{1}_S{2:02g}.fits".format(band, suffix, i+1), options,
@@ -133,10 +134,6 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
         lossy_compress=True)
 
     IO.writefits(snrs, maskname, "snrs_{0}_{1}_{2}.fits".format(maskname,
-        suffix, band), options, overwrite=True, header=header,
-        lossy_compress=True)
-
-    IO.writefits(fracs, maskname, "fracs_{0}_{1}_{2}.fits".format(maskname,
         suffix, band), options, overwrite=True, header=header,
         lossy_compress=True)
 
@@ -180,7 +177,6 @@ def r_interpol(ls, ss, lfid, shift_pix=0, pad=[0,0]):
 
                 output[:,i] = f(y-shift_pix)
             
-    
     return output
 
 
@@ -200,18 +196,13 @@ def handle_rectification_helper(edgeno):
     mxshift = np.int(np.ceil(np.max(shifts)/0.18))
     mnshift = np.int(np.floor(np.min(shifts)/0.18))
 
-    top = min(np.floor(np.min(tops)) + mxshift, 2048)
-    bot = max(np.ceil(np.max(bots)) - mnshift, 0)
-
-    slopes = 1.0/(tops-bots)
-    X,Y = np.mgrid[bot:top, 0:2048]
-    fracs = (X-bots) * slopes
+    top = min(np.floor(np.min(tops)), 2048)
+    bot = max(np.ceil(np.max(bots)), 0)
 
     ll = lambdas[1].data[bot:top, :]
     eps = dats[1][bot:top, :]
     ivs = ivars[1][bot:top, :]
 
-    fidf = fracs[:,1024]
     lmid = ll[ll.shape[0]/2,:]
     hpp = Filters.hpp[band]
 
@@ -237,8 +228,6 @@ def handle_rectification_helper(edgeno):
     eps_img = np.sum(epss, axis=0)
     iv_img = 1/np.sum(1/np.array(ivss), axis=0)
 
-
     return {"eps_img": eps_img, "iv_img": iv_img, "lambda": fidl,
-            "Target_Name": edge["Target_Name"], "slitno": edgeno+1, "frac":
-            fidf}
+            "Target_Name": edge["Target_Name"], "slitno": edgeno+1}
 
