@@ -144,25 +144,33 @@ def rename_files(wavenames, maskname, band, wavops):
         S = "S%2.2i" % (i)
         a = get_path(os.path.join(path, 
             "eps_%s_%s_%s.fits" % (band, suffix, S)))
-        b = os.path.join(path, "eps_%s_%s.fits" % (band, S)) + gz(a)
+        
+        a_h = pf.open(a)[0].header
+        obj = a_h['object']
+
+        b = os.path.join(path, "%s_%s_%s_eps.fits" % (maskname, band, obj)) + \
+            gz(a)
         os.rename(a,b)
 
         a = get_path(os.path.join(path, 
             "ivar_%s_%s_%s.fits" % (band, suffix, S)))
-        b = os.path.join(path, "ivar_%s_%s.fits" % (band, S)) + gz(a)
+        a_h = pf.open(a)[0].header
+        obj = a_h['object']
+
+        b = os.path.join(path, "%s_%s_%s_ivar.fits" % (maskname, band, obj)) + \
+            gz(a)
         os.rename(a,b)
 
-    
     a = get_path(os.path.join(path,
         "eps_%s_%s_%s.fits" % (maskname, suffix, band)))
     b = os.path.join(path,
-        "eps_%s_%s.fits" % (maskname, band)) + gz(a)
+        "%s_%s_eps.fits" % (maskname, band)) + gz(a)
     os.rename(a,b)
 
     a = get_path(os.path.join(path,
         "snrs_%s_%s_%s.fits" % (maskname, suffix, band)))
     b = os.path.join(path,
-        "snrs_%s_%s.fits" % (maskname, band)) + gz(a)
+        "%s_%s_snrs.fits" % (maskname, band)) + gz(a)
     os.rename(a, b)
 
 def handle_combine(wavenames, maskname, band, wavops):
