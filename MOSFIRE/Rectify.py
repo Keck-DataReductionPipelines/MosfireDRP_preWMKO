@@ -170,7 +170,7 @@ def r_interpol(ls, ss, lfid, shift_pix=0, pad=[0,0]):
             output = np.roll(output, -shift, axis=0)
         else:
             y = np.arange(output.shape[0])
-            for i in xrange(S[1]):
+            for i in xrange(output.shape[1]):
 
                 f = II.interp1d(y, output[:, i], bounds_error=False, fill_value
                         = 0.0)
