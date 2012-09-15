@@ -118,9 +118,8 @@ def imcombine(files, maskname, options, flat, outname=None):
     exptime = np.zeros((2048, 2048))
 
 
-    if len(files) > 2:
-        # TODO: Improve cosmic ray rejection code
-        print "Min/max CRR"
+    if len(files) >= 10:
+        print "Sigclip CRR"
         srt = np.argsort(el_per_sec,axis=0)
         shp = el_per_sec.shape
         sti = np.ogrid[0:shp[0], 0:shp[1], 0:shp[2]]
@@ -128,9 +127,21 @@ def imcombine(files, maskname, options, flat, outname=None):
         electrons = electrons[srt, sti[1], sti[2]]
         itimes = itimes[srt, sti[1], sti[2]]
 
+        mean = np.median(electrons[2:-2,:,:], axis = 0)
+        std = np.std(electrons[2:-2,:,:], axis = 0)
+
+        drop = np.where( (electrons > (mean+std*3)) | (electrons < (mean-std*3)) )
+        electrons[drop] = 0.0
+        itimes[drop] = 0.0
+
+        electrons = np.sum(electrons, axis=0)
+        itimes = np.sum(itimes, axis=0)
+
+
+    elif len(files) > 5:
+        print "Drop min/max CRR"
         electrons = np.sum(electrons[1:-1,:,:], axis=0)
         itimes = np.sum(itimes[1:-1,:,:], axis=0)
-
     else:
         electrons = np.sum(electrons, axis=0)
         itimes = np.sum(itimes, axis=0)
@@ -314,18 +325,18 @@ def handle_background(As, Bs, wavenames, maskname, band_name, options):
 
 
     header.update("object", "rectified [eps]")
-    IO.writefits(rectified, maskname, "rectified_%s_%s.fits" % (band_name,
+    IO.writefits(rectified, maskname, "%s_pair_%s_%s.fits" % (maskname, band_name,
         suffix), options, header=header, overwrite=True, lossy_compress=True)
 
     header.update("object", "rectified ivar [1/eps^2]")
-    IO.writefits(rectified_ivar, maskname, "rectified_ivar_%s_%s.fits" %
-            (band_name, suffix), options, header=header, overwrite=True,
+    IO.writefits(rectified_ivar, maskname, "%s_ivar_pair_%s_%s.fits" %
+            (maskname, band_name, suffix), options, header=header, overwrite=True,
             lossy_compress=True)
 
     header.update("object", "rectified snr")
 
     IO.writefits(rectified*np.sqrt(rectified_ivar), maskname,
-            "rectified_sn_%s_%s.fits" % (band_name, suffix), options,
+            "%s_sn_pair_%s_%s.fits" % (maskname, band_name, suffix), options,
             header=header, overwrite=True, lossy_compress=True)
 
 
