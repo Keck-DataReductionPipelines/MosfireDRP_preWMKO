@@ -36,6 +36,7 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
     lambdas = IO.load_lambdaslit(lname, maskname, band, options)
     edges, meta = IO.load_edges(maskname, band, options)
 
+
     shifts = []
     for pos in nod_posns:
 
@@ -79,10 +80,18 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
 
     output = np.zeros((1, len(fidl)))
     snrs = np.zeros((1, len(fidl)))
+
+
+    # the barset [bs] is used for determining object position
+    drop, drop, bs = IO.readmosfits(wavenames[0], options)
+
+
     for i in xrange(len(solutions)):
         solution = solutions[i]
         header = EPS[0].copy()
-        
+
+        pixel_dist = np.float(bs.ssl[-(i+1)]['Target_to_center_of_slit_distance'])/0.18
+
         header.update("OBJECT", "{0}".format(solution["Target_Name"]))
 
         ll = solution["lambda"]
@@ -96,7 +105,7 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
         header.update("ctype1", "AWAV")
         header.update("cunit1", "Angstrom")
         header.update("crval1", ll[0])
-        header.update("crval2", 0)
+        header.update("crval2", -solution["eps_img"].shape[0]/2 - pixel_dist)
         header.update("crpix1", 1)
         header.update("crpix2", 1)
         header.update("cdelt1", 1)
@@ -107,7 +116,6 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
         header.update("cd1_2", 0)
         header.update("cd2_1", 0)
         header.update("cd2_2", 1)
-
 
         img = solution["eps_img"]
         ivar = solution["iv_img"]
@@ -122,7 +130,6 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
                 "eps_{0}_{1}_S{2:02g}.fits".format(band, suffix, i+1), options,
                 overwrite=True, header=header, lossy_compress=True)
 
-        
         IO.writefits(solution["iv_img"], maskname,
                 "ivar_{0}_{1}_S{2:02g}.fits".format(band, suffix, i+1), options,
                 overwrite=True, header=header, lossy_compress=True)
@@ -166,15 +173,18 @@ def r_interpol(ls, ss, lfid, shift_pix=0, pad=[0,0]):
 
     # Now shift in the spatial direciton
     if np.abs(shift_pix) > 1e-4:
+        # Shift an integer amount
+        # TODO: Likely a bug in the roll() implementation
         if np.abs(shift_pix - np.int(shift_pix)) < 1e-4:
             output = np.roll(output, -shift, axis=0)
+
+        # Shift a fractional amount
         else:
-            y = np.arange(output.shape[0])
+            y = np.arange(output.shape[0]) + pad[0]
             for i in xrange(output.shape[1]):
 
-                f = II.interp1d(y, output[:, i], bounds_error=False, fill_value
-                        = 0.0)
-
+                f = II.interp1d(y, output[:, i], bounds_error=False, 
+                    fill_value = 0.0)
                 output[:,i] = f(y-shift_pix)
             
     return output
@@ -211,7 +221,7 @@ def handle_rectification_helper(edgeno):
 
 
     epss = []
-    ivss = []
+    vss = []
     sign = -1
     for shift in shifts:
 
@@ -219,14 +229,16 @@ def handle_rectification_helper(edgeno):
             mxshift])
         epss.append(sign * output)
 
-        output = r_interpol(ll, ivs, 
-            fidl, shift_pix=shift/0.18, pad=[mnshift, mxshift])
-        ivss.append(output)
+        var = 1/ivs
+        output = r_interpol(ll, var, fidl, shift_pix=shift/0.18, pad=[mnshift,
+            mxshift]) 
+        vss.append(output)
 
         sign *= -1
 
     eps_img = np.sum(epss, axis=0)
-    iv_img = 1/np.sum(1/np.array(ivss), axis=0)
+    iv_img = 1/np.sum(np.array(vss), axis=0)
+
 
     return {"eps_img": eps_img, "iv_img": iv_img, "lambda": fidl,
             "Target_Name": edge["Target_Name"], "slitno": edgeno+1}
