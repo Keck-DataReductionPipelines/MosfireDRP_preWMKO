@@ -103,6 +103,8 @@ def make():
 
                 if key in keys: continue
                 keys.append(key)
+            
+
 
                 if T == int: typename = 'integer'
                 if T == float: typename = 'real'
@@ -117,7 +119,7 @@ def make():
                 print "Query failed on:"
                 print insert_sql
                 traceback.print_exc()
-                sys.exit()
+                #sys.exit()
                  
 
     db.commit()
@@ -160,7 +162,7 @@ def sql_for_mask_filter_flats(db, maskname, filter):
     select path, fdate, number
     from files
     where maskname = "{0}" and substr(obsmode, -12, 12) = "spectroscopy" and
-    filter = "{1}" and (itime/1000.0) < 30 and (el-45) < .1
+    filter = "{1}" and (itime/1000.0) < 25 and (el-45) < .1
     order by fdate, number
             '''.format(maskname, filter))
 
