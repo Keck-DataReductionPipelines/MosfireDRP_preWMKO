@@ -50,8 +50,11 @@ for fname in files:
         
     header.update("lamps", lamps)
 
-    if header["aborted"]:
-        header.update("object", "ABORTED")
+    try:
+        if header["aborted"]:
+            header.update("object", "ABORTED")
+    except:
+        print "Missing header file in: %s" % fname
 
     try:
         print "%(datafile)12s %(object)40s %(truitime)6.1f s %(maskname)35s %(lamps)3s %(filter)4s %(mgtname)7s" % (header)
