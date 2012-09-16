@@ -9,7 +9,7 @@
 source /usr/stsci/envconfig.mac/cshrc
 iraf
 
-setenv MOSPATH /Users/npk/dropbox/mosfire/code/
+setenv MOSPATH AAAA
 setenv PYTHONPATH ${PYTHONPATH}:${MOSPATH}
 
 if ($#argv == 0) then
