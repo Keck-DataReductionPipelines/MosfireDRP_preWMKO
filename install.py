@@ -1,6 +1,8 @@
 
+import getpass
 import os
 import sys
+
 
 try: import pyfits
 except: print "Could not import pyfits, please reinstall stscipython"
@@ -34,14 +36,13 @@ print """Default directories:
     Place raw data files here:
  /scr2/mosfire
 
-    Reduced data will be placed, where UID is your
-     username
- /scr2/UID/mosfire_redux
+    Reduced data will be placed
+ /scr2/%s/mosfire_redux
 
     Place the bad pixel mask in
  /scr2/mosfire/badpixels/
 
-"""
+""" % (getpass.getuser())
 
 yorn = raw_input("Would you like to download the bad pixel mask [y/n]?")
 if yorn == 'y' or yorn == 'Y':
