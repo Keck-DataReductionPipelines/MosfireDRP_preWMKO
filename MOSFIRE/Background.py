@@ -118,7 +118,7 @@ def imcombine(files, maskname, options, flat, outname=None):
     exptime = np.zeros((2048, 2048))
 
 
-    if len(files) >= 10:
+    if len(files) >= 9:
         print "Sigclip CRR"
         srt = np.argsort(el_per_sec,axis=0)
         shp = el_per_sec.shape
