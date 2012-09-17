@@ -11,17 +11,17 @@ try: import stsci
 except: print "STScI python not properly installed"
 
 
-print "Installing mospy to /usr/local/bin"
+print "Installing mospy to /usr/bin"
 
 try:
-    f = open("apps/mospy")
+    f = open("apps/mospy_mac")
     lines = f.readlines()
     f.close()
 except:
     print """Could not open or read the apps/mospy file. Make sure
 that you run this file from the MOSFIRE directory"""
 
-f = open("/usr/local/bin/mospy", "w")
+f = open("/usr/bin/mospy", "w")
 
 for line in lines:
     line.replace("AAAA", os.getcwd())
