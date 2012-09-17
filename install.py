@@ -11,7 +11,7 @@ try: import stsci
 except: print "STScI python not properly installed"
 
 
-print "Installing mospy to /usr/bin"
+print "Installing mospy to /usr/local/bin"
 
 try:
     f = open("apps/mospy_mac")
@@ -21,10 +21,10 @@ except:
     print """Could not open or read the apps/mospy file. Make sure
 that you run this file from the MOSFIRE directory"""
 
-f = open("/usr/bin/mospy", "w")
+f = open("/usr/local/bin/mospy", "w")
 
 for line in lines:
-    line.replace("AAAA", os.getcwd())
+    line.replace("AAAA", "~/mosfire/DRP")
     f.write(line)
 
 f.close()
@@ -32,24 +32,56 @@ os.system('chmod a+x /usr/local/bin/mospy')
 
 
 print """Default directories:
+    The DRP will be moved to:
+ ~/mosfire/DRP
 
     Place raw data files here:
- /scr2/mosfire
+ ~/mosfire/data
 
     Reduced data will be placed
- /scr2/%s/mosfire_redux
+ ~/mosfire/output
 
-    Place the bad pixel mask in
- /scr2/mosfire/badpixels/
+    The bad pixel mask in
+ ~/mosfire/badpixels/
 
-""" % (getpass.getuser())
+    If mospy issues a command not found, place
+      /usr/local/bin in your PATH
+""" 
+
+os.system("mkdir -p ~/mosfire/data")
+os.system("mkdir -p ~/mosfire/output")
+os.system("mkdir -p ~/mosfire/badpixels")
+os.system("cp -r . ~/mosfire/DRP/")
 
 yorn = raw_input("Would you like to download the bad pixel mask [y/n]?")
+bpm = 'badpix_10sept2012.fits'
 if yorn == 'y' or yorn == 'Y':
-    os.system("curl -O http://mosfire.googlecode.com/files/badpix_10sep2012.fits")
 
-    os.system("mkdir -p /scr2/mosfire/badpixels")
-    os.system("mv badpix_*.fits /scr2/mosfire/badpixels/")
-
+    os.system("curl -O http://mosfire.googlecode.com/files/%s" % bpm)
+    os.system("mv badpix_*.fits ~/mosfire/badpixels/")
 
 
+try:
+    f = open(os.path.expanduser("~/mosfire/DRP/MOSFIRE/Options.py"))
+    lines = f.readlines()
+    f.close()
+except:
+    print "Could not open and read Options.py in DRP directory"
+    sys.exit()
+
+f = open(os.path.expanduser("~/mosfire/DRP/MOSFIRE/Options.py"), "w")
+
+path = os.path.expanduser('~')
+for line in lines:
+    sp = line.split('=')
+    if sp[0].rstrip() == 'indir': 
+        sp[1] = " '%s/mosfire/data'" % (path)
+    if sp[0].rstrip() == 'outdir': 
+        sp[1] = " '%s/mosfire/output'" % (path)
+    if sp[0].rstrip() == 'path_bpm': 
+        sp[1] = " '%s/mosfire/badpixels/%s'" % (path, bpm)
+
+    outstr = '='.join(sp)
+    f.write(outstr)
+
+f.close()
