@@ -140,8 +140,14 @@ def imcombine(files, maskname, options, flat, outname=None):
 
     elif len(files) > 5:
         print "Drop min/max CRR"
+        srt = np.argsort(el_per_sec,axis=0)
+
+        electrons = electrons[srt, sti[1], sti[2]]
+        itimes = itimes[srt, sti[1], sti[2]]
+
         electrons = np.sum(electrons[1:-1,:,:], axis=0)
         itimes = np.sum(itimes[1:-1,:,:], axis=0)
+
     else:
         electrons = np.sum(electrons, axis=0)
         itimes = np.sum(itimes, axis=0)
