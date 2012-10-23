@@ -162,7 +162,7 @@ def sql_for_mask_filter_flats(db, maskname, filter):
     select path, fdate, number
     from files
     where maskname = "{0}" and substr(obsmode, -12, 12) = "spectroscopy" and
-    filter = "{1}" and (itime/1000.0) < 25 and (el-45) < .1
+    filter = "{1}" and (itime/1000.0) < 25 and (el-45) < .1 and flatspec = 1
     order by fdate, number
             '''.format(maskname, filter))
 
@@ -173,7 +173,7 @@ def sql_for_mask_filter_spectra(db, maskname, filter):
     select fdate
     from files
     where maskname = "{0}" and substr(obsmode, -12, 12) = "spectroscopy" and
-    filter = "{1}" and (itime/1000.0) > 30
+    filter = "{1}" and (itime/1000.0) > 3 and flatspec = 0 and domestat = "tracking"
     group by fdate
             '''.format(maskname, filter))
     
@@ -183,8 +183,8 @@ def sql_for_mask_filter_date(db, maskname, filter, date):
     cur = db.execute('''
     select path, fdate, number, yoffset, itime/1000.0
     from files
-    where maskname = "{0}" and filter = "{1}" and (itime/1000.0) > 30 and 
-            fdate = {2}
+    where maskname = "{0}" and filter = "{1}" and (itime/1000.0) > 3 and 
+            fdate = {2} and flatspec = 0 and domestat = "tracking"
     order by fdate, number
     '''.format(maskname, filter, date))
 
@@ -453,6 +453,11 @@ def longslits():
         print("--- SUMMARY ---")
         for key, value in objs.iteritems():
             print("{0:10s}: {1:5g} frames".format(key, len(value)))
+
+
+    else:
+        print "Not enough arguments"
+        sys.exit()
 
     res = {
         "uid": getpass.getuser(), 
