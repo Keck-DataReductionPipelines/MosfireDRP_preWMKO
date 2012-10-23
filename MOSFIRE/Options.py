@@ -19,7 +19,7 @@ __version__ = 2.0
 
 npix = 2048
 
-indir = "/scr2/mosfire"
+indir = "/scr2/npk/mosfire"
 outdir = "/scr2/{0}/mosfire_redux".format(getpass.getuser())
 path_bpm = "/scr2/mosfire/badpixels/badpix_10sep2012.fits"
 
