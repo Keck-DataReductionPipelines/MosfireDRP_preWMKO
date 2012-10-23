@@ -36,7 +36,6 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
     lambdas = IO.load_lambdaslit(lname, maskname, band, options)
     edges, meta = IO.load_edges(maskname, band, options)
 
-
     shifts = []
     for pos in nod_posns:
 
@@ -59,11 +58,16 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
         shifts.append(shift)
         print "Position {0} shift: {1:2.2f} as".format(pos, shift)
     
+
+    theBPM = IO.badpixelmask()
+
     fname = "bsub_{0}_{1}_{2}.fits".format(maskname, band, suffix)
     EPS = IO.read_drpfits(maskname, fname, options)
+    EPS[1] = np.ma.masked_array(EPS[1], theBPM, fill_value=0)
 
     fname = "bsub_ivar_{0}_{1}_{2}.fits".format(maskname, band, suffix)
     IVAR = IO.read_drpfits(maskname, fname, options)
+    IVAR[1] = np.ma.masked_array(IVAR[1], theBPM, fill_value=0)
 
     dats = EPS
     ivars = IVAR
@@ -144,7 +148,7 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
         suffix, band), options, overwrite=True, header=header,
         lossy_compress=True)
 
-def r_interpol(ls, ss, lfid, shift_pix=0, pad=[0,0]):
+def r_interpol(ls, ss, lfid, tops, top, shift_pix=0, pad=[0,0]):
     '''
     Interpolate the data ss(ls, fs) onto a fiducial wavelength vector.
     ls[n_spatial, n_lam] - wavelength array
@@ -169,6 +173,8 @@ def r_interpol(ls, ss, lfid, shift_pix=0, pad=[0,0]):
         if len(ok) < 100: continue
 
         f = II.interp1d(ll[ok], sp[ok], bounds_error=False, fill_value = 0.0)
+            
+
         output[i+pad[0],:] = f(lfid)
 
     # Now shift in the spatial direciton
@@ -186,6 +192,20 @@ def r_interpol(ls, ss, lfid, shift_pix=0, pad=[0,0]):
                 f = II.interp1d(y, output[:, i], bounds_error=False, 
                     fill_value = 0.0)
                 output[:,i] = f(y-shift_pix)
+    
+    # Now rectify
+    vert_shift = tops-top
+
+    f = II.interp1d(ls[10, :], vert_shift, bounds_error=False, fill_value = 0.0)
+
+    for i in xrange(output.shape[1]):
+        to_shift = f(fidl[i])
+        x = np.arange(output.shape[0])
+        y = II.interp1d(x, output[:, i], bounds_error=False, fill_value=0.0)
+
+        output[:,i] = y(x + to_shift)
+
+
             
     return output
 
@@ -210,8 +230,8 @@ def handle_rectification_helper(edgeno):
     bot = max(np.ceil(np.max(bots)), 0)
 
     ll = lambdas[1].data[bot:top, :]
-    eps = dats[1][bot:top, :]
-    ivs = ivars[1][bot:top, :]
+    eps = dats[1][bot:top, :].filled(0.0)
+    ivs = ivars[1][bot:top, :].filled(0.0)
 
     lmid = ll[ll.shape[0]/2,:]
     hpp = Filters.hpp[band]
@@ -224,14 +244,13 @@ def handle_rectification_helper(edgeno):
     vss = []
     sign = -1
     for shift in shifts:
-
-        output = r_interpol(ll, eps, fidl, shift_pix=shift/0.18, pad=[mnshift,
-            mxshift])
+        output = r_interpol(ll, eps, fidl, tops, top, shift_pix=shift/0.18,
+            pad=[mnshift, mxshift])
         epss.append(sign * output)
 
         var = 1/ivs
-        output = r_interpol(ll, var, fidl, shift_pix=shift/0.18, pad=[mnshift,
-            mxshift]) 
+        output = r_interpol(ll, var, fidl, tops, top, shift_pix=shift/0.18,
+            pad=[mnshift, mxshift]) 
         vss.append(output)
 
         sign *= -1
