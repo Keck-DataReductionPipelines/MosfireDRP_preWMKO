@@ -171,7 +171,9 @@ def imcombine(files, maskname, bandname, options):
         header.update("imfno%2.2i" % (i), fname)
 
         for key in header.keys():
-            val = header[key]
+            try: val = header[key]
+            except KeyError: 
+                print("Header should have key '%s' but does not" % key)
 
             if thishdr.has_key(key):
                 if val != thishdr[key]:
@@ -245,6 +247,7 @@ def fit_lambda(maskname,
         ''' If a longslit, fool extraction range '''
 
         bot,top = longslit['yrange']
+        edgedata = [{}]
         edgedata[0]["xposs_bot"] = [1024]
         edgedata[0]["yposs_bot"] = [bot]
         edgedata[0]["bottom"] = np.poly1d([bot])
@@ -252,7 +255,6 @@ def fit_lambda(maskname,
         edgedata[0]["xposs_top"] = [1024]
         edgedata[0]["yposs_top"] = [top]
         edgedata[0]["top"] = np.poly1d([top])
-
     
     solutions = []
     lamout = np.zeros(shape=(2048, 2048), dtype=np.float32)
@@ -650,6 +652,7 @@ def pick_linelist(header):
 
     if band == 'K':
         #drop: 19751.3895, 19736.4099
+        print "the lines"
         lines = np.array([
         19518.4784 , 19593.2626 , 19618.5719 , 19642.4493 , 19678.046 ,
         19701.6455 , 19771.9063 , 19839.7764 ,
@@ -658,7 +661,9 @@ def pick_linelist(header):
         21176.5323 , 21249.5368 , 21279.1406 , 21507.1875 , 21537.4185 ,
         21580.5093 , 21711.1235 , 21802.2757 , 21873.507 , 21955.6857 ,
         22125.4484 , 22312.8204 , 22460.4183 , 22517.9267 , 22690.1765 ,
-        22742.1907 , 22985.9156 ])
+        22742.1907 , 22985.9156, 23286.22, 23559.76,  23781.88,
+        23914.55, 23968.14, 24041.62, 
+        24139.867, 24171.414])
 
 
     lines = np.array(lines)
@@ -773,6 +778,8 @@ def xcor_known_lines(lines, ll, spec, spec0, options):
     for lam in lines:
         f = options["fractional-wavelength-search"]
         roi = np.where((f*lam < ll) & (ll < lam/f))[0]
+
+
 
         if not roi.any():
             dxs.append(inf)
