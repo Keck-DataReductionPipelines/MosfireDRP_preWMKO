@@ -55,6 +55,8 @@ def make():
     create(c)
     dirs = os.walk(Options.indir)
 
+    Options.indir = Options.indir.rstrip("/")
+
     for root, dirs, files in dirs:
         if root == Options.indir: continue
         ignore, path = root.split(Options.indir)
@@ -65,8 +67,6 @@ def make():
         except: continue
 
         if (date < 2012) or (date > 2030): continue
-
-
 
         for file in files:
             if len(file) != 17: continue
