@@ -77,7 +77,7 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
     sols = range(len(edges)-1,-1,-1)
 
     p = Pool()
-    solutions = p.map(handle_rectification_helper, sols)
+    solutions = map(handle_rectification_helper, sols)
     p.close()
     tick = time.time()
     print "-----> Mask took %i. Writing to disk." % (tick-tock)
@@ -177,24 +177,8 @@ def r_interpol(ls, ss, lfid, tops, top, shift_pix=0, pad=[0,0]):
 
         output[i+pad[0],:] = f(lfid)
 
-    # Now shift in the spatial direciton
-    if np.abs(shift_pix) > 1e-4:
-        # Shift an integer amount
-        # TODO: Likely a bug in the roll() implementation
-        if np.abs(shift_pix - np.int(shift_pix)) < 1e-4:
-            output = np.roll(output, -shift, axis=0)
-
-        # Shift a fractional amount
-        else:
-            y = np.arange(output.shape[0]) + pad[0]
-            for i in xrange(output.shape[1]):
-
-                f = II.interp1d(y, output[:, i], bounds_error=False, 
-                    fill_value = 0.0)
-                output[:,i] = f(y-shift_pix)
-    
-    # Now rectify
-    vert_shift = tops-top
+    # Now rectify in spatial
+    vert_shift = tops-top-shift_pix
 
     f = II.interp1d(ls[10, :], vert_shift, bounds_error=False, fill_value = 0.0)
 
