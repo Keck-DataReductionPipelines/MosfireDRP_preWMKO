@@ -93,6 +93,9 @@ def make():
             values = [p, fdate, number]
 
             for key in hdr.keys():
+
+                if key == 'COMMENT': continue
+
                 value = hdr[key]
                 T = type(value)
                 key = key.replace("-","_")

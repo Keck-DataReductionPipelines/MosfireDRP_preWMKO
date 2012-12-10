@@ -57,6 +57,7 @@ def imcombine(files, maskname, options, flat, outname=None):
             "RADECSYS"])
 
         for key in header.keys():
+            if key == '': continue
             val = header[key]
 
             if thishdr.has_key(key):
