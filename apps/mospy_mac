@@ -9,6 +9,7 @@ iraf
 
 setenv MOSPATH AAAA
 setenv PYTHONPATH ${PYTHONPATH}:${MOSPATH}
+setenv PYRAF_NO_DISPLAY TRUE
 
 if ($#argv == 0) then
 	echo "Starting MOSFIRE Python"
