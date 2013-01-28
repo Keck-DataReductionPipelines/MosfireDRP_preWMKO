@@ -74,11 +74,11 @@ def imdiff(A, B, maskname, band, options):
 
     outpath = os.path.join(options["outdir"], maskname)
 
-    operand1 = os.path.join(IO.fname_to_path(A[0], options), A[0]) + s
-    try:
-        operand2 = os.path.join(IO.fname_to_path(B[0], options), B[0]) + s
-    except:
-        operand2 = B[0]
+    try: operand1 = os.path.join(IO.fname_to_path(A[0], options), A[0]) + s
+    except: operand1 = A[0]
+
+    try: operand2 = os.path.join(IO.fname_to_path(B[0], options), B[0]) + s
+    except: operand2 = B[0]
 
     dname = "{0}_{1}_{2}_{3}-{4}.fits".format(maskname, objname, band,
         A[1]["frameid"], B[1]["frameid"])
