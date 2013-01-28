@@ -135,6 +135,7 @@ def writefits(img, maskname, fname, options, header=None, bs=None,
             if hdu.header.has_key(k): continue
 
             if k == 'COMMENT': continue
+            if k == '': continue
 
             k = k.rstrip()
             if len(k) <= 8:
