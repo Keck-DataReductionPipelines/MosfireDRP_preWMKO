@@ -408,7 +408,7 @@ def longslits():
             select object, path, fdate, number, filter, yoffset, maskname, 
                 gratmode, itime, el
             from files
-            where substr(maskname,0,8) == 'LONGSLIT' and fdate = "{0}"
+            where substr(maskname,0,9) == 'LONGSLIT' and fdate = "{0}"
             order by number
             """.format(fdate, fdate)
         
