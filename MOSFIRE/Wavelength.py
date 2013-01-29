@@ -178,7 +178,8 @@ def imcombine(files, maskname, bandname, options):
             if thishdr.has_key(key):
                 if val != thishdr[key]:
                     newkey = "hierarch " + key + ("_img%2.2i" % i)
-                    header.update(newkey.rstrip(), thishdr[key])
+                    try: header.update(newkey.rstrip(), thishdr[key])
+                    except ValueError: pass
 
         ''' Now handle error checking'''
 
@@ -193,7 +194,8 @@ def imcombine(files, maskname, bandname, options):
             if thishdr.has_key(key):
                 if val != thishdr[key]:
                     newkey = "hierarch " + key + ("_img%2.2i" % i)
-                    header.update(newkey.rstrip(), thishdr[key])
+                    try: header.update(newkey.rstrip(), thishdr[key])
+                    except ValueError: pass
 
         ''' Now handle error checking'''
 
