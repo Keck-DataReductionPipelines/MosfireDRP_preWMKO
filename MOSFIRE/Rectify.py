@@ -22,6 +22,10 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
         commissioning_shift=3.0):
     global edges, dats, ivars, shifts, lambdas, band, fidl
 
+
+    '''
+    '''
+
     band = band_pass
     lname = Wavelength.filelist_to_wavename(wavenames, band_pass, maskname,
             options).rstrip(".fits")
@@ -77,13 +81,14 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
     sols = range(len(edges)-1,-1,-1)
 
     p = Pool()
-    solutions = map(handle_rectification_helper, sols)
+    solutions = p.map(handle_rectification_helper, sols)
     p.close()
     tick = time.time()
     print "-----> Mask took %i. Writing to disk." % (tick-tock)
 
     output = np.zeros((1, len(fidl)))
     snrs = np.zeros((1, len(fidl)))
+    ivarout= np.zeros((1, len(fidl)))
 
 
     # the barset [bs] is used for determining object position
@@ -129,15 +134,20 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
         output = np.append(output, np.nan*np.zeros((3,S[1])), 0)
         snrs = np.append(snrs, img*np.sqrt(ivar), 0)
         snrs = np.append(snrs, np.nan*np.zeros((3,S[1])), 0)
+        ivarout = np.append(ivarout, ivar, 0)
+        ivarout = np.append(ivarout, np.nan*np.zeros((3,S[1])), 0)
+        
 
-        IO.writefits(solution["eps_img"], maskname,
+        if True:
+            IO.writefits(solution["eps_img"], maskname,
                 "eps_{0}_{1}_S{2:02g}.fits".format(band, suffix, i+1), options,
                 overwrite=True, header=header, lossy_compress=True)
 
-        IO.writefits(solution["iv_img"], maskname,
+            IO.writefits(solution["iv_img"], maskname,
                 "ivar_{0}_{1}_S{2:02g}.fits".format(band, suffix, i+1), options,
                 overwrite=True, header=header, lossy_compress=True)
 
+    header = EPS[0].copy()
     header.update("OBJECT", "{0}/{1}".format(maskname, band))
 
     IO.writefits(output, maskname, "eps_{0}_{1}_{2}.fits".format(maskname,
@@ -148,7 +158,12 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
         suffix, band), options, overwrite=True, header=header,
         lossy_compress=True)
 
-def r_interpol(ls, ss, lfid, tops, top, shift_pix=0, pad=[0,0]):
+    IO.writefits(ivarout, maskname, "ivars_{0}_{1}_{2}.fits".format(maskname,
+        suffix, band), options, overwrite=True, header=header,
+        lossy_compress=True)
+
+
+def r_interpol(ls, ss, lfid, tops, top, shift_pix=0, pad=[0,0], fill_value=0.0):
     '''
     Interpolate the data ss(ls, fs) onto a fiducial wavelength vector.
     ls[n_spatial, n_lam] - wavelength array
@@ -156,6 +171,7 @@ def r_interpol(ls, ss, lfid, tops, top, shift_pix=0, pad=[0,0]):
     lfid[n_lam] - wavelength fiducial to interpolate onto
     shift_pix - # of pixels to shift in spatial direction
     pad - # of pixels to pad in spatial direction
+    fill_value - passed through to interp1d
     '''
 
     S = ss.shape
@@ -172,7 +188,7 @@ def r_interpol(ls, ss, lfid, tops, top, shift_pix=0, pad=[0,0]):
 
         if len(ok) < 100: continue
 
-        f = II.interp1d(ll[ok], sp[ok], bounds_error=False, fill_value = 0.0)
+        f = II.interp1d(ll[ok], sp[ok], bounds_error=False, fill_value = fill_value)
             
 
         output[i+pad[0],:] = f(lfid)
@@ -180,7 +196,7 @@ def r_interpol(ls, ss, lfid, tops, top, shift_pix=0, pad=[0,0]):
     # Now rectify in spatial
     vert_shift = tops-top-shift_pix
 
-    f = II.interp1d(ls[10, :], vert_shift, bounds_error=False, fill_value = 0.0)
+    f = II.interp1d(ls[10, :], vert_shift, bounds_error=False, fill_value = fill_value)
 
     for i in xrange(output.shape[1]):
         to_shift = f(fidl[i])
@@ -206,6 +222,7 @@ def handle_rectification_helper(edgeno):
     tops = edge["top"](pix)
     bots = edge["bottom"](pix)
 
+    # Length of the slit in arcsecond
     lenas = (tops[1024] - bots[1024]) * 0.18
     mxshift = np.int(np.ceil(np.max(shifts)/0.18))
     mnshift = np.int(np.floor(np.min(shifts)/0.18))
@@ -234,13 +251,23 @@ def handle_rectification_helper(edgeno):
 
         var = 1/ivs
         output = r_interpol(ll, var, fidl, tops, top, shift_pix=shift/0.18,
-            pad=[mnshift, mxshift]) 
+            pad=[mnshift, mxshift], fill_value=np.inf) 
         vss.append(output)
 
         sign *= -1
 
     eps_img = np.sum(epss, axis=0)
-    iv_img = 1/np.sum(np.array(vss), axis=0)
+
+
+    # Remove any NaNs or infs from the variance array
+    ivs = []
+    for var in vss:
+        THIS_IVAR = 1/var
+        bad = np.where(np.isfinite(THIS_IVAR) == 0)
+        THIS_IVAR[bad] = 0
+        ivs.append(THIS_IVAR)
+
+    iv_img = np.sum(np.array(ivs), axis=0)
 
 
     return {"eps_img": eps_img, "iv_img": iv_img, "lambda": fidl,
