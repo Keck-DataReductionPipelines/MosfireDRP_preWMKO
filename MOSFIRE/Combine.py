@@ -186,6 +186,12 @@ def rename_files(wavenames, maskname, band, wavops):
         "%s_%s_snrs.fits" % (maskname, band)) + gz(a)
     os.rename(a, b)
 
+    a = get_path(os.path.join(path,
+        "ivars_%s_%s_%s.fits" % (maskname, suffix, band)))
+    b = os.path.join(path,
+        "%s_%s_ivars.fits" % (maskname, band)) + gz(a)
+    os.rename(a, b)
+
 def handle_combine(wavenames, maskname, band, wavops):
 
     N = len(wavenames)
