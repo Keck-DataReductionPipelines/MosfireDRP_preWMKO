@@ -344,12 +344,10 @@ def fit_lambda_interactively(maskname, band, wavenames, options):
     
     outfilename = fn
     fig = pl.figure(1,figsize=(16,8))
-    pl.ion()
     II = InteractiveSolution(fig, mfits, linelist, options, 1,
-        outfilename, solutions=solutions, )
-    print "Waiting"
+        outfilename, solutions=solutions)
+    pl.ioff()
     pl.show()
-    print "out of show"
 
     print "save to: ", fn
     np.save(outfilename, np.array(II.solutions))
@@ -990,6 +988,7 @@ class InteractiveSolution:
             self.solutions = range(len(self.bs.ssl))
         else:
             self.solutions = solutions
+
         self.cid = self.fig.canvas.mpl_connect('key_press_event', self)
 
         self.setup()
