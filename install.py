@@ -21,13 +21,7 @@ except:
     print """Could not open or read the apps/mospy file. Make sure
 that you run this file from the MOSFIRE directory"""
 
-f = open("/usr/local/bin/mospy", "w")
-
-for line in lines:
-    line.replace("AAAA", "~/mosfire/DRP")
-    f.write(line)
-
-f.close()
+os.system("cp apps/mospy_mac /usr/local/bin/mospy")
 os.system('chmod a+x /usr/local/bin/mospy')
 
 
@@ -48,17 +42,17 @@ print """Default directories:
       /usr/local/bin in your PATH
 """ 
 
-os.system("mkdir -p ~/mosfire/data")
-os.system("mkdir -p ~/mosfire/output")
-os.system("mkdir -p ~/mosfire/badpixels")
-os.system("cp -r . ~/mosfire/DRP/")
+os.system("mkdir -p $HOME/mosfire/data")
+os.system("mkdir -p $HOME/mosfire/output")
+os.system("mkdir -p $HOME/mosfire/badpixels")
+os.system("cp -r . $HOME/mosfire/DRP/")
 
 yorn = raw_input("Would you like to download the bad pixel mask [y/n]?")
 bpm = 'badpix_10sept2012.fits'
 if yorn == 'y' or yorn == 'Y':
 
     os.system("curl -O http://mosfire.googlecode.com/files/%s" % bpm)
-    os.system("mv badpix_*.fits ~/mosfire/badpixels/")
+    os.system("mv badpix_*.fits $HOME/mosfire/badpixels/")
 
 
 try:

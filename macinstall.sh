@@ -3,7 +3,7 @@
 source /usr/stsci/envconfig.mac/cshrc
 iraf
 
-/usr/stsci/pyssg/Python-2.7/bin/python install.py
+/usr/stsci/pyssg/Python-2.7.3/bin/python install.py
 
 rehash
 
