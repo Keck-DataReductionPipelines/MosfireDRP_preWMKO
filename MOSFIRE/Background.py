@@ -63,7 +63,8 @@ def imcombine(files, maskname, options, flat, outname=None):
             if thishdr.has_key(key):
                 if val != thishdr[key]:
                     newkey = "hierarch " + key + ("_img%2.2i" % i)
-                    header.update(newkey.rstrip(), thishdr[key])
+                    try: header.update(newkey.rstrip(), thishdr[key])
+                    except: pass
 
         ''' Now handle error checking'''
 
@@ -159,7 +160,6 @@ def imcombine(files, maskname, options, flat, outname=None):
 
     ''' Now handle variance '''
     numreads = header["READS0"]
-    header.update
     RN = Detector.RN / np.sqrt(numreads)
 
     var = (electrons + RN**2) / itimes**2
@@ -204,7 +204,8 @@ def merge_headers(h1, h2):
         if h.has_key(key):
             if val != h[key]:
                 newkey = "hierarch " + key + ("_pos_%s" % patternid)
-                h.update(newkey.rstrip(), val)
+                try: h.update(newkey.rstrip(), val)
+                except: pass
 
     return h
 
