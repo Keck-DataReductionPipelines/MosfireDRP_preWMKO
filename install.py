@@ -48,7 +48,7 @@ os.system("mkdir -p $HOME/mosfire/badpixels")
 os.system("cp -r . $HOME/mosfire/DRP/")
 
 yorn = raw_input("Would you like to download the bad pixel mask [y/n]?")
-bpm = 'badpix_10sept2012.fits'
+bpm = 'badpix_10sep2012.fits'
 if yorn == 'y' or yorn == 'Y':
 
     os.system("curl -O http://mosfire.googlecode.com/files/%s" % bpm)
@@ -75,7 +75,7 @@ for line in lines:
     if sp[0].rstrip() == 'path_bpm': 
         sp[1] = " '%s/mosfire/badpixels/%s'" % (path, bpm)
 
-    outstr = '='.join(sp)
+    outstr = '='.join(sp) + "\n"
     f.write(outstr)
 
 f.close()
