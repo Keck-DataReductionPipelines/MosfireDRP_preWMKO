@@ -187,7 +187,7 @@ def sql_for_mask_filter_date(db, maskname, filter, date):
     select path, fdate, number, yoffset, itime/1000.0
     from files
     where maskname = "{0}" and filter = "{1}" and (itime/1000.0) > 3 and 
-            fdate = {2} and flatspec = 0 and domestat = "tracking"
+            fdate = {2} and flatspec = 0 and (domestat = "tracking" or domestat = 0)
     order by fdate, number
     '''.format(maskname, filter, date))
 
@@ -545,7 +545,6 @@ def masks():
 
                 nums = [int(S[2]) for S in FRAMES]
                 observations = find_continuous(nums)
-
 
                 this_date["observations"] = []
                 for observation in observations:
