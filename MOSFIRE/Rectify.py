@@ -43,7 +43,7 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
     shifts = []
     for pos in nod_posns:
 
-        II = IO.read_drpfits(maskname, "eps_{0}_{1}_{2}.fits".format(band,
+        II = IO.read_drpfits(maskname, "adu_{0}_{1}_{2}.fits".format(band,
             suffix, pos), options)
 
         off = np.array((II[0]["decoff"], II[0]["raoff"]),dtype=np.float64)
