@@ -590,7 +590,7 @@ def masks():
                 for observation in this_date["observations"]:
                     for k,v in observation["offsets"].iteritems():
                         print("\tOffset {0:5s} has {1:3g} frames ({2}-{3}) "
-                            "total exptime is {4:5g} s".format(k,
+                            "total exptime is {4:5g} s".format(str(k),
                                 len(v["fname"]), v["start/stop"][0],
                                 v["start/stop"][1], v["itime"]))
 
