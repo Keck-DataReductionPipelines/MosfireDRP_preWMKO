@@ -47,6 +47,7 @@ os.system("mkdir -p $HOME/mosdrp/data")
 os.system("mkdir -p $HOME/mosdrp/output")
 os.system("mkdir -p $HOME/mosdrp/badpixels")
 os.system("cp -r ~/mosfire/* $HOME/mosdrp/DRP/")
+os.system("cp -r ~/mosfire/.hg $HOME/mosdrp/DRP/")
 
 yorn = raw_input("Would you like to download the bad pixel mask [y/n]?")
 bpm = 'badpix_10sep2012.fits'
