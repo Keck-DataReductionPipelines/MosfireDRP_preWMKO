@@ -63,3 +63,4 @@ for fname in files:
             print "%(datafile)12s %(object)25s %(truitime)6.1f s %(lamps)3s %(filter)6s %(mgtname)7s" % (header)
         except:
             print "%s Skipped" % fname
+
