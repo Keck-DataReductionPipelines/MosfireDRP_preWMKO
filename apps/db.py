@@ -161,14 +161,16 @@ def sql_for_mask_group_filter(db, maskname):
 
 def sql_for_mask_filter_flats(db, maskname, filter):
 
-    cursor = db.execute('''
+    query = '''
     select path, fdate, number
     from files
     where maskname = "{0}" and substr(obsmode, -12, 12) = "spectroscopy" and
-    filter = "{1}" and (itime/1000.0) < 25 and (el-45) < .1 and flatspec = 1
+    filter = "{1}" and (el-45) < .1 and flatspec = 1
     order by fdate, number
-            '''.format(maskname, filter))
+            '''.format(maskname, filter)
 
+    print "Flat Query is:", query
+    cursor = db.execute(query)
     return cursor.fetchall()
 
 def sql_for_mask_filter_spectra(db, maskname, filter):
@@ -183,7 +185,7 @@ def sql_for_mask_filter_spectra(db, maskname, filter):
 
             '''.format(maskname, filter)
     
-    print "DB Query is: ", query
+    #print "DB Query is: ", query
     cur = db.execute(query)
     return cur.fetchall()
 
