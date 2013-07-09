@@ -88,7 +88,17 @@ def imdiff(A, B, maskname, band, options):
     IO.imarith(operand1, '-', operand2, os.path.join(outpath, dname))
     print dname
 
-    return outpath, dname
+    ''' Now handle variance '''
+    numreads = header["READS0"]
+    RN_adu = Detector.RN / np.sqrt(numreads) / Detector.gain
+    varname = "var_{0}_{1}_{2}_{3}+{4}_{5}+{6}.fits".format(maskname, objname, band,
+        A[1]["frameid"], B[1]["frameid"], imnumA, imnumB)
+
+    IO.imarith(operand1, '+', operand2, os.path.join(outpath, "tmp_" + varname))
+    IO.imarith(varname, '+', RN_adu**2, os.path.join(outpath, varname))
+
+
+    return outpath, dname, varname
 
 def go(maskname,
         band,
@@ -131,26 +141,31 @@ def go(maskname,
         A = positions[i]
         B = positions[i+1]
 
-        path, dname = imdiff(A, B, maskname, band, wavoptions)
+        path, dname, varname = imdiff(A, B, maskname, band, wavoptions)
         rectify(path, dname, lamdat, A, B, maskname, band, wavoptions,
+                longoptions)
+        rectify(path, varname, lamdat, A, B, maskname, band, wavoptions,
                 longoptions)
         print dname
 
-    path, dname = imdiff(B, A, maskname, band, wavoptions)
+    path, dname, vname = imdiff(B, A, maskname, band, wavoptions)
     print dname
     rectify(path, dname, lamdat, B, A, maskname, band, wavoptions,
             longoptions)
+    rectify(path, vname, lamdat, B, A, maskname, band, wavoptions,
+            longoptions)
     
-    fname = os.path.join(path, wavename + ".fits")
-    B = IO.readfits(fname)
-    B = [fname, B[0], B[1]]
-    for i in xrange(len(positions)):
-        A = positions[i]
-        imdiff(A, B, maskname, band, wavoptions)
-        rectify(path, dname, lamdat, A, B, maskname, band, wavoptions,
-            longoptions)
-    imdiff(B, A, maskname, band, wavoptions)
-    rectify(path, dname, lamdat, B, A, maskname, band, wavoptions,
-            longoptions)
+    if False:
+        fname = os.path.join(path, wavename + ".fits")
+        B = IO.readfits(fname)
+        B = [fname, B[0], B[1]]
+        for i in xrange(len(positions)):
+            A = positions[i]
+            imdiff(A, B, maskname, band, wavoptions)
+            rectify(path, dname, lamdat, A, B, maskname, band, wavoptions,
+                longoptions)
+        imdiff(B, A, maskname, band, wavoptions)
+        rectify(path, dname, lamdat, B, A, maskname, band, wavoptions,
+                longoptions)
 
 
