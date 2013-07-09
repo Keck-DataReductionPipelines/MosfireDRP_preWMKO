@@ -80,12 +80,53 @@ def imdiff(A, B, maskname, band, options):
     try: operand2 = os.path.join(IO.fname_to_path(B[0], options), B[0]) + s
     except: operand2 = B[0]
 
-    dname = "{0}_{1}_{2}_{3}-{4}.fits".format(maskname, objname, band,
-        A[1]["frameid"], B[1]["frameid"])
+    imnumA = A[0].split('_')[1].rstrip(".fits")
+    imnumB = B[0].split('_')[1].rstrip(".fits")
+
+    dname = "{0}_{1}_{2}_{3}-{4}_{5}-{6}.fits".format(maskname, objname, band,
+        A[1]["frameid"], B[1]["frameid"], imnumA, imnumB)
     IO.imarith(operand1, '-', operand2, os.path.join(outpath, dname))
     print dname
 
     return outpath, dname
+
+
+def go_pair(maksname, band, filenames, wavoptions, longoptions):
+    ''' go_pair is a temporary workaround to handle pairs of files
+    by hand'''
+
+    wavename = Wavelength.filelist_to_wavename(filenames, band, maskname,
+            wavoptions).rstrip(".fits")
+
+    lamdat = IO.load_lambdaslit(wavename, maskname, band, wavoptions)
+
+    print("Wavelength solution {0}".format(wavename))
+    print("{0:18s} {1:30s} {2:2s} {3:5s}".format("filename", "object", "pos",
+    "offset"))
+    positions = []
+    objname = None
+
+    if len(filenames) != 2:
+        raise Exception("go_pair only works on a pair of images. filenames should have only two entries")
+
+    headerA, dataA, bsA = IO.readmosfits(filenames[0], wavoptions)
+    headerB, dataB, bsA = IO.readmosfits(filenames[1], wavoptions)
+
+    objname = headerA["object"]
+    if objname != headerB["object"]:
+        raise Exception("First file object is %s and second file object is %s, these two are not the same" % (objname, headerB["object"]))
+
+    A = [filenames[0], headerA, dataA, bsA]
+    B = [filenames[1], headerB, dataB, bsB]
+
+    path, dname = imdiff(A, B, maskname, band, wavoptions)
+    rectify(path, dname, lamdat, A, B, maskname, band, wavoptions,
+            longoptions)
+
+    path, dname = imdiff(B, A, maskname, band, wavoptions)
+    rectify(path, dname, lamdat, B, A, maskname, band, wavoptions,
+            longoptions)
+    
 
 def go(maskname,
         band,
@@ -93,6 +134,9 @@ def go(maskname,
         wavoptions,
         longoptions):
 
+    '''
+    The go command is the main entry point into this module.
+    '''
     wavename = Wavelength.filelist_to_wavename(filenames, band, maskname,
             wavoptions).rstrip(".fits")
 
