@@ -89,7 +89,7 @@ def imdiff(A, B, maskname, band, options):
     print dname
 
     ''' Now handle variance '''
-    numreads = header["READS0"]
+    numreads = headerA["READS0"]
     RN_adu = Detector.RN / np.sqrt(numreads) / Detector.gain
     varname = "var_{0}_{1}_{2}_{3}+{4}_{5}+{6}.fits".format(maskname, objname, band,
         A[1]["frameid"], B[1]["frameid"], imnumA, imnumB)
