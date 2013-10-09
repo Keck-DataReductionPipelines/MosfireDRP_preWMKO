@@ -348,8 +348,8 @@ def fit_lambda_interactively(maskname, band, wavenames, options):
     II = InteractiveSolution(fig, mfits, linelist, options, 1,
         outfilename, solutions=solutions, )
     print "Waiting"
-    pl.show()
-    print "out of show"
+    pl.draw()
+    pl.show(block=True)
 
     print "save to: ", fn
     np.save(outfilename, np.array(II.solutions))
