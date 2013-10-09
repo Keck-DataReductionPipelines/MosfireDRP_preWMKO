@@ -48,7 +48,7 @@ npk   May  4 2011
 
 """
 
-import logging
+import logging as log
 from multiprocessing import Pool
 import os
 import itertools
@@ -125,6 +125,14 @@ def filelist_to_path(files, band, maskname, options):
     return outf
 
 def imcombine(files, maskname, bandname, options):
+    ''' This version of imcombine is used to create the wave_stack file
+    which is used only by the wavelength fitting routine. This imcombine does
+    not produce science results.
+
+    files -- list of strings with file names
+    maskname -- string with name of the mask
+    bandname -- string with name of band
+    options -- passed across from Options file'''
     
     Flat = IO.load_flat(maskname, bandname, options)
     flat = Flat[1]
@@ -139,7 +147,6 @@ def imcombine(files, maskname, bandname, options):
     for i in xrange(len(files)):
         fname = files[i]
         thishdr, data, bs = IO.readmosfits(fname, options)
-        #ADUs[i,:,:] = data.filled(0)/flat
         ADUs[i,:,:] = data.filled(0)
 
         if thishdr["aborted"]:
@@ -263,6 +270,7 @@ def fit_lambda(maskname,
 
     tock = time.time()
 
+
     if True:
         p = Pool()
         solutions = p.map(fit_lambda_helper, range(len(bs.ssl)))
@@ -344,7 +352,6 @@ def fit_lambda_interactively(maskname, band, wavenames, options):
     
     outfilename = fn
     fig = pl.figure(1,figsize=(16,8))
-    pl.ion()
     II = InteractiveSolution(fig, mfits, linelist, options, 1,
         outfilename, solutions=solutions, )
     print "Waiting"
@@ -990,6 +997,7 @@ class InteractiveSolution:
             self.solutions = range(len(self.bs.ssl))
         else:
             self.solutions = solutions
+
         self.cid = self.fig.canvas.mpl_connect('key_press_event', self)
 
         self.setup()
@@ -1452,7 +1460,8 @@ def fit_outwards_refit(data, bs, sol_1d, lines, options, start, bottom, top,
 
         #if np.std(delt) < .01: pdb.set_trace()
         print "resid ang S%2.2i @ p%4.0i: %1.2f rms %1.2f mad [shift%2.0f]" % \
-                (slitno+1, yhere, np.std(delt), np.median(np.abs(delt)), shift)
+                (slitno+1, yhere, np.std(delt), np.median(np.abs(delt)),
+                    shift)
 
         return cfit, delt
 

@@ -7,29 +7,29 @@
 source /usr/stsci/envconfig.mac/cshrc
 iraf
 
-setenv MOSPATH AAAA
+setenv MOSPATH $HOME/mosfire/DRP
 setenv PYTHONPATH ${PYTHONPATH}:${MOSPATH}
 setenv PYRAF_NO_DISPLAY TRUE
 
 if ($#argv == 0) then
 	echo "Starting MOSFIRE Python"
-	\ipython -pylab -colors Linux
+	\ipython --pylab 
 else
 	switch ( $argv[1] )
 		case "libs":
-			/usr/stsci/pyssg/Python-2.7/bin/python -c "import sys; print sys.path"
+			python -c "import sys; print sys.path"
 			breaksw
 		case "what":
-			/usr/stsci/pyssg/Python-2.7/bin/python ${MOSPATH}/apps/what.py $*
+			python ${MOSPATH}/apps/what.py $*
 			breaksw
         case "audit":
-            /usr/stsci/pyssg/Python-2.7/bin/python ${MOSPATH}/apps/audit.py $*
+            python ${MOSPATH}/apps/audit.py $*
             breaksw
         case "db":
-            /usr/stsci/pyssg/Python-2.7/bin/python ${MOSPATH}/apps/db.py $*
+            python ${MOSPATH}/apps/db.py $*
             breaksw
 		default:
-			/usr/stsci/pyssg/Python-2.7/bin/python $*
+			python $*
 			breaksw
 	endsw
 endif

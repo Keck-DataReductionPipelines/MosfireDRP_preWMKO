@@ -78,6 +78,7 @@ def stack_rectified(wavenames, maskname, band, wavops):
     N = len(wavenames)
     lamnames = []
     suffixs = []
+
     for i in xrange(N):
         lamnames.append( Wavelength.filelist_to_wavename(wavenames[i], band,
             maskname, wavops).rstrip(".fits"))
@@ -90,27 +91,28 @@ def stack_rectified(wavenames, maskname, band, wavops):
     ivars = []
     sns = []
 
+
     try:
-        ls = [get_path(os.path.join(path, "rectified_%s_%s.fits") % (band,
-            suffix)) for suffix in suffixs]
-        imcombine(ls, maskname, "rectified_%s_%s.fits" % (maskname, band), 
+        ls = [get_path(os.path.join(path, "eps_%s_%s_%s.fits") % (maskname,
+            suffix, band)) for suffix in suffixs]
+        imcombine(ls, maskname, "eps_%s_%s.fits" % (maskname, band), 
                 wavops, 'rate')
     except:
         pass
 
     try:
-        ls = [get_path(os.path.join(path, "rectified_ivar_%s_%s.fits") % (band,
-            suffix)) for suffix in suffixs]
-        imcombine(ls, maskname, "rectified_ivar_%s_%s.fits" % (maskname, band), 
-            wavops, 'ivar-rate')
+        ls = [get_path(os.path.join(path, "ivars_%s_%s_%s.fits") % (maskname, 
+            suffix, band)) for suffix in suffixs]
+        imcombine(ls, maskname, "ivars_%s_%s.fits" % (maskname, 
+            band), wavops, 'ivar-rate')
     except:
         pass
 
     try:
-        ls = [get_path(os.path.join(path, "rectified_sn_%s_%s.fits") % (band,
-            suffix)) for suffix in suffixs]
-        imcombine(ls, maskname, "rectified_sn_%s_%s.fits" % (maskname, band), 
-            wavops, 'sn-rate')
+        ls = [get_path(os.path.join(path, "snrs_%s_%s_%s.fits") % (maskname,
+            suffix, band)) for suffix in suffixs]
+        imcombine(ls, maskname, "snrs_%s_%s.fits" % (maskname, band), 
+            wavops, 'snr-rate')
     except:
         pass
 
@@ -196,6 +198,8 @@ def handle_combine(wavenames, maskname, band, wavops):
 
     N = len(wavenames)
     assert(N > 0)
+
+    print "Starting"
 
     if N == 1:  rename_files(wavenames, maskname, band, wavops)
     if N > 1:   stack_files(wavenames, maskname, band, wavops)

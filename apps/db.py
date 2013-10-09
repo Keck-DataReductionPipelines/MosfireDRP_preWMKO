@@ -161,35 +161,46 @@ def sql_for_mask_group_filter(db, maskname):
 
 def sql_for_mask_filter_flats(db, maskname, filter):
 
-    cursor = db.execute('''
+    query = '''
     select path, fdate, number
     from files
     where maskname = "{0}" and substr(obsmode, -12, 12) = "spectroscopy" and
-    filter = "{1}" and (itime/1000.0) < 25 and (el-45) < .1 and flatspec = 1
+    filter = "{1}" and (el-45) < .1 and flatspec = 1
     order by fdate, number
-            '''.format(maskname, filter))
+            '''.format(maskname, filter)
 
+    print "Flat Query is:", query
+    cursor = db.execute(query)
     return cursor.fetchall()
 
 def sql_for_mask_filter_spectra(db, maskname, filter):
-    cursor = db.execute('''
+    query = '''
     select fdate
     from files
     where maskname = "{0}" and substr(obsmode, -12, 12) = "spectroscopy" and
-    filter = "{1}" and (itime/1000.0) > 3 and flatspec = 0 and domestat = "tracking"
+    filter = "{1}" and (itime/1000.0) > 30 and flatspec = 0 and (domestat =
+    "tracking" or domestat = 0) and aborted = 0
+
     group by fdate
-            '''.format(maskname, filter))
+
+            '''.format(maskname, filter)
     
-    return cursor.fetchall()
+    #print "DB Query is: ", query
+    cur = db.execute(query)
+    return cur.fetchall()
 
 def sql_for_mask_filter_date(db, maskname, filter, date):
-    cur = db.execute('''
+    query = '''
     select path, fdate, number, yoffset, itime/1000.0
     from files
-    where maskname = "{0}" and filter = "{1}" and (itime/1000.0) > 3 and 
-            fdate = {2} and flatspec = 0 and domestat = "tracking"
+    where maskname = "{0}" and filter = "{1}" and (itime/1000.0) > 30 and 
+            fdate = {2} and flatspec = 0  and (domestat = "tracking" or
+            domestat = 0) and aborted = 0
     order by fdate, number
-    '''.format(maskname, filter, date))
+    '''.format(maskname, filter, date)
+
+    print "DB Query is: ", query
+    cur = db.execute(query)
 
     return cur.fetchall()
  
@@ -546,7 +557,6 @@ def masks():
                 nums = [int(S[2]) for S in FRAMES]
                 observations = find_continuous(nums)
 
-
                 this_date["observations"] = []
                 for observation in observations:
                     this_observation = {"observation": observation}
@@ -555,6 +565,11 @@ def masks():
                         path, fdate, number, yoffset, itime = frame
                         if yoffset is None: yoffset = "Unknown"
 
+                        if (number < observation[0]) or (number > 
+                                observation[1]):
+                            continue
+
+                        if float(yoffset) == 0: pdb.set_trace()
                         if offsets.has_key(yoffset):
 
                             offsets[yoffset]["fname"].append(
@@ -577,7 +592,7 @@ def masks():
                 for observation in this_date["observations"]:
                     for k,v in observation["offsets"].iteritems():
                         print("\tOffset {0:5s} has {1:3g} frames ({2}-{3}) "
-                            "total exptime is {4:5g} s".format(k,
+                            "total exptime is {4:5g} s".format(str(k),
                                 len(v["fname"]), v["start/stop"][0],
                                 v["start/stop"][1], v["itime"]))
 

@@ -43,7 +43,7 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
     shifts = []
     for pos in nod_posns:
 
-        II = IO.read_drpfits(maskname, "eps_{0}_{1}_{2}.fits".format(band,
+        II = IO.read_drpfits(maskname, "adu_{0}_{1}_{2}.fits".format(band,
             suffix, pos), options)
 
         off = np.array((II[0]["decoff"], II[0]["raoff"]),dtype=np.float64)
@@ -141,26 +141,46 @@ def handle_rectification(maskname, nod_posns, wavenames, band_pass, options,
         if True:
             IO.writefits(solution["eps_img"], maskname,
                 "eps_{0}_{1}_S{2:02g}.fits".format(band, suffix, i+1), options,
-                overwrite=True, header=header, lossy_compress=True)
+                overwrite=True, header=header, lossy_compress=False)
 
             IO.writefits(solution["iv_img"], maskname,
                 "ivar_{0}_{1}_S{2:02g}.fits".format(band, suffix, i+1), options,
-                overwrite=True, header=header, lossy_compress=True)
+                overwrite=True, header=header, lossy_compress=False)
 
     header = EPS[0].copy()
     header.update("OBJECT", "{0}/{1}".format(maskname, band))
+    header.update("wat0_001", "system=world")
+    header.update("wat1_001", "wtype=linear")
+    header.update("wat2_001", "wtype=linear")
+    header.update("dispaxis", 1)
+    header.update("dclog1", "Transform")
+    header.update("dc-flag", 0)
+    header.update("ctype1", "AWAV")
+    header.update("cunit1", "Angstrom")
+    header.update("crval1", ll[0])
+    header.update("crval2", 1)
+    header.update("crpix1", 1)
+    header.update("crpix2", 1)
+    header.update("cdelt1", 1)
+    header.update("cdelt2", 1)
+    header.update("cname1", "angstrom")
+    header.update("cname2", "pixel")
+    header.update("cd1_1", ll[1]-ll[0])
+    header.update("cd1_2", 0)
+    header.update("cd2_1", 0)
+    header.update("cd2_2", 1)
 
     IO.writefits(output, maskname, "eps_{0}_{1}_{2}.fits".format(maskname,
         suffix, band), options, overwrite=True, header=header,
-        lossy_compress=True)
+        lossy_compress=False)
 
     IO.writefits(snrs, maskname, "snrs_{0}_{1}_{2}.fits".format(maskname,
         suffix, band), options, overwrite=True, header=header,
-        lossy_compress=True)
+        lossy_compress=False)
 
     IO.writefits(ivarout, maskname, "ivars_{0}_{1}_{2}.fits".format(maskname,
         suffix, band), options, overwrite=True, header=header,
-        lossy_compress=True)
+        lossy_compress=False)
 
 
 def r_interpol(ls, ss, lfid, tops, top, shift_pix=0, pad=[0,0], fill_value=0.0):
@@ -224,8 +244,8 @@ def handle_rectification_helper(edgeno):
 
     # Length of the slit in arcsecond
     lenas = (tops[1024] - bots[1024]) * 0.18
-    mxshift = np.int(np.ceil(np.max(shifts)/0.18))
-    mnshift = np.int(np.floor(np.min(shifts)/0.18))
+    mxshift = np.abs(np.int(np.ceil(np.max(shifts)/0.18)))
+    mnshift = np.abs(np.int(np.floor(np.min(shifts)/0.18)))
 
     top = min(np.floor(np.min(tops)), 2048)
     bot = max(np.ceil(np.max(bots)), 0)

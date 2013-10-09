@@ -30,6 +30,27 @@ def rem_header_key(header, key):
 
 
 def imcombine(files, maskname, options, flat, outname=None):
+    '''
+    From a list of files it imcombine returns the imcombine of several values.
+    The imcombine code also estimates the readnoise ad RN/sqrt(numreads) so
+    that the variance per frame is equal to (ADU + RN^2) where RN is computed
+    in ADUs.
+
+    header -- fits header
+    ADUs -- The mean # of ADUs per frame
+    var -- the Variance [in adu] per frame. 
+    bs -- Barset
+    itimes -- The _total_ integration time in second
+    Nframe -- The number of frames in a stack.
+
+    
+    Thus the number of electron per second is derived as: 
+        e-/sec = (ADUs * Gain) * (Nframe/itimes)
+
+    The total number of electrons is:
+        el = ADUs * Gain * Nframe
+
+    '''
 
     ADUs = np.zeros((len(files), 2048, 2048))
     itimes = np.ones((len(files), 2048, 2048))
@@ -63,7 +84,8 @@ def imcombine(files, maskname, options, flat, outname=None):
             if thishdr.has_key(key):
                 if val != thishdr[key]:
                     newkey = "hierarch " + key + ("_img%2.2i" % i)
-                    header.update(newkey.rstrip(), thishdr[key])
+                    try: header.update(newkey.rstrip(), thishdr[key])
+                    except: pass
 
         ''' Now handle error checking'''
 
@@ -112,83 +134,65 @@ def imcombine(files, maskname, options, flat, outname=None):
         print "%s %s[%s]/%s %5.1f" % (fname, maskname, patternid,
             header['filter'], np.mean(itimes[i]))
 
-    electrons = np.array(ADUs) * Detector.gain  / flat
-    el_per_sec = electrons / itimes
+    ADUs = np.array(ADUs) / flat
+    ADUs_per_sec = ADUs / itimes
 
     output = np.zeros((2048, 2048))
     exptime = np.zeros((2048, 2048))
 
 
-    if len(files) >= 9:
-        print "Sigclip CRR"
-        srt = np.argsort(el_per_sec,axis=0)
-        shp = el_per_sec.shape
-        sti = np.ogrid[0:shp[0], 0:shp[1], 0:shp[2]]
-
-        electrons = electrons[srt, sti[1], sti[2]]
-        itimes = itimes[srt, sti[1], sti[2]]
-
-        mean = np.median(electrons[2:-2,:,:], axis = 0)
-        std = np.std(electrons[2:-2,:,:], axis = 0)
-
-        drop = np.where( (electrons > (mean+std*3)) | (electrons < (mean-std*3)) )
-        electrons[drop] = 0.0
-        itimes[drop] = 0.0
-
-        electrons = np.sum(electrons, axis=0)
-        itimes = np.sum(itimes, axis=0)
-
-
-    elif len(files) > 5:
+    if len(files) > 5:
         print "Drop min/max CRR"
-        srt = np.argsort(el_per_sec,axis=0)
-        shp = el_per_sec.shape
+        srt = np.argsort(ADUs_per_sec,axis=0)
+        shp = ADUs_per_sec.shape
         sti = np.ogrid[0:shp[0], 0:shp[1], 0:shp[2]]
 
-        electrons = electrons[srt, sti[1], sti[2]]
+        ADUs_per_sec = ADUs_per_sec[srt, sti[1], sti[2]]
+        ADUs = ADUs[srt, sti[1], sti[2]]
         itimes = itimes[srt, sti[1], sti[2]]
 
-        electrons = np.sum(electrons[1:-1,:,:], axis=0)
+        ADUs = np.mean(ADUs[1:-1,:,:], axis=0)
+        ADUs_per_sec = np.mean(ADUs_per_sec[1:-1,:,:], axis=0)
         itimes = np.sum(itimes[1:-1,:,:], axis=0)
+        Nframe = len(files) - 2
 
     else:
-        electrons = np.sum(electrons, axis=0)
+        ADUs = np.mean(ADUs, axis=0)
         itimes = np.sum(itimes, axis=0)
+        Nframe = len(files) 
 
-    el_per_sec = electrons/itimes
 
     ''' Now handle variance '''
     numreads = header["READS0"]
-    header.update
-    RN = Detector.RN / np.sqrt(numreads)
+    RN_adu = Detector.RN / np.sqrt(numreads) / Detector.gain
 
-    var = (electrons + RN**2) / itimes**2
-
+    var = (ADUs + RN_adu**2) 
 
     if header.has_key("RN"): raise Exception("RN already populated in header")
-    header.update("RN", "%1.3f e-" % RN)
+    header.update("RN", "%1.3f ADU" % RN_adu)
+    header.update("NUMFRM", Nframe)
 
 
     if outname is not None:
-        header.update("object", "{0}: electrons/s signal".format(maskname))
-        header.update("bunit", "ELECTRONS")
+        header.update("object", "{0}: ADU per frame".format(maskname))
+        header.update("bunit", "ADU")
 
-        IO.writefits(electrons, maskname, "eps_%s" % (outname),
+        IO.writefits(ADUs, maskname, "adu_%s" % (outname),
                 options, header=header, overwrite=True)
 
-        header.update("object", "{0}: electrons^2 var".format(maskname))
-        header.update("bunit", "ELECTRONS^2")
+        header.update("object", "{0}: adu^2 var per frame".format(maskname))
+        header.update("bunit", "ADU^2")
 
-        IO.writefits(var*itimes**2, maskname, "var_%s" % (outname),
+        IO.writefits(var, maskname, "var_%s" % (outname),
                 options, header=header, overwrite=True, lossy_compress=True)
 
-        header.update("object", "{0}: itime s".format(maskname))
+        header.update("object", "{0}: itime s total".format(maskname))
         header.update("bunit", "SECOND")
 
         IO.writefits(np.float32(itimes), maskname, "itimes_%s" % (outname),
                 options, header=header, overwrite=True, lossy_compress=True)
 
-    return header, el_per_sec, var, bs
+    return header, ADUs, var, bs, itimes, Nframe
 
 def merge_headers(h1, h2):
     """Merge headers h1 and h2 such that h2 has the nod position name
@@ -204,10 +208,10 @@ def merge_headers(h1, h2):
         if h.has_key(key):
             if val != h[key]:
                 newkey = "hierarch " + key + ("_pos_%s" % patternid)
-                h.update(newkey.rstrip(), val)
+                try: h.update(newkey.rstrip(), val)
+                except: pass
 
     return h
-
 
 
 def handle_background(As, Bs, wavenames, maskname, band_name, options): 
@@ -228,15 +232,20 @@ def handle_background(As, Bs, wavenames, maskname, band_name, options):
     if np.abs(np.median(flat) - 1) > 0.1:
         raise Exception("Flat seems poorly behaved.")
 
-    hdrA, ratesA, varA, bsA = imcombine(As, maskname, options, 
-            flat, outname="%s_%s_A.fits" % (band_name, suffix))
+    hdrA, avgaduA, varaduA, bsA, timeA, NframeA = imcombine(As, maskname,
+            options, flat, outname="%s_%s_A.fits" % (band_name, suffix))
 
-    hdrB, ratesB, varB, bsB = imcombine(Bs, maskname, options, 
-            flat, outname="%s_%s_B.fits" % (band_name, suffix))
+    hdrB, avgaduB, varaduB, bsB, timeB, NframeB = imcombine(Bs, maskname,
+            options, flat, outname="%s_%s_B.fits" % (band_name, suffix))
 
     header = merge_headers(hdrA, hdrB)
 
-    AmB = ratesA - ratesB
+    elpersecA = avgaduA * Detector.gain * (NframeA/timeA)
+    elpersecB = avgaduB * Detector.gain * (NframeB/timeB)
+    varA = varaduA * Detector.gain * (NframeA/timeA)**2
+    varB = varaduB * Detector.gain * (NframeB/timeA)**2
+
+    AmB = elpersecA - elpersecB
     vAmB = varA + varB
     ivar = 1/vAmB
 
@@ -262,24 +271,24 @@ def handle_background(As, Bs, wavenames, maskname, band_name, options):
         sky_sub_out[yroi, xroi] = sol["output"]
         sky_model_out[yroi, xroi] = sol["model"]
     
-    header.update("object", "{0}: electron/s".format(maskname))
-    header.update("bunit", "ELECTRONS/S")
+    header.update("object", "{0}: electron".format(maskname))
+    header.update("bunit", "ELECTRONS")
 
     IO.writefits(data, maskname, "sub_%s_%s_%s.fits" % (maskname, band,
         suffix), options, header=header, overwrite=True, lossy_compress=True)
 
-    header.update("object", "{0}: electron/s".format(maskname))
-    header.update("bunit", "ELECTRONS/S")
+    header.update("object", "{0}: electron/frame".format(maskname))
+    header.update("bunit", "ELECTRONS")
     IO.writefits(sky_sub_out, maskname, "bsub_%s_%s_%s.fits" % (maskname, band,
         suffix), options, header=header, overwrite=True)
 
-    header.update("object", "{0}: (s/electron)^2".format(maskname))
-    header.update("bunit", "(S/ELECTRONS)^2")
+    header.update("object", "{0}: (1/electron)^2".format(maskname))
+    header.update("bunit", "(1/ELECTRONS)^2")
     IO.writefits(ivar, maskname, "bsub_ivar_%s_%s_%s.fits" % (maskname, band,
         suffix), options, header=header, overwrite=True, lossy_compress=True)
 
-    header.update("object", "{0}: electron/s".format(maskname))
-    header.update("bunit", "ELECTRONS/S")
+    header.update("object", "{0}: electron".format(maskname))
+    header.update("bunit", "ELECTRONS")
 
     IO.writefits(sky_model_out, maskname, "bmod_%s_%s_%s.fits" % (maskname,
         band, suffix), options, header=header, overwrite=True,
@@ -428,7 +437,7 @@ def background_subtract_helper(slitno):
 
     for i in range(3):
         try:
-            delta = dl
+            delta = dl*0.9
             knots = np.arange(knotstart, knotend, delta)
             bspline = II.splrep(ls[OK], ss[OK], k=5, task=-1, t=knots)
         except:
