@@ -134,30 +134,53 @@ def imcombine(files, maskname, options, flat, outname=None):
         print "%s %s[%s]/%s %5.1f" % (fname, maskname, patternid,
             header['filter'], np.mean(itimes[i]))
 
-    ADUs = np.array(ADUs) / flat
-    ADUs_per_sec = ADUs / itimes
+    electrons = np.array(ADUs) * Detector.gain / flat
+    el_per_sec = electrons / itimes
 
     output = np.zeros((2048, 2048))
     exptime = np.zeros((2048, 2048))
 
 
-    if len(files) > 5:
-        print "Drop min/max CRR"
-        srt = np.argsort(ADUs_per_sec,axis=0)
-        shp = ADUs_per_sec.shape
+    if len(files) >= 9:
+        print "Sigclip CRR"
+        srt = np.argsort(electrons, axis=0, kind='quicksort')
+        shp = el_per_sec.shape
         sti = np.ogrid[0:shp[0], 0:shp[1], 0:shp[2]]
 
-        ADUs_per_sec = ADUs_per_sec[srt, sti[1], sti[2]]
-        ADUs = ADUs[srt, sti[1], sti[2]]
+        electrons = electrons[srt, sti[1], sti[2]]
+        el_per_sec = el_per_sec[srt, sti[1], sti[2]]
         itimes = itimes[srt, sti[1], sti[2]]
 
-        ADUs = np.mean(ADUs[1:-1,:,:], axis=0)
-        ADUs_per_sec = np.mean(ADUs_per_sec[1:-1,:,:], axis=0)
+        # Construct the mean and standard deviation by dropping the top and bottom two 
+        # electron fluxes
+        mean = np.mean(el_per_sec[2:-2,:,:], axis = 0)
+        std = np.std(el_per_sec[2:-2,:,:], axis = 0)
+
+        drop = np.where( (el_per_sec > (mean+std*4)) | (el_per_sec < (mean-std*4)) )
+        print "dropping: ", len(drop[0])
+        electrons[drop] = 0.0
+        itimes[drop] = 0.0
+
+        electrons = np.sum(electrons, axis=0)
+        itimes = np.sum(itimes, axis=0)
+        Nframe = len(files) 
+
+    elif len(files) > 5:
+        print "Drop min/max CRR"
+        srt = np.argsort(el_per_sec,axis=0)
+        shp = el_per_sec.shape
+        sti = np.ogrid[0:shp[0], 0:shp[1], 0:shp[2]]
+
+        electrons = electrons[srt, sti[1], sti[2]]
+        itimes = itimes[srt, sti[1], sti[2]]
+
+        electrons = np.sum(electrons[1:-1,:,:], axis=0)
         itimes = np.sum(itimes[1:-1,:,:], axis=0)
+
         Nframe = len(files) - 2
 
     else:
-        ADUs = np.mean(ADUs, axis=0)
+        electrons = np.sum(electrons)
         itimes = np.sum(itimes, axis=0)
         Nframe = len(files) 
 
@@ -165,23 +188,33 @@ def imcombine(files, maskname, options, flat, outname=None):
     ''' Now handle variance '''
     numreads = header["READS0"]
     RN_adu = Detector.RN / np.sqrt(numreads) / Detector.gain
+    RN = Detector.RN / np.sqrt(numreads)
 
-    var = (ADUs + RN_adu**2) 
+    var = (electrons + RN**2) / itimes
+
+    ''' Now mask out bad pixels '''
+    electrons[data.mask] = np.nan
+    var[data.mask] = np.inf
 
     if header.has_key("RN"): raise Exception("RN already populated in header")
-    header.update("RN", "%1.3f ADU" % RN_adu)
+    header.update("RN", "%1.3f e-" % RN)
     header.update("NUMFRM", Nframe)
 
-
     if outname is not None:
-        header.update("object", "{0}: ADU per frame".format(maskname))
+        header.update("object", "{0}: electron per second".format(maskname))
         header.update("bunit", "ADU")
 
-        IO.writefits(ADUs, maskname, "adu_%s" % (outname),
+        IO.writefits(np.float32(np.sum(ADUs * Detector.gain / flat, axis=0)), maskname,
+            "eps_raw_%s" % (outname), options, header=header, overwrite=True)
+
+        IO.writefits(np.float32(electrons/itimes), maskname, "eps_%s" % (outname),
                 options, header=header, overwrite=True)
 
-        header.update("object", "{0}: adu^2 var per frame".format(maskname))
-        header.update("bunit", "ADU^2")
+        # Update itimes after division in order to not introduce nans
+        itimes[data.mask] = 0.0
+
+        header.update("object", "{0}: eps^2 var per frame".format(maskname))
+        header.update("bunit", "EPS^2")
 
         IO.writefits(var, maskname, "var_%s" % (outname),
                 options, header=header, overwrite=True, lossy_compress=True)
@@ -192,7 +225,7 @@ def imcombine(files, maskname, options, flat, outname=None):
         IO.writefits(np.float32(itimes), maskname, "itimes_%s" % (outname),
                 options, header=header, overwrite=True, lossy_compress=True)
 
-    return header, ADUs, var, bs, itimes, Nframe
+    return header, electrons/itimes, var, bs, itimes, Nframe
 
 def merge_headers(h1, h2):
     """Merge headers h1 and h2 such that h2 has the nod position name
@@ -232,18 +265,13 @@ def handle_background(As, Bs, wavenames, maskname, band_name, options):
     if np.abs(np.median(flat) - 1) > 0.1:
         raise Exception("Flat seems poorly behaved.")
 
-    hdrA, avgaduA, varaduA, bsA, timeA, NframeA = imcombine(As, maskname,
+    hdrA, elpersecA, varA, bsA, timeA, NframeA = imcombine(As, maskname,
             options, flat, outname="%s_%s_A.fits" % (band_name, suffix))
 
-    hdrB, avgaduB, varaduB, bsB, timeB, NframeB = imcombine(Bs, maskname,
+    hdrB, elpersecB, varB, bsB, timeB, NframeB = imcombine(Bs, maskname,
             options, flat, outname="%s_%s_B.fits" % (band_name, suffix))
 
     header = merge_headers(hdrA, hdrB)
-
-    elpersecA = avgaduA * Detector.gain * (NframeA/timeA)
-    elpersecB = avgaduB * Detector.gain * (NframeB/timeB)
-    varA = varaduA * Detector.gain * (NframeA/timeA)**2
-    varB = varaduB * Detector.gain * (NframeB/timeA)**2
 
     AmB = elpersecA - elpersecB
     vAmB = varA + varB
