@@ -39,7 +39,7 @@ def handle_flats(flatlist, maskname, band, options, extension=None):
     2. A set of polynomials that mark the edges of a slit
 
     Inputs:
-    flatlist: 
+    flatlist: Either a string of an input file or a list of file names
     maskname: The name of a mask
     band: A string indicating the bandceil
 
@@ -57,6 +57,12 @@ def handle_flats(flatlist, maskname, band, options, extension=None):
 
     # Check
     bpos = np.ones(92) * -1
+
+    
+    flatlist = IO.list_file_to_strings(flatlist)
+
+    print flatlist
+
     for fname in flatlist:
 
         hdr, dat, bs = IO.readmosfits(fname, options)
@@ -79,12 +85,12 @@ def handle_flats(flatlist, maskname, band, options, extension=None):
                             "this set of flat files")
     bs = bs0
     # Imcombine
-    print "Attempting to combine: ", flatlist
-    combine(flatlist, maskname, band, options)
+    if True:
+        print "Attempting to combine: ", flatlist
+        combine(flatlist, maskname, band, options)
 
-    print "Combined '%s' to '%s'" % (flatlist, maskname)
-    path = os.path.join(options["outdir"], maskname,
-                    "combflat_2d_%s.fits" % band)
+        print "Combined '%s' to '%s'" % (flatlist, maskname)
+    path = "combflat_2d_%s.fits" % band
     (header, data) = IO.readfits(path, use_bpm=True)
 
     print "Flat written to %s" % path
@@ -94,13 +100,11 @@ def handle_flats(flatlist, maskname, band, options, extension=None):
     results = find_and_fit_edges(data, header, bs, options)
     results[-1]["maskname"] = maskname
     results[-1]["band"] = band
-    np.save(os.path.join(options["outdir"], maskname, 
-            "slit-edges_{0}".format(band)), results)
+    np.save("slit-edges_{0}".format(band), results)
     save_ds9_edges(results, options)
 
     # Generate Flat
-    out = os.path.join(options["outdir"], maskname, 
-                    "pixelflat_2d_%s.fits" % (band))
+    out = "pixelflat_2d_%s.fits" % (band)
     make_pixel_flat(data, results, options, out, flatlist)
     print "Pixel flat took {0:6.4} s".format(time.time()-tick)
 
@@ -273,7 +277,7 @@ def combine(flatlist, maskname, band, options):
     '''
     combine list of flats into a flat file'''
 
-    out = os.path.join(options["outdir"], maskname, "combflat_2d_%s.fits" 
+    out = os.path.join("combflat_2d_%s.fits" 
                     % (band))
     if os.path.exists(out):
             os.remove(out)
@@ -385,7 +389,7 @@ def find_edge_pair(data, y, roi_width):
         else:
             xposs_bot_missing.append(xp)
             xposs_top_missing.append(xp)
-            print "Skipping: %i" % (xp)
+            print "Skipping (wavelength pixel): %i" % (xp)
 
     
     return map(np.array, (xposs_bot, xposs_bot_missing, yposs_bot, xposs_top,
