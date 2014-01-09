@@ -221,8 +221,8 @@ def read_drpfits(maskname, fname, options):
 
     return output
 
-def fname_to_path(fname, options):
-    '''Take a filename like m120507_0123, parse date, and return full path'''
+def fname_to_date_tuple(fname):
+    '''Take a filename like m120507_0123, return 12may07'''
     months = {"01": "jan", "02": "feb", "03": "mar", "04": "apr", "05": "may",
         "06": "jun", "07": "jul", "08": "aug", "09": "sep", "10": "oct",
         "11": "nov", "12": "dec"}
@@ -230,13 +230,22 @@ def fname_to_path(fname, options):
     if len(fname) != 17:
         raise Exception("The file name '%s' is not of correct length. It "
                 "must be of the form mYYmmdd_nnnn.fits" % fname)
+    
     try:
         fdate = fname.split("m")[1][0:6]
         yr, mn, dy = "20" + fdate[0:2], fdate[2:4], int(fdate[4:6])
         month = months[mn]
     except:
         print "Could not parse date out of file name: %s" % (fname)
+    
+    return yr, month, dy
 
+def fname_to_path(fname, options):
+    '''Take a filename like m120507_0123, parse date, and return full path'''
+
+    if os.path.isabs(fname): return fname
+
+    yr, month, dy = fname_to_date_tuple(fname)
     path = os.path.join(options["indir"], yr + month + "%2.2i" % dy)
     if not os.path.exists(os.path.join(path, fname)):
         path = os.path.join(options["indir"], yr + month + "%2.2i" % (dy-1))
@@ -248,6 +257,48 @@ def fname_to_path(fname, options):
 
     return path
 
+def list_file_to_strings(fname):
+    '''Read the filename in fname and convert to a series of paths.
+This emulates IRAF's @file system. However, in addtion, the first line of the file
+can be an absolute path. Example:
+list.txt
+/path/to/files
+file1
+file2
+file3
+
+returns ['/path/to/files/file1', '/path/to/files/file2', '/path/to/files/file3']
+
+whereas
+list.txt
+file1
+file2
+file3
+
+returns ['file1', 'file2', 'file3']
+'''
+
+    if type(fname) != str:
+        return fname
+
+    inputs = np.loadtxt(fname, dtype= [("f", "S100")])
+
+    if len(inputs) == 0:
+        return []
+
+    
+    path = ""
+    start_index = 0
+    if os.path.isabs(inputs[0][0]):
+        path = inputs[0][0]
+        start_index = 1
+
+    output = []
+    for i in xrange(start_index, len(inputs)):
+        output.append(os.path.join(path, inputs[i][0]))
+
+    return output
+    
 
 def readmosfits(fname, options, extension=None):
     '''Read a fits file written by MOSFIRE from path and return a tuple of 
