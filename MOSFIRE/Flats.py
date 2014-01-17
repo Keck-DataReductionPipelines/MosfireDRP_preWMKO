@@ -51,10 +51,6 @@ def handle_flats(flatlist, maskname, band, options, extension=None):
 
     tick = time.time()
 
-    path = os.path.join(options["outdir"], maskname)
-    try: os.mkdir(path)
-    except OSError: pass
-
     # Check
     bpos = np.ones(92) * -1
 
@@ -84,6 +80,7 @@ def handle_flats(flatlist, maskname, band, options, extension=None):
                     raise Exception("Bar positions are not all the same in "
                             "this set of flat files")
     bs = bs0
+    np.save("%s_%s_barset" % (maskname, band), [bs])
     # Imcombine
     if True:
         print "Attempting to combine: ", flatlist
@@ -261,8 +258,7 @@ def save_ds9_edges(results, options):
             continue
         
     band = results[-1]["band"]
-    fn = os.path.join(options["outdir"], results[-1]["maskname"], 
-                    "slit-edges_%s.reg" % band)
+    fn = "slit-edges_%s.reg" % band
     try:
             f = open(fn,'w')
             f.write(ds9)
