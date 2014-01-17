@@ -1,11 +1,24 @@
 #!/bin/csh
 
 
-set DT="`date +'%Y.%m.%d_%H.%M.%S'`"
+set DT="`date +'%Y.%m.%d'`"
 echo $DT
 
+rm repository_version
+hg sum > repository_version
 mkdir badpixels
 cp /scr2/mosfire/badpixels/badpix_10sep2012.fits badpixels
-tar -cfmosfire_v$DT.tar MOSFIRE/*py apps/*py apps/mospy platescale/10March2011.4.972.db badpixels/badpix_10sep2012.fits
+tar -cfmosdrp_$DT.tar MOSFIRE/*py apps/*py apps/mospy platescale/10March2011.4.972.db badpixels/badpix_10sep2012.fits repository_version drivers/*py
 
-gzip mosfire_v$DT.tar
+gzip mosdrp_$DT.tar
+cp mosdrp_$DT.tar.gz ~/public_html/mosdrp_releases
+
+set PD=`pwd`
+cd ~/public_html/mosdrp_releases
+rm mosdrp_cur.tgz
+ln -s mosdrp_$DT.tar.gz mosdrp_cur.tgz
+
+cd $PD
+
+
+
