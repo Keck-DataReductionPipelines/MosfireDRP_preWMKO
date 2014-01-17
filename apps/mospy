@@ -1,39 +1,48 @@
 #!/bin/csh -f
 
-#
-# Example mospy startup script.
-# 
-#  Unless you're at caltech you will need to change the environmental variables
-#
+alias ur_setup 'eval `/home/npk/.ureka/ur_setup -csh \!*`'
+alias ur_forget 'eval `/home/npk/.ureka/ur_forget -csh \!*`'
 
-source /usr/stsci/envconfig.mac/cshrc
-iraf
 
-setenv MOSPATH AAAA
+setenv MOSPATH /scr2/mosfire/DRP/mosfire
+setenv MOSPATH /home/npk/mdrp/
 setenv PYTHONPATH ${PYTHONPATH}:${MOSPATH}
-setenv PYRAF_NO_DISPLAY TRUE
+
+if (! -d $MOSPATH) then
+    echo "Path '$MOSPATH' does not exist. Modify $0"
+    echo "and change MOSPATH to the DRP directory."
+    exit 1
+endif
+
+ur_setup
 
 if ($#argv == 0) then
-	echo "Starting MOSFIRE Python"
-	\ipython -pylab -colors Linux
+        echo "Starting MOSFIRE Python"
+        ipython --pylab --colors Linux
 else
-	switch ( $argv[1] )
-		case "libs":
-			python -c "import sys; print sys.path"
-			breaksw
-		case "what":
-			\python ${MOSPATH}/apps/what.py $*
-			breaksw
-        case "audit":
-            \python ${MOSPATH}/apps/audit.py $*
+    switch ( $argv[1] )
+        case "libs":
+            python -c "import sys; print sys.path"
             breaksw
+
         case "db":
-            \python ${MOSPATH}/apps/db.py $*
+            python ${MOSPATH}/apps/db.py $*
             breaksw
-		default:
-			\python $*
-			breaksw
-	endsw
+
+        case "handle":
+            python ${MOSPATH}/apps/handle.py $*
+            breaksw
+
+        case "what":
+            python ${MOSPATH}/apps/what.py $*
+            breaksw
+
+        default
+            python $*
+            breaksw
+    endsw
 endif
 
 onintr -
+
+    
