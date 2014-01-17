@@ -34,8 +34,11 @@ def badpixelmask():
 
 def load_edges(maskname, band, options):
     ''' Load the slit edge functions. Returns (edges, metadata) '''
-    path = os.path.join(options["outdir"], maskname)
-    fn = os.path.join(path, "slit-edges_{0}.npy".format(band))
+    if False:
+        path = os.path.join(options["outdir"], maskname)
+        fn = os.path.join(path, "slit-edges_{0}.npy".format(band))
+
+    fn = "slit-edges_{0}.npy".format(band)
 
     edges = np.load(fn)
 
@@ -50,9 +53,11 @@ def load_edges(maskname, band, options):
 
 def load_lambdacenter(fnum, maskname, options):
     ''' Load the wavelength coefficient functions '''
-    path = os.path.join(options["outdir"], maskname)
-    fn = os.path.join(path, "lambda_center_coeffs_{0}.npy".format(fnum))
+    if False:
+        path = os.path.join(options["outdir"], maskname)
+        fn = os.path.join(path, "lambda_center_coeffs_{0}.npy".format(fnum))
 
+    fn = "lambda_center_coeffs_{0}.npy".format(fnum)
     ld = np.load(fn)
 
     return ld
@@ -60,17 +65,23 @@ def load_lambdacenter(fnum, maskname, options):
 def load_lambdadata(wavename, maskname, band, options):
     ''' Load the wavelength coefficient functions '''
 
-    fn = os.path.join(options["outdir"], maskname,
+    if False:
+        fn = os.path.join(options["outdir"], maskname,
             "lambda_coeffs_{0}.npy".format(wavename))
 
+
+    fn = "lambda_coeffs_{0}.npy".format(wavename)
     ld = np.load(fn)
 
     return ld
 
 def load_lambdaoutwards(fnum, maskname, band, options):
     ''' Load the wavelength coefficient functions '''
-    path = os.path.join(options["outdir"], maskname)
-    fn = os.path.join(path, "lambda_outwards_coeffs_{0}.npy".format(fnum))
+    if False:
+        path = os.path.join(options["outdir"], maskname)
+        fn = os.path.join(path, "lambda_outwards_coeffs_{0}.npy".format(fnum))
+
+    fn = "lambda_outwards_coeffs{0}.npy".format(fnum)
 
     ld = np.load(fn)
 
@@ -78,23 +89,32 @@ def load_lambdaoutwards(fnum, maskname, band, options):
 
 def load_lambdamodel(fnum, maskname, band, options):
     ''' Load the wavelength coefficient functions '''
-    path = os.path.join(options["outdir"], maskname)
-    fn = os.path.join(path, "lambda_mask_coeffs_{0}.npy".format(fnum))
+    if False:
+        path = os.path.join(options["outdir"], maskname)
+        fn = os.path.join(path, "lambda_mask_coeffs_{0}.npy".format(fnum))
+
+    fn = "lambda_mask_coeffs_{0}.npy".format(fnum)
 
     ld = np.load(fn)
     return ld
 
 def load_flat(maskname, band, options):
-    path = os.path.join(options["outdir"], maskname)
-    fn = os.path.join(path, "pixelflat_2d_{0}.fits".format(band))
+    if False:
+        path = os.path.join(options["outdir"], maskname)
+        fn = os.path.join(path, "pixelflat_2d_{0}.fits".format(band))
+
+    fn = "pixelflat_2d_{0}.fits".format(band)
 
     return readfits(fn, use_bpm=True)
 
 
 def load_lambdaslit(fnum, maskname, band, options):
     ''' Load the wavelength coefficient functions '''
-    path = os.path.join(options["outdir"], maskname)
-    fn = os.path.join(path, "lambda_solution_{0}.fits".format(fnum))
+    if False:
+        path = os.path.join(options["outdir"], maskname)
+        fn = os.path.join(path, "lambda_solution_{0}.fits".format(fnum))
+
+    fn = "lambda_solution_{0}.fits".format(fnum)
 
     print fn
 
@@ -103,7 +123,7 @@ def load_lambdaslit(fnum, maskname, band, options):
         raise Exception("band name mismatch")
 
     if ret[0]['maskname'] != maskname:
-        print("The maskname for the edge file '%s' does not match "
+        rint("The maskname for the edge file '%s' does not match "
                 "that in the edge file '%s'" % (maskname, ret[0]['maskname']))
         print "Continuing"
 
@@ -119,13 +139,16 @@ def writefits(img, maskname, fname, options, header=None, bs=None,
     else:
         hdu = pf.PrimaryHDU(img)
 
-    path = os.path.join(options["outdir"], maskname)
-    if not os.path.exists(path):
-        print("Output directory '%s' does not exist. The DRP will attempt" 
-                "to create this directory." % path)
-        os.mkdir(path)
+    if False:
+        path = os.path.join(options["outdir"], maskname)
+        if not os.path.exists(path):
+            print("Output directory '%s' does not exist. The DRP will attempt" 
+                    "to create this directory." % path)
+            os.mkdir(path)
 
-    fn = os.path.join(path, fname)
+        fn = os.path.join(path, fname)
+    
+    fn = fname
 
     if header is None: header = {"DRPVER": MOSFIRE.__version__}
     else: header.update("DRPVER", MOSFIRE.__version__)
@@ -187,7 +210,9 @@ def readheader(path):
 def read_drpfits(maskname, fname, options):
     '''Read a fits file written by the DRP'''
 
-    path = os.path.join(options["outdir"], maskname, fname)
+    if os.path.exists(fname): path = fname
+    elif os.path.exists(fname + ".gz"): path = fname + ".gz"
+    else: path = os.path.join(fname_to_path(fname, options), fname)
 
     if os.path.exists(path + ".gz"):
         path = path + ".gz"
@@ -309,7 +334,8 @@ def readmosfits(fname, options, extension=None):
     does not append slit extension.
     '''
 
-    path = os.path.join(fname_to_path(fname, options), fname)
+    if os.path.isabs(fname): path = fname
+    else: path = os.path.join(fname_to_path(fname, options), fname)
 
     hdulist = pf.open(path)
     header = hdulist[0].header
@@ -331,7 +357,8 @@ def readmosfits(fname, options, extension=None):
         raise Exception("Improper MOSFIRE FITS File: %s" % path)
 
     if np.abs(header["REGTMP1"] - 77) > 0.5:
-        raise Exception("The temperature of the detector is %f where it "
+        print "**************************************"
+        print ("The temperature of the detector is %f where it "
                 "should be 77.000 deg. Please notify Keck support staff." %
                 header["REGTMP1"])
 
