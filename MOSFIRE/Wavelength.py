@@ -74,11 +74,8 @@ import pdb
 
 __version__ = "1May2012"
 
-
-
-
-
 MADLIMIT = 0.1
+
 try:
     __IPYTHON__
     reload(Options)
@@ -92,11 +89,6 @@ except:
 #
 # Glue code
 #
-
-def mask_band_to_fname(maskname, bandname, options):
-
-    return os.path.joint(options["outdir"], maskname, "lambda_%s_comb.fits" %
-            bandname)
 
 def filelist_to_wavename(files, band, maskname, options):
     start = files[0].split('/')[-1].rstrip(".fits")
@@ -119,8 +111,7 @@ def grating_results(band):
 
 
 def filelist_to_path(files, band, maskname, options):
-    outf = os.path.join(options["outdir"], maskname,
-            filelist_to_wavename(files, band, maskname, options))
+    outf = filelist_to_wavename(files, band, maskname, options)
 
     return outf
 
@@ -138,11 +129,14 @@ def imcombine(files, maskname, bandname, options):
     flat = Flat[1]
     flat = flat.filled(1.0)
 
+    files = IO.list_file_to_strings(files)
+
     ADUs = np.zeros((len(files), 2048, 2048))
     prevssl = None
     prevmn = None
     patternid = None
     header = None
+
 
     for i in xrange(len(files)):
         fname = files[i]
@@ -218,6 +212,7 @@ def imcombine(files, maskname, bandname, options):
     electrons = np.median(np.array(ADUs) * Detector.gain, axis=0)
 
     wavename = filelist_to_wavename(files, bandname, maskname, options)
+
     IO.writefits(electrons, maskname, wavename, options, overwrite=True,
             header=header)
 
@@ -227,19 +222,22 @@ def fit_lambda(maskname,
         wavenames, 
         guessnames, 
         options,
-        longslit=None):
+        longslit=None,
+        neon=None):
     """Fit the two-dimensional wavelength solution to each science slit"""
     global bs, data, lamout, center_solutions, edgedata
     np.seterr(all="ignore")
     
+
+    wavenames = IO.list_file_to_strings(wavenames)
     wavename = filelist_to_wavename(wavenames, bandname, maskname,
             options).rstrip(".fits")
 
+    guessnames = IO.list_file_to_strings(wavenames)
     guessname = filelist_to_wavename(guessnames, bandname, maskname,
             options).rstrip(".fits")
 
-    fn = os.path.join(options["outdir"], maskname,
-            "lambda_coeffs_{0}.npy".format(wavename))
+    fn = "lambda_coeffs_{0}.npy".format(wavename)
 
     print "%s] Writing to: %s" % (maskname, fn)
 
@@ -252,6 +250,10 @@ def fit_lambda(maskname,
     center_solutions = IO.load_lambdacenter(fnum, maskname, options)
     edgedata, metadata = IO.load_edges(maskname, bandname, options)
 
+    if neon is not None:
+        drop, Neon = IO.readfits(neon, use_bpm=True)
+        data += Neon
+    
     if longslit is not None:
         ''' If a longslit, fool extraction range '''
 
@@ -321,25 +323,156 @@ def fit_lambda_helper(slitno):
 
     return sol
 
-
-def fit_lambda_interactively(maskname, band, wavenames, options):
+def apply_interactive(maskname, band, options, apply=None, to=None, neon=False):
     """Fit the one-dimensional wavelength solution to each science slit"""
     np.seterr(all="ignore")
 
+    # Load the guess wavelength solution data
+    wavenames = IO.list_file_to_strings(apply)
+    wavename = filelist_to_path(wavenames, band, maskname, options)
+    fn = "lambda_center_coeffs_{0}.npy".format(wavename.rstrip(".fits"))
+    waves = np.load(fn)
+
+    # Load the arc lamp
+    to_files = IO.list_file_to_strings(to)
+    to_filename = filelist_to_path(to_files, band, maskname, options)
+    mfits = IO.readfits(to_filename, use_bpm=True)
+    (drop, data) = mfits
+    (header, drop, bs) = IO.readmosfits(wavenames[0], options)
+
+    mfits = header, data, bs
+    linelist = pick_linelist(header, neon=neon)
+
+    solutions = []
+    pix = np.arange(2048)
+    for slitno in xrange(len(waves)):
+        csuslits = bs.scislit_to_csuslit(slitno+1)
+
+        try:
+            l = len(csuslits)
+            if l > 1:
+                csuslit = csuslits[l/2]
+            else:
+                csuslit = csuslits[0]
+        except:
+            csuslit = csuslits
+
+        extract_pos = bs.science_slit_to_pixel(slitno+1)
+        cfit = waves[slitno]['sol_1d'][1]
+
+        spec = \
+            np.ma.mean(data[extract_pos-1:extract_pos+1, :],
+                axis=0) # axis = 0 is spatial direction
+
+        STD = np.inf
+        n_attempts = 5
+        while (n_attempts > 0) and (STD > .3):
+            ll = CV.chebval(pix, cfit)
+            [xs, sxs, sigmas] = find_known_lines(linelist, ll, spec, options)
+            [deltas, cfit, perror] = fit_chebyshev_to_lines(xs, sxs, linelist, options)
+
+            ok = np.isfinite(deltas)
+            STD = np.std(deltas[ok])
+            MAD = np.median(np.abs(deltas[ok]))
+            n_attempts -= 1
+
+
+        solutions.append({"linelist": linelist, "MAD": MAD, 
+                "foundlines": xs, "foundlinesig": sxs,
+                "sol_1d": [deltas, cfit, sigmas], "STD":
+                STD, "slitno": slitno, "extract_pos":
+                extract_pos})
+
+        
+        print "slitno %2.0i STD: %1.2f MAD: %1.2f" % (slitno+1, STD, MAD)
+
+    # Output filename
+    print to_filename
+    outfn = "lambda_center_coeffs_{0}.npy".format(to_filename.rstrip(".fits"))
+
+    np.save(outfn, solutions)
+
+def check_wavelength_roi(maskname, band, skyfiles, arcfiles, LROI, options):
+    '''The purpose of this function is to help the user selection a wavelength
+        range of interest over which to normalize the arcs versus sky solutions.
+        '''
+    skyfiles = IO.list_file_to_strings(skyfiles)
+    skyfilename = filelist_to_path(skyfiles, band, maskname, options)
+    fn = "lambda_center_coeffs_{0}.npy".format(skyfilename.rstrip(".fits"))
+    skysols = np.load(fn)
+
+    # Load the arc wavelength solution data
+    arcfiles = IO.list_file_to_strings(arcfiles)
+    arcfilename = filelist_to_path(arcfiles, band, maskname, options)
+    fn = "lambda_center_coeffs_{0}.npy".format(arcfilename.rstrip(".fits"))
+    arcsols = np.load(fn)
+
+    if len(skysols) != len(arcsols): raise Exception("Number of slits in sky (%i) and arcs (%i) is different" % ( len(skysols) , len(arcsols)))
+
+    pix = np.arange(2048)
+    pl.figure(1)
+
+    if len (LROI) == 1: LROI *= len(skysols)
+    if len (LROI) != len(skysols): raise Exception("Number of solutions is not equal to the LROI vector (%i!=%i)" % ( len(LROI), len(skysols)))
+
+    MeanDiffs = []
+    for i in xrange(len(skysols)):
+        s = skysols[i]
+        a = arcsols[i]
+
+        ls = CV.chebval(pix, s['sol_1d'][1])
+        la = CV.chebval(pix, a['sol_1d'][1])
+
+        roi = (ls > LROI[i][0]) & (ls < LROI[i][1])
+        la -= np.mean( (la-ls)[roi] )
+
+        diff = ls - la
+        pl.plot(ls, diff)
+        pl.axvline(LROI[i][0], color='blue')
+        pl.axvline(LROI[i][1], color='red')
+
+        roi = (ls > 21500) & (ls < 22000)
+        MeanDiffs.append(np.mean(ls[roi] - la[roi]))
+
+        
+    pl.xlim(19000, 25000)
+    pl.ylim(-7,7)
+    pl.grid(True)
+    pl.title("Close this window to continue")
+    pl.xlabel("Sky Wavelength [Angstrom]")
+    pl.ylabel("Sky - Arc Wavelength [Angstrom]")
+    
+    MeanDiffs =np.array(MeanDiffs)
+    print "RMS in 21500 < lambda < 22000 is %2.2f Ang" % (
+        np.sqrt(np.mean(MeanDiffs**2)))
+    pl.show()
+
+    return LROI
+
+
+def fit_lambda_interactively(maskname, band, wavenames, options, neon=None):
+    """Fit the one-dimensional wavelength solution to each science slit"""
+    np.seterr(all="ignore")
+
+    
+    wavenames = IO.list_file_to_strings(wavenames)
     input_f = filelist_to_path(wavenames, band, maskname, options)
+    
     mfits = IO.readfits(input_f, use_bpm=True)
     (drop, data) = mfits
     (header, drop, bs) = IO.readmosfits(wavenames[0], options)
 
     mfits = header, data, bs
 
-    path = os.path.join(options["outdir"], maskname)
+    if neon is not None:
+        drop, Neon = IO.readfits(neon)
+
+        data += Neon
 
     name = filelist_to_wavename(wavenames, band, maskname, options)
-    fn = os.path.join(path,
-    "lambda_center_coeffs_{0}.npy".format(name.rstrip(".fits")))
+    fn = "lambda_center_coeffs_{0}.npy".format(name.rstrip(".fits"))
 
-    linelist = pick_linelist(header)
+    linelist = pick_linelist(header, neon=neon)
     
     try: 
         solutions = np.load(fn)
@@ -360,6 +493,7 @@ def fit_lambda_interactively(maskname, band, wavenames, options):
 
     print "save to: ", fn
     np.save(outfilename, np.array(II.solutions))
+    np.save('barset.npy', [II.bs])
 
 
 def polyfit2d(f, x, y, unc=1.0, orderx=1,ordery=1):
@@ -415,13 +549,196 @@ def polyfit2d(f, x, y, unc=1.0, orderx=1,ordery=1):
 
     return (cx, cy, cov)
 
+def helper_apply_sky_and_arc(positions, coeffs, lambdaMAD):
 
+    global lams, sigs
+
+        
+
+def find_pixel_offset(lam_sky, coeff_arc, LROI):
+    '''Find the best pixel offset between the sky wavelength solution and
+    Chebyshev fitting polymoials by looping over a pixel range.'''
+
+    roi = (lam_sky > LROI[0]) & (lam_sky < LROI[1])
+
+    dpixs = np.arange(-1, 1, .01)
+    RMSs = np.zeros(len(dpixs))
+    
+    xx = np.arange(2048)
+    for rms_cnt in xrange(len(dpixs)):
+        dpix = dpixs [rms_cnt]
+        dl = lam_sky - CV.chebval(xx - dpix, coeff_arc)
+        RMSs[rms_cnt] = np.sqrt(np.mean(dl[roi]**2))
+
+    minix = np.argmin(RMSs)
+    best_dpix = dpixs[minix]
+    return best_dpix
+
+
+def apply_lambda_sky_and_arc(maskname, bandname, skynames, arcnames, LROIs,
+    options, longslit=None, smooth=True, neon=True):
+    
+    global lams, sigs
+    
+
+    skynames = IO.list_file_to_strings(skynames)
+    arcnames = IO.list_file_to_strings(arcnames)
+
+    skyname = filelist_to_wavename(skynames, bandname, maskname,
+            options).rstrip(".fits")
+    arcname = filelist_to_wavename(arcnames, bandname, maskname,
+            options).rstrip(".fits")
+
+    print skyname
+    print arcname
+    drop, data = IO.readfits(skyname+'.fits', use_bpm=True)
+    header, drop, bs = IO.readmosfits(skynames[0], options)
+    skydata = data.filled(0)
+
+    drop, data = IO.readfits(arcname+'.fits', use_bpm=True)
+    header, drop, bs = IO.readmosfits(arcnames[0], options)
+    arcdata = data.filled(0)
+
+    slitedges, edgeinfo = IO.load_edges(maskname, bandname, options)
+    SkyL = IO.load_lambdadata(skyname, maskname, bandname, options)
+    ArcL = IO.load_lambdadata(arcname, maskname, bandname, options)
+
+    bmap = {"Y": 6, "J": 5, "H": 4, "K": 3}
+    order = bmap[bandname]
+
+    skylines = pick_linelist(header)
+    arclines = pick_linelist(header, neon=neon)
+
+    # write lambda
+    lams = np.zeros((2048, 2048), dtype=np.float32)
+    sigs = np.zeros((2048, 2048), dtype=np.float)
+    xx = np.arange(2048)
+    xsamp = np.array(np.linspace(0, 2047, 10), dtype=np.int)
+    
+    xypairs = []
+
+    if len(SkyL) != len(ArcL):
+        raise Exception("Number of lines in Sky file not the same as those in Arc file")
+
+    fitpix = np.arange(0,2048,100)
+    solutions = []
+    for i in xrange(len(SkyL)):
+        slp = SkyL[i]["2d"]["positions"].astype(np.int)
+        slc = SkyL[i]["2d"]["coeffs"]
+        slm = SkyL[i]["2d"]["lambdaMAD"]
+        alp = ArcL[i]["2d"]["positions"].astype(np.int)
+        alc = ArcL[i]["2d"]["coeffs"]
+        alm = ArcL[i]["2d"]["lambdaMAD"]
+
+        print "2d wavelengths: Slit %i/%i" % (i+1, len(SkyL))
+
+        prev = 0
+        dpixels = []
+        for j in xrange(len(slp)):
+
+            if (slm[j] < 0.2) and (alm[j] < 0.2):
+                
+                coeff_sky = slc[j]
+                coeff_arc = alc[j]
+                lam_sky = CV.chebval(xx, coeff_sky)
+                lam_arc = CV.chebval(xx, coeff_arc)
+
+                # minimize pixel solution
+                best_dpix = find_pixel_offset(lam_sky, coeff_arc, LROIs[i])
+                dpixels.append(best_dpix)
+
+                # Refit the chebyshev
+                lambdas = CV.chebval(fitpix - best_dpix, coeff_arc)
+                arc_positions = lambdas > np.mean(LROIs[i])
+                sky_positions = lambdas <= np.mean(LROIs[i])
+
+                to_fit = CV.chebval(fitpix[sky_positions], coeff_sky)
+                to_fit = np.append(to_fit,
+                    CV.chebval(fitpix[arc_positions], coeff_arc))
+                
+                coeffs = CV.chebfit(fitpix, to_fit, options["chebyshev-degree"])
+
+
+                prev = lams[slp[j],:] = CV.chebval(xx, coeffs)
+                prevcoeff = coeffs
+            else:
+                lams[slp[j],:] = prev
+
+            SkyL[i]["2d"]["coeffs"][j,:] = coeffs
+            
+
+        print "Shifted arc by an average of %1.2f pixels" % (np.mean(dpixels))
+        if smooth == True:
+            xr = np.arange(len(slp))
+
+            for i in xrange(lams.shape[1]):
+                ff = np.poly1d(Fit.polyfit_clip(xr, lams[slp, i], 3))
+                d = lams[slp,i] - ff(xr)
+                lams[slp, i] = ff(xr)
+
+    print("{0}: writing lambda".format(maskname))
+
+    ### FIX FROM HERE
+    fn = "merged_lambda_coeffs_{0}_and_{1}".format(skyname, arcname)
+    np.save(fn, SkyL)
+    
+
+    header = pf.Header()
+    header.update("maskname", maskname)
+    header.update("filter", bandname)
+    header.update("object", "Wavelengths {0}/{1}".format(maskname, bandname))
+
+    IO.writefits(lams, maskname, "merged_lambda_solution_{0}_and_{1}.fits".format(skyname, arcname), 
+            options, overwrite=True, header=header)
+                
+    print("{0}: rectifying".format(maskname))
+    dlam = np.ma.median(np.diff(lams[1024,:]))
+    hpp = Filters.hpp[bandname] 
+    ll_fid = np.arange(hpp[0], hpp[1], dlam)
+    nspec = len(ll_fid)
+
+    rectified = np.zeros((2048, nspec), dtype=np.float32)
+
+    for i in xrange(2048):
+        ll = lams[i,:]
+        ss = skydata[i,:]
+
+        f = interp1d(ll, ss, bounds_error=False)
+        rectified[i,:] = f(ll_fid)
+
+    header.update("object", "Rectified wave FIXME")
+    header.update("wat0_001", "system=world")
+    header.update("wat1_001", "wtype=linear")
+    header.update("wat2_001", "wtype=linear")
+    header.update("dispaxis", 1)
+    header.update("dclog1", "Transform")
+    header.update("dc-flag", 0)
+    header.update("ctype1", "AWAV")
+    header.update("cunit1", "Angstrom")
+    header.update("crval1", ll_fid[0])
+    header.update("crval2", 0)
+    header.update("crpix1", 1)
+    header.update("crpix2", 1)
+    header.update("cdelt1", 1)
+    header.update("cdelt2", 1)
+    header.update("cname1", "angstrom")
+    header.update("cname2", "pixel")
+    header.update("cd1_1", dlam)
+    header.update("cd1_2", 0)
+    header.update("cd2_1", 0)
+    header.update("cd2_2", 1)
+
+
+    IO.writefits(rectified, maskname, "merged_rectified_{0}_and_{1}.fits".format(skyname, arcname), 
+            options, overwrite=True, lossy_compress=True, header=header)
+    
 
 def apply_lambda_simple(maskname, bandname, wavenames, options,
-        longslit=None, smooth=True):
+        longslit=None, smooth=True, neon=None):
     """Convert solutions into final output products. This is the function that
     should be used for now."""
 
+    wavenames = IO.list_file_to_strings(wavenames)
     wavename = filelist_to_wavename(wavenames, bandname, maskname,
             options).rstrip(".fits")
 
@@ -431,7 +748,6 @@ def apply_lambda_simple(maskname, bandname, wavenames, options,
     header, drop, bs = IO.readmosfits(wavenames[0], options)
     data = data.filled(0)
 
-    path = os.path.join(options["outdir"], maskname)
     slitedges, edgeinfo = IO.load_edges(maskname, bandname, options)
     Ld = IO.load_lambdadata(wavename, maskname, bandname, options)
 
@@ -451,7 +767,7 @@ def apply_lambda_simple(maskname, bandname, wavenames, options,
     bmap = {"Y": 6, "J": 5, "H": 4, "K": 3}
     order = bmap[bandname]
 
-    lines = pick_linelist(header)
+    lines = pick_linelist(header, neon=neon)
 
     # write lambda
     lams = np.zeros((2048, 2048), dtype=np.float32)
@@ -610,7 +926,7 @@ def dlambda_model(p):
 
     return scale/(order/d) * sinbeta / costerm
 
-def pick_linelist(header):
+def pick_linelist(header, neon=None):
     band = header["filter"]
     
     # following linelinests are produced by ccs and can be found in the iraf
@@ -648,20 +964,20 @@ def pick_linelist(header):
   
 
     if band == 'J':
+        # Removed: 12589.2998 12782.9052 12834.5202
         lines = np.array([
             11538.7582 , 11591.7013 , 11627.8446 , 11650.7735 , 11696.3379 ,
             11716.2294 , 11788.0779 , 11866.4924 , 11988.5382 , 12007.0419 ,
             12030.7863 , 12122.4957 , 12135.8356 , 12154.9582 , 12196.3557 ,
             12229.2777 , 12257.7632 , 12286.964 , 12325.9549 , 12351.5321 ,
-            12400.8893 , 12423.349 , 12482.8503 , 12502.43 , 12589.2998 ,
-            12782.9052 , 12834.5202 , 12905.5773 , 12921.1364 , 12943.1311 ,
+            12400.8893 , 12423.349 , 12482.8503 , 12502.43 , 
+            12905.5773 , 12921.1364 , 12943.1311 ,
             12985.5595 , 13021.6447 , 13052.818 , 13085.2604 , 13127.8037 ,
             13156.9911 , 13210.6977 , 13236.5414 , 13301.9624 , 13324.3509 ,
              13421.579])
 
     if band == 'K':
-        #drop: 19751.3895, 19736.4099
-        print "the lines"
+        #drop: 19751.3895, 19736.4099, 21711.1235, 22
         lines = np.array([
         19518.4784 , 19593.2626 , 19618.5719 , 19642.4493 , 19678.046 ,
         19701.6455 , 19771.9063 , 19839.7764 ,
@@ -670,10 +986,35 @@ def pick_linelist(header):
         21176.5323 , 21249.5368 , 21279.1406 , 21507.1875 , 21537.4185 ,
         21580.5093 , 21711.1235 , 21802.2757 , 21873.507 , 21955.6857 ,
         22125.4484 , 22312.8204 , 22460.4183 , 22517.9267 , 22690.1765 ,
-        22742.1907 , 22985.9156, 23286.22, 23559.76,  23781.88,
-        23914.55, 23968.14, 24041.62, 
-        24139.867, 24171.414])
+        22742.1907 , 22985.9156, 23914.55, 24041.62])
 
+        if neon is not None:
+            # http://www2.keck.hawaii.edu/inst/mosfire/data/MosfireArcs/mosfire_Ne_vac.list
+            # Trimmed using PDF of id'd lines
+            lines = np.array([
+                #19579.094 ,
+                19582.455 ,
+                20355.771 ,
+                21047.013 ,
+                21714.039 ,
+                22434.265 ,
+                22536.528 ,
+                22667.971 ,
+                23106.784 ,
+                23379.343 ,
+                23571.764 ,
+                23642.934 ,
+                #23918.541 ,
+                24168.025 ,
+                #24256.224 ,
+                #24371.661 ,
+                #24378.260 ,
+                #24390.011 ,
+                #24454.531 ,
+                #24459.775 ,
+                #24466.068 ,
+                #24471.606 ,
+                    ])
 
     lines = np.array(lines)
     return np.sort(lines)
@@ -740,7 +1081,7 @@ global color=red
                 ds9 += "circle(%f, %f, 1) # color=%s text={}\n" % (x, guess[5],
                         color)
 
-    path = Options.wavelength['outdir']
+    path = './'
 
 
     fname = fname.rstrip(".fits")
@@ -1033,10 +1374,12 @@ class InteractiveSolution:
             parguess = guess_wavelength_solution(csuslit, self.header,
                 self.bs)
             ll = wavelength_model(parguess, tx)
+
             self.cfit = CV.chebfit(tx, ll, self.options["chebyshev-degree"])
+            self.cfit[0] -= 16.0
 
         self.spec = \
-            np.ma.median(self.data[self.extract_pos-1:self.extract_pos+1, :],
+            np.ma.mean(self.data[self.extract_pos-1:self.extract_pos+1, :],
                 axis=0) # axis = 0 is spatial direction
 
         self.ll = CV.chebval(self.pix, self.cfit)
@@ -1227,6 +1570,7 @@ class InteractiveSolution:
         self.MAD = np.ma.median(np.abs(deltas[ok]))
 
         print "STD: %1.2f MAD: %1.2f" % (self.STD, self.MAD)
+        print self.cfit
 
 
         self.solutions[self.slitno-1] = {"linelist": self.linelist, "MAD":
@@ -1457,7 +1801,6 @@ def fit_outwards_refit(data, bs, sol_1d, lines, options, start, bottom, top,
         [delt, cfit, lines] = fit_chebyshev_to_lines(xs, sxs,
                 linelist, options)
 
-
         #if np.std(delt) < .01: pdb.set_trace()
         print "resid ang S%2.2i @ p%4.0i: %1.2f rms %1.2f mad [shift%2.0f]" % \
                 (slitno+1, yhere, np.std(delt), np.median(np.abs(delt)),
@@ -1667,10 +2010,6 @@ def plot_mask_fits(maskname, fname, options):
 def plot_sky_spectra(maskname, fname, options):
 
     from matplotlib.backends.backend_pdf import PdfPages
-    path = os.path.join(options["outdir"], maskname)
-    if not os.path.exists(path):
-        raise Exception("Output directory '%s' does not exist. This " 
-            "directory should exist." % path)
 
     fp = os.path.join(options['indir'], fname)
     mfits = IO.readmosfits(fp)
@@ -1736,7 +2075,7 @@ def plot_data_quality(maskname, fname, options):
 
     
     fname = fname.rstrip(".fits")
-    path = os.path.join(options["outdir"],maskname)
+    path = './'
     solname = os.path.join(path, "lambda_coeffs_%s.npy" % fname)
     solutions = np.load(solname)
     solname = os.path.join(path, "mask_solution_%s.npy" % fname)
