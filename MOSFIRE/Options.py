@@ -82,14 +82,13 @@ npix = 2048
 
 
 
-indir = '/Users/npk/mosdrp/data'
-outdir = '/Users/npk/mosdrp/output'
-path_bpm = '/Users/npk/mosdrp/badpixels/badpix_10sep2012.fits'
+indir = '/scr2/mosfire/'
+indir = '/scr2/npk/mosfire/'
+outdir = '/scr2/npk/mosfire_redux'
+outdir = '/scr2/npk/for_sb'
+#path_bpm = '/scr2/mosfire/badpixels/badpix_10sep2012.fits'
+path_bpm = os.path.join(os.environ["MOSPATH"], "badpixels", "badpix_10sep2012.fits")
 
-
-
-
-indir = '/Users/npk/mosdrp/data'
 
 
 
