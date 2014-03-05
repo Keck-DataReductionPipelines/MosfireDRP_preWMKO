@@ -303,24 +303,30 @@ file3
 returns ['file1', 'file2', 'file3']
 '''
 
-    if type(fname) != str:
-        return fname
+    filelist = fname
+    if type(fname) == str:
+        filelist = [fname]
 
-    inputs = np.loadtxt(fname, dtype= [("f", "S100")])
-
-    if len(inputs) == 0:
+    if len(fname) == 0:
         return []
 
-    
-    path = ""
-    start_index = 0
-    if os.path.isabs(inputs[0][0]):
-        path = inputs[0][0]
-        start_index = 1
+    if fname[0][-4:] == '.fits':
+        return fname
 
     output = []
-    for i in xrange(start_index, len(inputs)):
-        output.append(os.path.join(path, inputs[i][0]))
+
+    for fname in filelist:
+        print "Loading: %s" % fname
+        inputs = np.loadtxt(fname, dtype= [("f", "S100")])
+
+        path = ""
+        start_index = 0
+        if os.path.isabs(inputs[0][0]):
+            path = inputs[0][0]
+            start_index = 1
+
+        for i in xrange(start_index, len(inputs)):
+            output.append(os.path.join(path, inputs[i][0]))
 
     return output
     
