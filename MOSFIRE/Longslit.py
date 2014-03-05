@@ -13,7 +13,9 @@ from MOSFIRE import Detector, IO, Filters, Wavelength
 def rectify(path, dname, lamdat, A, B, maskname, band, wavoptions, 
         longoptions):
 
-    header, data = IO.readfits(os.path.join(path, dname))
+    pdb.set_trace()
+    header, data = IO.readfits(dname)
+    pdb.set_trace() 
     raw_img = data * Detector.gain / header['TRUITIME']
 
     dlam = Wavelength.grating_results(band)
@@ -63,7 +65,7 @@ def rectify(path, dname, lamdat, A, B, maskname, band, wavoptions,
         wavoptions, header=header, overwrite=True, lossy_compress=True)
 
 
-def imdiff(A, B, maskname, band, options):
+def imdiff(A, B, maskname, band, header, options):
     s = "[0]"
 
     targname = A[1]["targname"].rstrip(" ")
@@ -73,23 +75,23 @@ def imdiff(A, B, maskname, band, options):
         objname = targname.replace(" ", "_")
 
     outpath = os.path.join(options["outdir"], maskname)
+    outpath = '/scr2/npk/m4/LONGSLIT-15x0.7/2013sep23/H/'
 
-    try: operand1 = os.path.join(IO.fname_to_path(A[0], options), A[0]) + s
-    except: operand1 = A[0]
 
-    try: operand2 = os.path.join(IO.fname_to_path(B[0], options), B[0]) + s
-    except: operand2 = B[0]
+    operand1 = A[0]
+    operand2 = B[0]
 
     imnumA = A[0].split('_')[1].rstrip(".fits")
     imnumB = B[0].split('_')[1].rstrip(".fits")
 
     dname = "{0}_{1}_{2}_{3}-{4}_{5}-{6}.fits".format(maskname, objname, band,
         A[1]["frameid"], B[1]["frameid"], imnumA, imnumB)
-    IO.imarith(operand1, '-', operand2, os.path.join(outpath, dname))
-    print dname
+
+    pdb.set_trace()
+    IO.imarith(operand1, '-', operand2, os.path.join(outpath,dname))
 
     ''' Now handle variance '''
-    numreads = headerA["READS0"]
+    numreads = header["READS0"]
     RN_adu = Detector.RN / np.sqrt(numreads) / Detector.gain
     varname = "var_{0}_{1}_{2}_{3}+{4}_{5}+{6}.fits".format(maskname, objname, band,
         A[1]["frameid"], B[1]["frameid"], imnumA, imnumB)
@@ -103,6 +105,7 @@ def imdiff(A, B, maskname, band, options):
 def go(maskname,
         band,
         filenames,
+        wavefile,
         wavoptions,
         longoptions):
 
@@ -112,15 +115,16 @@ def go(maskname,
     wavename = Wavelength.filelist_to_wavename(filenames, band, maskname,
             wavoptions).rstrip(".fits")
 
-    lamdat = IO.load_lambdaslit(wavename, maskname, band, wavoptions)
+    lamdat = np.load(wavefile)
 
-    print("Wavelength solution {0}".format(wavename))
-    print("{0:18s} {1:30s} {2:2s} {3:5s}".format("filename", "object", "pos",
-    "offset"))
     positions = []
     objname = None
-    for file in filenames:
-        header, data, bs = IO.readmosfits(file, wavoptions)
+    for listfile in filenames:
+        fnames = IO.list_file_to_strings(listfile)
+        if len(fnames) != 1:
+            raise Exception("I currently expect only one file per position. Remove multiple entries and try again")
+
+        header, data, bs = IO.readmosfits(fnames[0], wavoptions)
 
         if objname is None:
             objname = header["object"]
@@ -132,7 +136,7 @@ def go(maskname,
         print("{0:18s} {1:30s} {2:2s} {3:4.1f}".format(file, header["object"],
             header["frameid"], header["yoffset"]))
 
-        positions.append([file, header, data, bs])
+        positions.append([fnames[0], header, data, bs])
 
     print("{0:2g} nod positions found. Producing stacked difference" \
            " image.".format(len(positions)))
@@ -141,7 +145,8 @@ def go(maskname,
         A = positions[i]
         B = positions[i+1]
 
-        path, dname, varname = imdiff(A, B, maskname, band, wavoptions)
+        
+        path, dname, varname = imdiff(A, B, maskname, band, header, wavoptions)
         rectify(path, dname, lamdat, A, B, maskname, band, wavoptions,
                 longoptions)
         rectify(path, varname, lamdat, A, B, maskname, band, wavoptions,
