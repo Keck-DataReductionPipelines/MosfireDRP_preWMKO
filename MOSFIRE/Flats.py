@@ -80,7 +80,6 @@ def handle_flats(flatlist, maskname, band, options, extension=None):
                     raise Exception("Bar positions are not all the same in "
                             "this set of flat files")
     bs = bs0
-    np.save("%s_%s_barset" % (maskname, band), [bs])
     # Imcombine
     if True:
         print "Attempting to combine: ", flatlist
@@ -492,6 +491,10 @@ def find_and_fit_edges(data, header, bs, options):
     slits = []
 
     top = [0., np.float(Options.npix)]
+
+    start_slit_num = int(bs.msl[0]['Slit_Number'])-1
+    if start_slit_num > 0:
+        y -= DY * start_slit_num
 
     # Count and check that the # of objects in the SSL matches that of the MSL
     # This is purely a safety check
