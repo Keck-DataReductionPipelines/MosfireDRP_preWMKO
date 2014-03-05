@@ -451,7 +451,7 @@ def check_wavelength_roi(maskname, band, skyfiles, arcfiles, LROI, options):
     return LROI
 
 
-def fit_lambda_interactively(maskname, band, wavenames, options, neon=None):
+def fit_lambda_interactively(maskname, band, wavenames, options, neon=False, longslit=None):
     """Fit the one-dimensional wavelength solution to each science slit"""
     np.seterr(all="ignore")
 
@@ -464,11 +464,6 @@ def fit_lambda_interactively(maskname, band, wavenames, options, neon=None):
     (header, drop, bs) = IO.readmosfits(wavenames[0], options)
 
     mfits = header, data, bs
-
-    if neon is not None:
-        drop, Neon = IO.readfits(neon)
-
-        data += Neon
 
     name = filelist_to_wavename(wavenames, band, maskname, options)
     fn = "lambda_center_coeffs_{0}.npy".format(name.rstrip(".fits"))
@@ -489,6 +484,9 @@ def fit_lambda_interactively(maskname, band, wavenames, options, neon=None):
     II = InteractiveSolution(fig, mfits, linelist, options, 1,
         outfilename, solutions=solutions, )
     print "Waiting"
+    if longslit is not None:
+        II.extract_pos = longslit["row_position"]
+        print "Extract position set to %i" % II.extract_pos
     pl.draw()
     pl.show(block=True)
 
@@ -962,6 +960,12 @@ def pick_linelist(header, neon=None):
                 17248.5646 , 17282.8514 , 17330.8089 , 17386.0403 , 17427.0418 ,
                 17449.9205 , 17505.7497 , 17653.0464 , 17671.843 , 17698.7879 ,
                 17811.3826 , 17880.341 ])
+
+        if neon is True:
+            lines = np.array([14933.886, 14990.415, 15144.236, 15195.083,
+                15234.8770, 15352.3840, 15411.8030, 15608.4780, 16027.1470,
+                16272.7970, 16409.7370, 16479.2540, 16793.3780, 16866.2550,
+                17166.6220])
   
 
     if band == 'J':
@@ -989,7 +993,7 @@ def pick_linelist(header, neon=None):
         22125.4484 , 22312.8204 , 22460.4183 , 22517.9267 , 22690.1765 ,
         22742.1907 , 22985.9156, 23914.55, 24041.62])
 
-        if neon is not None:
+        if neon is True:
             # http://www2.keck.hawaii.edu/inst/mosfire/data/MosfireArcs/mosfire_Ne_vac.list
             # Trimmed using PDF of id'd lines
             lines = np.array([
