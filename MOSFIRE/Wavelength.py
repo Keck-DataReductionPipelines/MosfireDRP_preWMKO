@@ -132,6 +132,8 @@ def imcombine(files, maskname, bandname, options):
 
     files = IO.list_file_to_strings(files)
 
+    print "combining : %s" % files
+
     ADUs = np.zeros((len(files), 2048, 2048))
     prevssl = None
     prevmn = None
