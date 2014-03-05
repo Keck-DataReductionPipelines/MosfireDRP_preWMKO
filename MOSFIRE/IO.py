@@ -435,6 +435,7 @@ def imarith(operand1, op, operand2, result):
     pars = iraf.imarith.getParList()
     iraf.imcombine.unlearn()
 
+    print "%s %s %s -> %s" % (operand1, op, operand2, result)
     iraf.imarith(operand1=operand1, op=op, operand2=operand2, result=result)
 
     iraf.imarith.setParList(pars)
