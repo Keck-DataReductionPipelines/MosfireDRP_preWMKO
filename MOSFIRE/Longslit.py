@@ -13,9 +13,7 @@ from MOSFIRE import Detector, IO, Filters, Wavelength
 def rectify(path, dname, lamdat, A, B, maskname, band, wavoptions, 
         longoptions):
 
-    pdb.set_trace()
     header, data = IO.readfits(dname)
-    pdb.set_trace() 
     raw_img = data * Detector.gain / header['TRUITIME']
 
     dlam = Wavelength.grating_results(band)
@@ -27,7 +25,7 @@ def rectify(path, dname, lamdat, A, B, maskname, band, wavoptions,
     from scipy.interpolate import interp1d
 
     for i in xrange(2048):
-        ll = lamdat[1][i,:]
+        ll = lamdat[i,:]
         ss = raw_img[i,:]
         ok = np.isfinite(ll) & np.isfinite(ss) & (ll < hpp[1]) & (ll >
                 hpp[0])
@@ -78,8 +76,8 @@ def imdiff(A, B, maskname, band, header, options):
     outpath = '/scr2/npk/m4/LONGSLIT-15x0.7/2013sep23/H/'
 
 
-    operand1 = A[0]
-    operand2 = B[0]
+    operand1 = A[0] + '[0]'
+    operand2 = B[0] + '[0]'
 
     imnumA = A[0].split('_')[1].rstrip(".fits")
     imnumB = B[0].split('_')[1].rstrip(".fits")
@@ -87,7 +85,6 @@ def imdiff(A, B, maskname, band, header, options):
     dname = "{0}_{1}_{2}_{3}-{4}_{5}-{6}.fits".format(maskname, objname, band,
         A[1]["frameid"], B[1]["frameid"], imnumA, imnumB)
 
-    pdb.set_trace()
     IO.imarith(operand1, '-', operand2, os.path.join(outpath,dname))
 
     ''' Now handle variance '''
@@ -97,8 +94,9 @@ def imdiff(A, B, maskname, band, header, options):
         A[1]["frameid"], B[1]["frameid"], imnumA, imnumB)
 
     IO.imarith(operand1, '+', operand2, os.path.join(outpath, "tmp_" + varname))
-    IO.imarith(varname, '+', RN_adu**2, os.path.join(outpath, varname))
+    IO.imarith("tmp_" + varname, '+', RN_adu**2, os.path.join(outpath, varname))
 
+    os.remove("tmp_" + varname)
 
     return outpath, dname, varname
 
@@ -115,7 +113,7 @@ def go(maskname,
     wavename = Wavelength.filelist_to_wavename(filenames, band, maskname,
             wavoptions).rstrip(".fits")
 
-    lamdat = np.load(wavefile)
+    lamhdr, lamdat = IO.readfits(wavefile)
 
     positions = []
     objname = None
