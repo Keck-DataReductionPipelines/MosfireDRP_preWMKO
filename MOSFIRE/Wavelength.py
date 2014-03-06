@@ -227,16 +227,26 @@ def fit_lambda(maskname,
         options,
         longslit=None,
         neon=None):
-    """Fit the two-dimensional wavelength solution to each science slit"""
+    """Fit the two-dimensional wavelength solution to each science slit
+
+    Inputs:
+        bandname: The mask name as a string
+        wavenames: List of wavelength files
+        options: Dictionary of wavelength options
+        longlist: True if a longslit
+        neon: path to neon file
+"""
     global bs, data, lamout, center_solutions, edgedata
     np.seterr(all="ignore")
     
 
     wavenames = IO.list_file_to_strings(wavenames)
+    print "WAVENAMES", wavenames
     wavename = filelist_to_wavename(wavenames, bandname, maskname,
             options).rstrip(".fits")
 
     guessnames = IO.list_file_to_strings(wavenames)
+    print "GUESSNAMES", guessnames
     guessname = filelist_to_wavename(guessnames, bandname, maskname,
             options).rstrip(".fits")
 
@@ -276,7 +286,7 @@ def fit_lambda(maskname,
     tock = time.time()
 
 
-    if True:
+    if False:
         p = Pool()
         solutions = p.map(fit_lambda_helper, range(len(bs.ssl)))
         p.close()
@@ -454,7 +464,23 @@ def check_wavelength_roi(maskname, band, skyfiles, arcfiles, LROI, options):
 
 
 def fit_lambda_interactively(maskname, band, wavenames, options, neon=False, longslit=None):
-    """Fit the one-dimensional wavelength solution to each science slit"""
+    """Fit the one-dimensional wavelength solution to each science slit
+    
+    Args:
+        maskname: The maskname
+        band: The spectral band [Y, J, H, K]
+        wavenames: List of wavelength standard files
+        options: Options dictionary
+        neon: Using neon emission line
+        longslit: Longslit dictionary containing {"yrange": [a,b] and "row_position": YY}
+            Note that [a,b] is the range to extract the longslit spectrum over
+            row_position is the location to perform the interactive solution over. This
+                row should be clean of any contaminatring light
+
+
+        """
+
+
     np.seterr(all="ignore")
 
     
@@ -484,11 +510,12 @@ def fit_lambda_interactively(maskname, band, wavenames, options, neon=False, lon
     outfilename = fn
     fig = pl.figure(1,figsize=(16,8))
     II = InteractiveSolution(fig, mfits, linelist, options, 1,
-        outfilename, solutions=solutions, )
+        outfilename, solutions=solutions)
     print "Waiting"
+    II.starting_pos = None
     if longslit is not None:
-        II.extract_pos = longslit["row_position"]
-        print "Extract position set to %i" % II.extract_pos
+        II.starting_pos = longslit["row_position"]
+        print "Extract position set to %i" % II.starting_pos
     pl.draw()
     pl.show(block=True)
 
@@ -995,9 +1022,24 @@ def pick_linelist(header, neon=None):
         22125.4484 , 22312.8204 , 22460.4183 , 22517.9267 , 22690.1765 ,
         22742.1907 , 22985.9156, 23914.55, 24041.62])
 
-        if neon is True:
-            # http://www2.keck.hawaii.edu/inst/mosfire/data/MosfireArcs/mosfire_Ne_vac.list
-            # Trimmed using PDF of id'd lines
+    if neon is True:
+        # http://www2.keck.hawaii.edu/inst/mosfire/data/MosfireArcs/mosfire_Ne_vac.list
+        # Trimmed using PDF of id'd lines
+
+        if band == 'J':
+            lines = np.array([
+                11393.552,
+                11412.257,
+                11525.900,
+                11539.503,
+                11617.260,
+                11792.271,
+                11988.194,
+                12069.636,
+                12462.799,
+                12692.674,
+                12915.546])
+        if band == 'K':
             lines = np.array([
                 #19579.094 ,
                 19582.455 ,
@@ -1021,7 +1063,7 @@ def pick_linelist(header, neon=None):
                 #24459.775 ,
                 #24466.068 ,
                 #24471.606 ,
-                    ])
+                ])
 
     lines = np.array(lines)
     return np.sort(lines)
@@ -1312,6 +1354,7 @@ class InteractiveSolution:
     spec = None
     good_solution = False
     done = False
+    starting_pos = None # This overrides the extract position for longslits
 
     ll = None
     pix = None
@@ -1364,7 +1407,13 @@ class InteractiveSolution:
 
 
         self.linelist = self.linelist0
-        self.extract_pos = self.bs.science_slit_to_pixel(self.slitno)
+        if self.starting_pos is None:
+            self.extract_pos = self.bs.science_slit_to_pixel(self.slitno)
+        else:
+            '''This is used in longslits to handle a forced start position'''
+            self.extract_pos = self.starting_pos
+
+        print "Extracting at %i " % self.extract_pos
 
         S = self.solutions[self.slitno-1]
         if type(S) is not int: # previously setup
@@ -1790,7 +1839,38 @@ def construct_model(slitno):
 #
 def fit_outwards_refit(data, bs, sol_1d, lines, options, start, bottom, top,
         slitno):
-    lags = np.arange(-25,25)
+    '''Fit Chebyshev polynomials across a slit bounded by bottom to top.
+
+    Args:
+        data: 2k x 2k data frame
+        bs: The barset
+        sol_1d: The guess solution taken at the 'start' position
+        lines: The list of lines (wavelength in Angstrom)
+        options: Options dictionary
+        start: The start position (should be where the interactive wavelength
+            fit occurred.
+        bottom/top: The bottom/top of the slit in pixels
+
+    Returns:
+        Npixel length array of dictionaries containing:
+        'coeffs': Chebyshev coefficients
+        'delts': The offset of the line position to the measured position
+            in Angstrom
+        'lambdaRMS': The standard deviaiton of delts
+        'lambdaMAD': The MAD of delts
+        'positions': Line positions in pixel units'
+
+        The wavelength solution at some pixel is computed by
+
+        sol = fit_outwards_refit(...)
+        wave_vector = CV.chebval(arange(2048), sol[pixelnum]['coeffs'])
+
+        where wave_vector holds the wavelength in angstroms of a 
+            row.
+        
+
+    '''
+    lags = np.arange(-30,30)
     pix = np.arange(2048.)
     linelist = lines
 
@@ -1843,6 +1923,7 @@ def fit_outwards_refit(data, bs, sol_1d, lines, options, start, bottom, top,
     positions = np.concatenate((np.arange(start, top, 1), 
         np.arange(start-1,bottom,-1)))
     positions = np.arange(bottom, top, 1)
+    print "Computing 0 spectrum at %i" % start
     spec0 = np.ma.median(data[start-1:start+1, :], axis=0)
     params = sweep(positions)
 
