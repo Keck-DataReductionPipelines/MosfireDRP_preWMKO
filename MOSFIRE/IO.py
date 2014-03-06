@@ -310,7 +310,7 @@ returns ['file1', 'file2', 'file3']
     if len(fname) == 0:
         return []
 
-    if fname[0][-4:] == '.fits':
+    if fname[0][-5:] == '.fits':
         return fname
 
     output = []
