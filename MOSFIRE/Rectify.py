@@ -68,7 +68,7 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
     theBPM = IO.badpixelmask()
 
     all_solutions = []
-    all_shifts = [[0.3,3], [0,2.7]]
+    all_shifts = [shifts]
     cntr = 0
     for plan in plans:
         p0 = plan[0].replace("'", "p")
