@@ -1036,8 +1036,7 @@ def pick_linelist(header, neon=None):
                 11146.072,
                 11180.585,
                 11393.552,
-                11412.257,
-            )]
+                11412.257])
 
         if band == 'J':
             lines = np.array([
@@ -1555,6 +1554,9 @@ class InteractiveSolution:
         pl.xlim(self.xlim)
         if self.band == 'Y': pl.ylim([-100, 1000])
         else: pl.ylim([-1000, ymax*.8])
+
+        if np.max(self.spec) < 200:
+            pl.ylim([-100,500])
         
         self.draw_done()
 
