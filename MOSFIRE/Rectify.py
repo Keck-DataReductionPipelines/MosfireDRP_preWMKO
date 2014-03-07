@@ -53,6 +53,13 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
     fidl = np.arange(hpp[0], hpp[1], dlambda)
 
     lambdas = IO.readfits(wavename, options)
+
+    if np.any(lambdas < 0):
+        print "***********WARNING ***********"
+        print "The file {0} may not be a wavelength file.".format(wavename)
+        print "Check before proceeding."
+        print "***********WARNING ***********"
+
     edges, meta = IO.load_edges(maskname, band, options)
     shifts = []
 
