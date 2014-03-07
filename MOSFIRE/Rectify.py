@@ -20,12 +20,30 @@ from MOSFIRE import Background, CSU, Fit, IO, Options, Filters, Detector, Wavele
 
 def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, options,
         commissioning_shift=3.0):
+    '''Handle slit rectification and coaddition.
+
+    Args:
+        maskname: The mask name string
+        in_files: List of stacked spectra in electron per second. Will look
+            like ['eps_Offset_1.5.txt.fits', 'eps_Offset_-1.5.txt.fits']
+        wavename: path (relative or full) to the wavelength stack file, string
+        band_pass: Band pass name, string
+        barset_file: Path to a mosfire fits file containing the full set of
+            FITS extensions for the barset. It can be any file in the list
+            of science files.
+    Returns:
+        None
+
+    Writes files:
+        eps_[band_pass]_[posname1]-[posname2]_S##.fits --
+            The rectified, background subtracted, stacked eps spectrum
+        sd_[band_pass]_[posname1]-[posname2]_S##.fits --
+            Rectified, background subtracted, stacked STD spectrum
+        itime_[band_pass]_[posname1]-[posname2]_S##.fits --
+            Rectified, background subtracted, staced integration time spectrum
+    '''
+
     global edges, dats, stds, itimes, shifts, lambdas, band, fidl, all_shifts
-
-
-    '''
-    '''
-
     band = band_pass
 
     
