@@ -234,7 +234,41 @@ def fit_lambda(maskname,
         wavenames: List of wavelength files
         options: Dictionary of wavelength options
         longlist: True if a longslit
-        neon: path to neon file
+        neon: path to neon image [2k x 2k frame]
+
+    Prints:
+        This step prints out lines like
+            resid ang S01 @ p####: 0.25 rms 0.15 mad [shift10]
+
+        which means that the residual error in angstrom units for slit #1,
+        at pixel location #### is 0.25 angstrom RMS and 0.15 median absolute
+        deviation. The shift refers to the average amount of pixel shift from
+        the solution determined during the interactive fitting step. 
+
+    Results:
+        
+        lambda_coeffs_...npy: Coefficients file containing an array of 
+        dictionaries:
+            {"slitno": The 0-indexed slit number into the barset
+            "lines": The list of fitted emission lines
+            "center_sol": The Chebyshev coefficients in the center of the 
+                slit
+            "2d": A dictionary containing:
+                {'positions': The rows that comprise the slit
+                'delts:' The mean standard deviation of features. 
+                    This list is the length of 'lines'
+                'lambdaRMS': RMS of delts
+                'lambdaMAD': MAD of delts
+                'coeffs': The Chebyshev coefficients for each position}
+            }
+
+                
+        lambda_solution....fits: A fits file with wavelength [Ang] for each
+            pixel in the image
+        sigs_solution...fits: A fits file with the standard deviation per row
+            of the wavelength solution
+        rectified_wave_stack: The tilted spectra are interpolated onto a common
+            wavelength grid.
 """
     global bs, data, lamout, center_solutions, edgedata
     np.seterr(all="ignore")
@@ -487,6 +521,7 @@ def fit_lambda_interactively(maskname, band, wavenames, options, neon=False, lon
     wavenames = IO.list_file_to_strings(wavenames)
     input_f = filelist_to_path(wavenames, band, maskname, options)
     
+    print "{0} resolves to input files: {1}".format(wavenames, input_f)
     mfits = IO.readfits(input_f, use_bpm=True)
     (drop, data) = mfits
     (header, drop, bs) = IO.readmosfits(wavenames[0], options)
