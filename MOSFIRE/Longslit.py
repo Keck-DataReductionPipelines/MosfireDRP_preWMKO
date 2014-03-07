@@ -111,10 +111,21 @@ def go(maskname,
 
     '''
     The go command is the main entry point into this module.
+
+    Inputs:
+        maskname: String of the mask name
+        band: String of 'Y', 'J', 'H', or 'K'
+        filenames: List of filenames to reduce
+        wavefile: String of path to FITS file with the wavelength solution
+        wavoptions: The Wavelength Options dictionary
+        longoptions: Dictionary containing:
+            {'yrange': The pixel range to extract over
+            'row_position': The row to solve the initial wavelength solution on}
     '''
     wavename = Wavelength.filelist_to_wavename(filenames, band, maskname,
             wavoptions).rstrip(".fits")
 
+    print "Wavefile: {0}".format(wavefile)
     lamhdr, lamdat = IO.readfits(wavefile)
 
     positions = []
