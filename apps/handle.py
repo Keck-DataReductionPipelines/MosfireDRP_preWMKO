@@ -83,6 +83,9 @@ for fname in files:
         maskname = maskname.replace(" (align)", "")
         align = True
 
+    if maskname.find('LONGSLIT') != -1:
+        align = False
+
     empty_files = {'Align': [], 'Ne': [], 'Ar': [], 'Flat': [],
             'Dark': [], 'Aborted': [], 'Image': [], 'MIRA': [], 'Unknown': []}
 
@@ -97,6 +100,8 @@ for fname in files:
 
 
     offset = 'Offset_' + str(header['YOFFSET'])
+
+    
 
     if mira:
         masks[maskname][date][filter]['MIRA'].append(fname)
