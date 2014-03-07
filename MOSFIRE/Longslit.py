@@ -10,7 +10,7 @@ import scipy
 
 from MOSFIRE import Detector, IO, Filters, Wavelength
 
-def rectify(path, dname, lamdat, A, B, maskname, band, wavoptions, 
+def rectify(dname, lamdat, A, B, maskname, band, wavoptions, 
         longoptions):
 
     header, data = IO.readfits(dname)
@@ -72,10 +72,6 @@ def imdiff(A, B, maskname, band, header, options):
     else:
         objname = targname.replace(" ", "_")
 
-    outpath = os.path.join(options["outdir"], maskname)
-    outpath = '/scr2/npk/m4/LONGSLIT-15x0.7/2013sep23/H/'
-
-
     operand1 = A[0] + '[0]'
     operand2 = B[0] + '[0]'
 
@@ -85,7 +81,9 @@ def imdiff(A, B, maskname, band, header, options):
     dname = "{0}_{1}_{2}_{3}-{4}_{5}-{6}.fits".format(maskname, objname, band,
         A[1]["frameid"], B[1]["frameid"], imnumA, imnumB)
 
-    IO.imarith(operand1, '-', operand2, os.path.join(outpath,dname))
+    try: os.remove(dname)
+    except:pass
+    IO.imarith(operand1, '-', operand2, dname)
 
     ''' Now handle variance '''
     numreads = header["READS0"]
@@ -93,12 +91,16 @@ def imdiff(A, B, maskname, band, header, options):
     varname = "var_{0}_{1}_{2}_{3}+{4}_{5}+{6}.fits".format(maskname, objname, band,
         A[1]["frameid"], B[1]["frameid"], imnumA, imnumB)
 
-    IO.imarith(operand1, '+', operand2, os.path.join(outpath, "tmp_" + varname))
-    IO.imarith("tmp_" + varname, '+', RN_adu**2, os.path.join(outpath, varname))
+    
+    IO.imarith(operand1, '+', operand2, "tmp_" + varname)
+    try: os.remove(varname)
+    except: pass
+    IO.imarith("tmp_" + varname, '+', RN_adu**2, varname)
 
-    os.remove("tmp_" + varname)
+    try: os.remove("tmp_" + varname)
+    except: pass
 
-    return outpath, dname, varname
+    return dname, varname
 
 def go(maskname,
         band,
@@ -128,7 +130,7 @@ def go(maskname,
             objname = header["object"]
 
         if objname != header["object"]:
-            raise Exception("Trying to combine longslit stack of object {0} " 
+            print ("Trying to combine longslit stack of object {0} " 
                     "with object {1}".format(objname, header["object"]))
 
         print("{0:18s} {1:30s} {2:2s} {3:4.1f}".format(file, header["object"],
@@ -144,18 +146,18 @@ def go(maskname,
         B = positions[i+1]
 
         
-        path, dname, varname = imdiff(A, B, maskname, band, header, wavoptions)
-        rectify(path, dname, lamdat, A, B, maskname, band, wavoptions,
+        dname, varname = imdiff(A, B, maskname, band, header, wavoptions)
+        rectify(dname, lamdat, A, B, maskname, band, wavoptions,
                 longoptions)
-        rectify(path, varname, lamdat, A, B, maskname, band, wavoptions,
+        rectify(varname, lamdat, A, B, maskname, band, wavoptions,
                 longoptions)
         print dname
 
-    path, dname, vname = imdiff(B, A, maskname, band, wavoptions)
+    dname, vname = imdiff(B, A, maskname, band, header, wavoptions)
     print dname
-    rectify(path, dname, lamdat, B, A, maskname, band, wavoptions,
+    rectify(dname, lamdat, B, A, maskname, band, wavoptions,
             longoptions)
-    rectify(path, vname, lamdat, B, A, maskname, band, wavoptions,
+    rectify(vname, lamdat, B, A, maskname, band, wavoptions,
             longoptions)
     
     if False:
