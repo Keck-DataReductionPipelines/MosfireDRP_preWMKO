@@ -54,7 +54,7 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
 
     lambdas = IO.readfits(wavename, options)
 
-    if np.any(lambdas < 0):
+    if np.any(lambdas < 0) or np.any(lambads > 29000):
         print "***********WARNING ***********"
         print "The file {0} may not be a wavelength file.".format(wavename)
         print "Check before proceeding."
