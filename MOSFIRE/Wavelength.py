@@ -1025,6 +1025,19 @@ def pick_linelist(header, neon=None):
     if neon is True:
         # http://www2.keck.hawaii.edu/inst/mosfire/data/MosfireArcs/mosfire_Ne_vac.list
         # Trimmed using PDF of id'd lines
+    
+        if band == 'Y':
+            lines = np.array([
+                9668.071,
+                10298.238,
+                10565.303,
+                10801.001,
+                10847.448,
+                11146.072,
+                11180.585,
+                11393.552,
+                11412.257,
+            )]
 
         if band == 'J':
             lines = np.array([
@@ -1039,6 +1052,25 @@ def pick_linelist(header, neon=None):
                 12462.799,
                 12692.674,
                 12915.546])
+
+        if band == 'H':
+            lines = np.array([
+                14933.886,
+                14990.415,
+                15144.236,
+                15195.083,
+                15234.877,
+                15352.384,
+                15411.803,
+                15608.478,
+                16027.147,
+                16272.797,
+                16049.737,
+                16479.254,
+                16793.378,
+                16866.255,
+                17166.622])
+
         if band == 'K':
             lines = np.array([
                 #19579.094 ,
