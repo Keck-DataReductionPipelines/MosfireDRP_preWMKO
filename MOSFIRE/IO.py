@@ -450,19 +450,32 @@ def imcombine(filelist, out, options, bpmask=None, reject="none", nlow=None,
         nhigh=None):
 
     '''Convenience wrapper around IRAF task imcombine
+
+    Args:
+        filelist: The list of files to imcombine
+        out: The full path to the output file
+        options: Options dictionary
+        bpmask: The full path to the bad pixel mask
+        reject: none, minmax, sigclip, avsigclip, pclip
+        nlow,nhigh: Parameters for minmax rejection, see iraf docs
     
-    reject: none, minmax, sigclip, avsigclip, pclip'''
+    Returns:
+        None
+
+    Side effects:
+        Creates the imcombined file at location `out'
+    '''
 
     #TODO: REMOVE Iraf and use python instead. STSCI Python has
     # A builtin routine.
     from pyraf import iraf
     iraf.images()
 
-    filelist = [os.path.join(fname_to_path(f, options), "%s[0]" % f) for f in filelist]
+    filelist = [("%s[0]" % f) for f in filelist]
     pars = iraf.imcombine.getParList()
     iraf.imcombine.unlearn()
 
-    path = os.path.join(options['outdir'] , "flatcombine.lst")
+    path = "flatcombine.lst"
     f = open(path, "w")
     for file in filelist:
         f.write(file + "\n")
