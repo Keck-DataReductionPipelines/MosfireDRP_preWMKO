@@ -41,12 +41,12 @@ waveops = Options.wavelength
 #Wavelength.apply_lambda_sky_and_arc(maskname, band, 'Offset_1.5.txt', 
     #'Ne.txt', LROIs, waveops, neon=True)
 #Background.handle_background(['Offset_1.5.txt', 'Offset_-1.5.txt'],
-#    'fill this in after apply_lambda_sky_and_arc'
+#    'Fill in with appropriate merged_lambda_solution_..fits
 #    maskname,
 #    band,
 #    waveops)
 #Rectify.handle_rectification(maskname, ['eps_Offset_1.5.txt.fits', 'eps_Offset_-1.5.txt.fits'],
-#    'fill this in after handle_background'
+#    'Fill in with appropriate merged_lambda_solution_..fits
 #   band, 
 #   "Copy the first file in Offset_1.5.txt here"
 #   waveops)

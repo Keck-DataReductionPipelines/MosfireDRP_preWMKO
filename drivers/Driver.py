@@ -27,13 +27,13 @@ waveops = Options.wavelength
 #Wavelength.apply_lambda_simple(maskname, band, 'Offset_1.5.txt', waveops)
 #Background.handle_background(['Offset_1.5.txt', 'Offset_-1.5.txt',
     #'Offset_1.2.txt', 'Offset_-1.2.txt'],
-    #'fill in after apply_lambda_simple'
+    #'Fill in with appropriate lambda_solution_..fits'
     #maskname, band, waveops)
 
 #Rectify.handle_rectification(maskname, ['eps_Offset_1.5.txt.fits',
 #    'eps_Offset_-1.5.txt.fits','eps_Offset_1.2.txt.fits',
 #    'eps_Offset_-1.2.txt.fits',],
-#    'fill in after handle_background step'
+#    'Fill in with appropriate lambda_solution_..fits'
 #    band, 
 #    "/path/to/first/file in Offset_1.5.txt"
 #    waveops)
