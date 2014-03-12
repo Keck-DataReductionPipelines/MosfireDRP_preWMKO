@@ -497,7 +497,7 @@ def check_wavelength_roi(maskname, band, skyfiles, arcfiles, LROI, options):
     return LROI
 
 
-def fit_lambda_interactively(maskname, band, wavenames, options, neon=False, longslit=None):
+def fit_lambda_interactively(maskname, band, wavenames, options, neon=None, longslit=None,argon=None):
     """Fit the one-dimensional wavelength solution to each science slit
     
     Args:
@@ -505,7 +505,8 @@ def fit_lambda_interactively(maskname, band, wavenames, options, neon=False, lon
         band: The spectral band [Y, J, H, K]
         wavenames: List of wavelength standard files
         options: Options dictionary
-        neon: Using neon emission line
+        neon: Using neon emission lines
+        argon: Using argon emission lines
         longslit: Longslit dictionary containing {"yrange": [a,b] and "row_position": YY}
             Note that [a,b] is the range to extract the longslit spectrum over
             row_position is the location to perform the interactive solution over. This
@@ -531,7 +532,7 @@ def fit_lambda_interactively(maskname, band, wavenames, options, neon=False, lon
     name = filelist_to_wavename(wavenames, band, maskname, options)
     fn = "lambda_center_coeffs_{0}.npy".format(name.rstrip(".fits"))
 
-    linelist = pick_linelist(header, neon=neon)
+    linelist = pick_linelist(header, neon=neon, argon=argon)
     
     try: 
         solutions = np.load(fn)
@@ -989,7 +990,7 @@ def dlambda_model(p):
 
     return scale/(order/d) * sinbeta / costerm
 
-def pick_linelist(header, neon=None):
+def pick_linelist(header, neon=None, argon=None):
     band = header["filter"]
     
     # following linelinests are produced by ccs and can be found in the iraf
@@ -997,7 +998,7 @@ def pick_linelist(header, neon=None):
     # /scr2/mosfire/mosfire_sky_lines/database
 
     if band == 'Y':
-        lines = np .array([
+        lines = np.array([
               9793.6294 , 9874.84889 , 9897.54143 , 9917.43821 , 10015.6207 ,
              10028.0978 , 10046.7027 , 10085.1622 , 10106.4478 , 10126.8684 ,
               10174.623 , 10192.4683 , 10213.6107 , 10289.3707 , 10298.7496 ,
@@ -1025,12 +1026,6 @@ def pick_linelist(header, neon=None):
                 17449.9205 , 17505.7497 , 17653.0464 , 17671.843 , 17698.7879 ,
                 17811.3826 , 17880.341 ])
 
-        if neon is True:
-            lines = np.array([14933.886, 14990.415, 15144.236, 15195.083,
-                15234.8770, 15352.3840, 15411.8030, 15608.4780, 16027.1470,
-                16272.7970, 16409.7370, 16479.2540, 16793.3780, 16866.2550,
-                17166.6220])
-  
 
     if band == 'J':
         # Removed: 12589.2998 12782.9052 12834.5202
@@ -1130,6 +1125,77 @@ def pick_linelist(header, neon=None):
                 #24466.068 ,
                 #24471.606 ,
                 ])
+
+    if argon is not None:
+        if band == 'Y':
+            lines = np.array([
+                9660.43,
+                9787.18,
+                10054.81,
+                10472.92,
+                10480.90,
+                10676.49,
+                10684.70,
+                10883.94,
+                11081.90, ])
+        if band == 'J':
+            lines = np.array([
+                11491.25,
+                11671.90,
+                11722.70,
+                11946.55,
+                12029.94,
+                12115.64,
+                12143.06,
+                12346.77,
+                12406.22,
+                12442.73,
+                12491.08,
+                12736.90,
+                12806.24,
+                12960.20,
+                13011.82,
+                13217.61,
+                13276.27,
+                13316.85,
+                13370.77,
+                13410.26,
+                13507.88,
+                13626.38 ])
+        if band == 'H':
+            lines = np.array([
+                14654.35,
+                14743.17,
+                15050.62,
+                15176.84,
+                15306.07,
+                15333.54,
+                15406.85,
+                15904.03,
+                15993.86,
+                16184.44,
+                16441.44,
+                16524.38,
+                16744.65,
+                16945.21,
+                17449.67,
+                17919.61])
+        if band == 'K':
+            lines = np.array([
+                19822.91,
+                19971.18,
+                20322.56,
+                20574.43,
+                20621.86,
+                20739.22,
+                20816.72,
+                20991.84,
+                21338.71,
+                21540.09,
+                22045.58,
+                22083.21,
+                23139.52,
+                23851.54,])
 
     lines = np.array(lines)
     return np.sort(lines)
