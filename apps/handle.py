@@ -110,7 +110,7 @@ for fname in files:
     elif 'Ne' in header['lamps']:
         masks[maskname][date][filter]['Ne'].append(fname)
     elif 'Ar' in header['lamps']:
-        masks[maskname][date][filter]['Ne'].append(fname)
+        masks[maskname][date][filter]['Ar'].append(fname)
     elif header['ABORTED']:
         masks[maskname][date][filter]['Aborted'].append(fname)
     elif header['FILTER'] == 'Dark':
