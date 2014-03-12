@@ -51,7 +51,7 @@ obsfiles = ['Offset_0.txt', 'Offset_13.33333.txt', 'Offset_6.666667.txt', 'Offse
 # Use neon for wavelength calibrations
 #Wavelength.imcombine('Ne.txt', maskname, band, waveops)
 #Wavelength.fit_lambda_interactively(maskname, band, 'Ne.txt', waveops, longslit=longslit, neon=True)
-#Wavelength.fit_lambda(maskname, band, 'Ne.txt', 'Ne.txt', waveops, longslit=longslit, neon=True)
+#Wavelength.fit_lambda(maskname, band, 'Ne.txt', 'Ne.txt', waveops, longslit=longslit)
 #Wavelength.apply_lambda_simple(maskname, band, 'Ne.txt', waveops, longslit=longslit, smooth=True)
 
 # Update the following line after the apply_lambda_simple step
