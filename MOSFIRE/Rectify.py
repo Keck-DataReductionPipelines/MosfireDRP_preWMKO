@@ -67,6 +67,7 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
     
     for file in in_files:
 
+        print ":: ", file
         II = IO.read_drpfits(maskname, file, options)
 
         off = np.array((II[0]["decoff"], II[0]["raoff"]),dtype=np.float64)

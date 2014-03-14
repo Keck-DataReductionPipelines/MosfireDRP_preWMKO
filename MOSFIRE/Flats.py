@@ -61,7 +61,7 @@ def handle_flats(flatlist, maskname, band, options, extension=None):
 
     for fname in flatlist:
 
-        hdr, dat, bs = IO.readmosfits(fname, options)
+        hdr, dat, bs = IO.readmosfits(fname, options, extension=extension)
         try: bs0
         except: bs0 = bs
 
@@ -69,7 +69,7 @@ def handle_flats(flatlist, maskname, band, options, extension=None):
             raise Exception("Barsets do not seem to match")
 
         if hdr["filter"] != band:
-            raise Exception("Filter name %s does not match header filter name "
+            print ("Filter name %s does not match header filter name "
                     "%s in file %s" % (band, hdr["filter"], fname))
         for i in xrange(len(bpos)):
             b = hdr["B{0:02d}POS".format(i+1)]

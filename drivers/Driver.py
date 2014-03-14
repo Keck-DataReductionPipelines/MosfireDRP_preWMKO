@@ -17,24 +17,24 @@ band = ''
 flatops = Options.flat
 waveops = Options.wavelength
 
+obsfiles = ['Offset_1.5.txt', 'Offset_-1.5.txt']
+
 #Flats.handle_flats('Flat.txt', maskname, band, flatops)
-#Wavelength.imcombine('Offset_1.5.txt', maskname, band, waveops)
-#Wavelength.fit_lambda_interactively(maskname, band, 'Offset_1.5.txt', 
+#Wavelength.imcombine(obsfiles, maskname, band, waveops)
+#Wavelength.fit_lambda_interactively(maskname, band, obsfiles,
     #waveops)
-#Wavelength.fit_lambda(maskname, band, 'Offset_1.5.txt', 'Offset_1.5.txt',
+#Wavelength.fit_lambda(maskname, band, obsfiles, obsfiles,
     #waveops)
 
-#Wavelength.apply_lambda_simple(maskname, band, 'Offset_1.5.txt', waveops)
-#Background.handle_background(['Offset_1.5.txt', 'Offset_-1.5.txt',
-    #'Offset_1.2.txt', 'Offset_-1.2.txt'],
-    #'Fill in with appropriate lambda_solution_..fits'
+#Wavelength.apply_lambda_simple(maskname, band, obsfiles, waveops)
+#Background.handle_background(obsfiles,
+    #'lambda_solution_wave_stack_H_m130429_0224-0249.fits',
     #maskname, band, waveops)
 
-#Rectify.handle_rectification(maskname, ['eps_Offset_1.5.txt.fits',
-#    'eps_Offset_-1.5.txt.fits','eps_Offset_1.2.txt.fits',
-#    'eps_Offset_-1.2.txt.fits',],
-#    'Fill in with appropriate lambda_solution_..fits'
+redfiles = ["eps_" + files + ".fits" for file in obsfiles]
+#Rectify.handle_rectification(maskname, redfiles,
+#    "lambda_solution_wave_stack_H_m130429_0224-0249.fits",
 #    band, 
-#    "/path/to/first/file in Offset_1.5.txt"
+#    "/scr2/npk/mosfire/2013apr29/m130429_0224.fits",
 #    waveops)
 #

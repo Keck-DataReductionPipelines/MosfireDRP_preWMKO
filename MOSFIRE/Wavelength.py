@@ -116,15 +116,23 @@ def filelist_to_path(files, band, maskname, options):
 
     return outf
 
-def imcombine(files, maskname, bandname, options):
+def imcombine(files, maskname, bandname, options, extension=None):
     ''' This version of imcombine is used to create the wave_stack file
     which is used only by the wavelength fitting routine. This imcombine does
     not produce science results.
 
-    files -- list of strings with file names
-    maskname -- string with name of the mask
-    bandname -- string with name of band
-    options -- passed across from Options file'''
+    Args:
+        files: list of strings with file names
+        maskname: string with name of the mask
+        bandname: string with name of band
+        options: passed across from Options file
+        extension: path to file that contains a well formated fits header
+            this should be used only when the detector server fails
+            to write the full FITS header
+    
+    Results:
+        writes a median combined image in electron. It is called
+            wave_stack_[bandname]_[filename range].fits'''
     
     Flat = IO.load_flat(maskname, bandname, options)
     flat = Flat[1]
@@ -143,7 +151,7 @@ def imcombine(files, maskname, bandname, options):
 
     for i in xrange(len(files)):
         fname = files[i]
-        thishdr, data, bs = IO.readmosfits(fname, options)
+        thishdr, data, bs = IO.readmosfits(fname, options, extension=extension)
         ADUs[i,:,:] = data.filled(0)
 
         if thishdr["aborted"]:
@@ -226,7 +234,8 @@ def fit_lambda(maskname,
         guessnames, 
         options,
         longslit=None,
-        neon=None):
+        neon=None,
+        extension=None):
     """Fit the two-dimensional wavelength solution to each science slit
 
     Inputs:
@@ -235,6 +244,9 @@ def fit_lambda(maskname,
         options: Dictionary of wavelength options
         longlist: True if a longslit
         neon: path to neon image [2k x 2k frame]
+        extension: path to file that contains a well formated fits header
+            this should be used only when the detector server fails
+            to write the full FITS header
 
     Prints:
         This step prints out lines like
@@ -291,7 +303,7 @@ def fit_lambda(maskname,
     wavepath = filelist_to_path(wavenames, bandname, maskname,
             options)
     drop, data = IO.readfits(wavepath, use_bpm=True)
-    header, drop,bs = IO.readmosfits(wavenames[0], options)
+    header, drop,bs = IO.readmosfits(wavenames[0], options, extension=extension)
 
     fnum = guessname
     center_solutions = IO.load_lambdacenter(fnum, maskname, options)
@@ -320,7 +332,7 @@ def fit_lambda(maskname,
     tock = time.time()
 
 
-    if False:
+    if True:
         p = Pool()
         solutions = p.map(fit_lambda_helper, range(len(bs.ssl)))
         p.close()
@@ -370,7 +382,8 @@ def fit_lambda_helper(slitno):
 
     return sol
 
-def apply_interactive(maskname, band, options, apply=None, to=None, neon=False):
+def apply_interactive(maskname, band, options, apply=None, to=None, neon=False,
+    extension=None):
     """Fit the one-dimensional wavelength solution to each science slit"""
     np.seterr(all="ignore")
 
@@ -385,7 +398,7 @@ def apply_interactive(maskname, band, options, apply=None, to=None, neon=False):
     to_filename = filelist_to_path(to_files, band, maskname, options)
     mfits = IO.readfits(to_filename, use_bpm=True)
     (drop, data) = mfits
-    (header, drop, bs) = IO.readmosfits(wavenames[0], options)
+    (header, drop, bs) = IO.readmosfits(wavenames[0], options, extension=extension)
 
     mfits = header, data, bs
     linelist = pick_linelist(header, neon=neon)
@@ -497,7 +510,7 @@ def check_wavelength_roi(maskname, band, skyfiles, arcfiles, LROI, options):
     return LROI
 
 
-def fit_lambda_interactively(maskname, band, wavenames, options, neon=None, longslit=None,argon=None):
+def fit_lambda_interactively(maskname, band, wavenames, options, neon=None, longslit=None,argon=None, extension=None):
     """Fit the one-dimensional wavelength solution to each science slit
     
     Args:
@@ -507,6 +520,9 @@ def fit_lambda_interactively(maskname, band, wavenames, options, neon=None, long
         options: Options dictionary
         neon: Using neon emission lines
         argon: Using argon emission lines
+        extension: path to file that contains a well formated fits header
+            this should be used only when the detector server fails
+            to write the full FITS header
         longslit: Longslit dictionary containing {"yrange": [a,b] and "row_position": YY}
             Note that [a,b] is the range to extract the longslit spectrum over
             row_position is the location to perform the interactive solution over. This
@@ -525,7 +541,7 @@ def fit_lambda_interactively(maskname, band, wavenames, options, neon=None, long
     print "{0} resolves to input files: {1}".format(wavenames, input_f)
     mfits = IO.readfits(input_f, use_bpm=True)
     (drop, data) = mfits
-    (header, drop, bs) = IO.readmosfits(wavenames[0], options)
+    (header, drop, bs) = IO.readmosfits(wavenames[0], options, extension=extension)
 
     mfits = header, data, bs
 
@@ -640,7 +656,7 @@ def find_pixel_offset(lam_sky, coeff_arc, LROI):
 
 
 def apply_lambda_sky_and_arc(maskname, bandname, skynames, arcnames, LROIs,
-    options, longslit=None, smooth=True, neon=True):
+    options, longslit=None, smooth=True, neon=True, extension=None):
     
     global lams, sigs
     
@@ -656,11 +672,11 @@ def apply_lambda_sky_and_arc(maskname, bandname, skynames, arcnames, LROIs,
     print skyname
     print arcname
     drop, data = IO.readfits(skyname+'.fits', use_bpm=True)
-    header, drop, bs = IO.readmosfits(skynames[0], options)
+    header, drop, bs = IO.readmosfits(skynames[0], options, extension=extension)
     skydata = data.filled(0)
 
     drop, data = IO.readfits(arcname+'.fits', use_bpm=True)
-    header, drop, bs = IO.readmosfits(arcnames[0], options)
+    header, drop, bs = IO.readmosfits(arcnames[0], options, extension=extension)
     arcdata = data.filled(0)
 
     slitedges, edgeinfo = IO.load_edges(maskname, bandname, options)
