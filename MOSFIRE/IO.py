@@ -132,22 +132,31 @@ def load_lambdaslit(fnum, maskname, band, options):
 
 def writefits(img, maskname, fname, options, header=None, bs=None,
         overwrite=False, lossy_compress=False):
-    '''Convenience wrapper to write MOSFIRE drp-friendly FITS files'''
+    '''Convenience wrapper to write MOSFIRE drp-friendly FITS files
+    
+    Args:
+        img: Data array to write to disk
+        maskname: Name of the science mask
+        fname: Full or relative path to output file
+        options: {} Unused
+        header: Optional, the header to write
+        bs: Optional unused
+        overwrite: Force overwrite of file, default False/No.
+        lossy_compress: Zero out the lowest order bits of the floats in
+            order to make FITS files amenable to compression. The loss is
+            at least 10 x less than 5e- which is the lowest reasonable read-
+            noise value.
+
+    Results:
+        Writes a file to fname with data img and header header.
+
+    '''
 
     if lossy_compress:
         hdu = pf.PrimaryHDU(floatcompress(img))
     else:
         hdu = pf.PrimaryHDU(img)
 
-    if False:
-        path = os.path.join(options["outdir"], maskname)
-        if not os.path.exists(path):
-            print("Output directory '%s' does not exist. The DRP will attempt" 
-                    "to create this directory." % path)
-            os.mkdir(path)
-
-        fn = os.path.join(path, fname)
-    
     fn = fname
 
     if header is None: header = {"DRPVER": MOSFIRE.__version__}
@@ -169,7 +178,7 @@ def writefits(img, maskname, fname, options, header=None, bs=None,
     if overwrite:
         try: 
             os.remove(fn)
-            print "Removed old file '%s'%" % (fn)
+            print "Removed old file '{0}'%".format(fn)
         except: pass
 
     print "Wrote to '%s'" % (fn)
