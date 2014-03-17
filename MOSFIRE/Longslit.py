@@ -75,8 +75,8 @@ def imdiff(A, B, maskname, band, header, options):
     operand1 = A[0] + '[0]'
     operand2 = B[0] + '[0]'
 
-    imnumA = A[0].split('_')[1].rstrip(".fits")
-    imnumB = B[0].split('_')[1].rstrip(".fits")
+    imnumA = A[0].split('_')[-1].rstrip(".fits")
+    imnumB = B[0].split('_')[-1].rstrip(".fits")
 
     dname = "{0}_{1}_{2}_{3}-{4}_{5}-{6}.fits".format(maskname, objname, band,
         A[1]["frameid"], B[1]["frameid"], imnumA, imnumB)
