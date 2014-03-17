@@ -100,14 +100,42 @@ def imdiff(A, B, maskname, band, header, options):
     try: os.remove("tmp_" + varname)
     except: pass
 
+
     return dname, varname
+
+def apply_flat(scifilename, maskname, band):
+    ''' Divides the contents of scifilename by the flat field and
+        overwrites scifilename with the same file divided by the flat
+
+        Args:
+            scifilename: Path to science file name.
+            maskname: The mask name
+            band: The filter bands
+
+        Results:
+            Overwrites scifilename where the data contents of the file
+                are divided by the pixel flat
+    '''
+
+    
+    flat = IO.load_flat(maskname, band, {})
+    flat_data = flat[1].filled(1.0)
+
+    header, data = IO.readfits(scifilename)
+    
+    print("Applying flat to file {0}".format(scifilename))
+    IO.writefits(data/flat_data, maskname, scifilename, {}, header=header,
+        overwrite=True)
+
+
 
 def go(maskname,
         band,
         filenames,
         wavefile,
         wavoptions,
-        longoptions):
+        longoptions,
+        use_flat=False):
 
     '''
     The go command is the main entry point into this module.
@@ -121,6 +149,8 @@ def go(maskname,
         longoptions: Dictionary containing:
             {'yrange': The pixel range to extract over
             'row_position': The row to solve the initial wavelength solution on}
+        use_flat: Boolean False [default] means to use no flat field
+            Boolean True means to divide by the pixelflat
     '''
     wavename = Wavelength.filelist_to_wavename(filenames, band, maskname,
             wavoptions).rstrip(".fits")
@@ -158,6 +188,9 @@ def go(maskname,
 
         
         dname, varname = imdiff(A, B, maskname, band, header, wavoptions)
+        if use_flat:
+            apply_flat(varname, maskname, band)
+
         rectify(dname, lamdat, A, B, maskname, band, wavoptions,
                 longoptions)
         rectify(varname, lamdat, A, B, maskname, band, wavoptions,
@@ -165,7 +198,8 @@ def go(maskname,
         print dname
 
     dname, vname = imdiff(B, A, maskname, band, header, wavoptions)
-    print dname
+    if use_flat:
+        apply_flat(vname, maskname, band)
     rectify(dname, lamdat, B, A, maskname, band, wavoptions,
             longoptions)
     rectify(vname, lamdat, B, A, maskname, band, wavoptions,
