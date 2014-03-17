@@ -83,6 +83,7 @@ def imdiff(A, B, maskname, band, header, options):
 
     try: os.remove(dname)
     except:pass
+    print "Data Diff {0}-{1}".format(operand1,operand2)
     IO.imarith(operand1, '-', operand2, dname)
 
     ''' Now handle variance '''
@@ -92,9 +93,11 @@ def imdiff(A, B, maskname, band, header, options):
         A[1]["frameid"], B[1]["frameid"], imnumA, imnumB)
 
     
+    print "Var Sum {0}+{1}".format(operand1,operand2)
     IO.imarith(operand1, '+', operand2, "tmp_" + varname)
     try: os.remove(varname)
     except: pass
+    print "Var add RN {0}+{1}".format(operand1,RN_adu**2)
     IO.imarith("tmp_" + varname, '+', RN_adu**2, varname)
 
     try: os.remove("tmp_" + varname)
@@ -186,9 +189,11 @@ def go(maskname,
         A = positions[i]
         B = positions[i+1]
 
+        print("----------- -----".format(A,B))
         
         dname, varname = imdiff(A, B, maskname, band, header, wavoptions)
         if use_flat:
+            apply_flat(dname, maskname, band)
             apply_flat(varname, maskname, band)
 
         rectify(dname, lamdat, A, B, maskname, band, wavoptions,
@@ -199,6 +204,7 @@ def go(maskname,
 
     dname, vname = imdiff(B, A, maskname, band, header, wavoptions)
     if use_flat:
+        apply_flat(dname, maskname, band)
         apply_flat(vname, maskname, band)
     rectify(dname, lamdat, B, A, maskname, band, wavoptions,
             longoptions)
