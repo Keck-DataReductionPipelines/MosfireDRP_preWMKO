@@ -203,15 +203,15 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
         itout = np.append(itout, np.nan*np.zeros((3,S[1])), 0)
 
         IO.writefits(img, maskname,
-            "eps_{0}_S{1:02g}_S{2}.fits".format(band, i_slit+1,target_name), options,
+            "{0}_{1}_{2}_eps.fits".format(maskname, band, target_name), options,
             overwrite=True, header=header, lossy_compress=False)
 
         IO.writefits(std, maskname,
-            "sd_{0}_S{1:02g}_S{2}.fits".format(band, i_slit+1,target_name), options,
+            "{0}_{1}_{2}_sd.fits".format(maskname, band, target_name), options,
             overwrite=True, header=header, lossy_compress=False)
 
         IO.writefits(tms, maskname,
-            "itime_{0}_S{1:02g}_S{2}.fits".format(band, i_slit+1, target_name), options,
+            "{0}_{1}_{2}.fits".format(maskname, band, target_name), options,
             overwrite=True, header=header, lossy_compress=False)
 
     header = EPS[0].copy()
@@ -237,19 +237,19 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
     header.update("cd2_1", 0)
     header.update("cd2_2", 1)
 
-    IO.writefits(output, maskname, "eps_{0}_{1}.fits".format(maskname,
+    IO.writefits(output, maskname, "{0}_{1}_eps.fits".format(maskname,
         band), options, overwrite=True, header=header,
         lossy_compress=False)
 
-    IO.writefits(snrs, maskname, "snrs_{0}_{1}.fits".format(maskname,
+    IO.writefits(snrs, maskname, "{0}_{1}_snrs.fits".format(maskname,
         band), options, overwrite=True, header=header,
         lossy_compress=False)
 
-    IO.writefits(sdout, maskname, "sd_{0}_{1}.fits".format(maskname,
+    IO.writefits(sdout, maskname, "{0}_{1}_sd.fits".format(maskname,
         band), options, overwrite=True, header=header,
         lossy_compress=False)
 
-    IO.writefits(itout, maskname, "itime_{0}_{1}.fits".format(maskname,
+    IO.writefits(itout, maskname, "{0}_{1}_itime.fits".format(maskname,
         band), options, overwrite=True, header=header,
         lossy_compress=False)
 
@@ -356,7 +356,7 @@ def handle_rectification_helper(edgeno):
         sign *= -1
 
     eps_img = np.sum(epss, axis=0)
-    it_img = np.sum(np.array(itss), axis=0)
+    it_img = np.mean(np.array(itss), axis=0)
 
 
     # Remove any NaNs or infs from the variance array
