@@ -1799,7 +1799,7 @@ class InteractiveSolution:
 
         actions_mouseless = {".": self.fastforward, "n": self.nextobject, "p":
                 self.prevobject, "q": self.quit, "r": self.reset, "f":
-                self.fit_event}
+                self.fit_event, "\\": self.fit_event}
 
         actions = { "c": self.shift, "d": self.drop_point,
                 "z": self.zoom, "x": self.unzoom, "s": self.savefig}
