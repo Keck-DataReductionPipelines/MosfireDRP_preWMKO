@@ -261,6 +261,10 @@ def merge_headers(h1, h2):
     patternid = h2["frameid"]
 
     for key in h2.keys():
+        if "NAXIS" in key: continue
+        if "SIMPLE" in key: continue
+        if "BITPIX" in key: continue
+        if "EXTEND" in key: continue
         val = h2[key]
 
         if h.has_key(key):
@@ -268,6 +272,10 @@ def merge_headers(h1, h2):
                 newkey = "hierarch " + key + ("_pos_%s" % patternid)
                 try: h.update(newkey.rstrip(), val)
                 except: pass
+        else:
+            try: h.update("hierarch " + key + ("_pos%s" % patternid), val)
+            except: pass
+
 
     return h
 
@@ -395,7 +403,7 @@ def write_outputs(solutions, itime, header, maskname, band_name, plan, options):
 
     header.update("object", "{0}: electron".format(maskname))
     header.update("bunit", "ELECTRONS")
-    IO.writefits(Std, maskname, "std_%s_%s_%s.fits" % (maskname, band,
+    IO.writefits(Std, maskname, "sig_%s_%s_%s.fits" % (maskname, band,
         suffix), options, header=header, overwrite=True, lossy_compress=True)
 
     header.update("object", "{0}: electron/second".format(maskname))
@@ -464,8 +472,8 @@ def write_outputs(solutions, itime, header, maskname, band_name, plan, options):
     IO.writefits(rectified, maskname, "%s_pair_%s_%s.fits" % (maskname, band_name,
         suffix), options, header=header, overwrite=True, lossy_compress=True)
 
-    header.update("object", "rectified std [electron]")
-    IO.writefits(rectified_std, maskname, "%s_pair_std_%s_%s.fits" %
+    header.update("object", "rectified standard deviation [electron]")
+    IO.writefits(rectified_std, maskname, "%s_pair_sig_%s_%s.fits" %
             (maskname, band_name, suffix), options, header=header, overwrite=True,
             lossy_compress=True)
 

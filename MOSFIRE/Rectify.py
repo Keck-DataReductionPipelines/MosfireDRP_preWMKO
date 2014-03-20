@@ -106,7 +106,7 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
         EPS = IO.read_drpfits(maskname, fname, options)
         EPS[1] = np.ma.masked_array(EPS[1], theBPM, fill_value=0)
 
-        fname = "std_{0}_{1}_{2}.fits".format(maskname, band, suffix)
+        fname = "sig_{0}_{1}_{2}.fits".format(maskname, band, suffix)
         STD = IO.read_drpfits(maskname, fname, options)
         STD[1] = np.ma.masked_array(STD[1], theBPM, fill_value=np.inf)
 
@@ -153,6 +153,7 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
         target_name = bs.ssl[-(i_slit+1)]['Target_Name']
         pixel_dist = np.float(bs.ssl[-(i_slit+1)]['Target_to_center_of_slit_distance'])/0.18
 
+        pixel_dist -= solution['offset']
         header.update("OBJECT", "{0}".format(solution["Target_Name"]))
 
         ll = solution["lambda"]
@@ -207,7 +208,7 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
             overwrite=True, header=header, lossy_compress=False)
 
         IO.writefits(std, maskname,
-            "{0}_{1}_{2}_sd.fits".format(maskname, band, target_name), options,
+            "{0}_{1}_{2}_sig.fits".format(maskname, band, target_name), options,
             overwrite=True, header=header, lossy_compress=False)
 
         IO.writefits(tms, maskname,
@@ -245,7 +246,7 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
         band), options, overwrite=True, header=header,
         lossy_compress=False)
 
-    IO.writefits(sdout, maskname, "{0}_{1}_sd.fits".format(maskname,
+    IO.writefits(sdout, maskname, "{0}_{1}_sig.fits".format(maskname,
         band), options, overwrite=True, header=header,
         lossy_compress=False)
 
@@ -279,15 +280,17 @@ def r_interpol(ls, ss, lfid, tops, top, shift_pix=0, pad=[0,0], fill_value=0.0):
 
         if len(ok) < 100: continue
 
-        f = II.interp1d(ll[ok], sp[ok], bounds_error=False, fill_value = fill_value)
+        f = II.interp1d(ll[ok], sp[ok], bounds_error=False, 
+            fill_value = fill_value)
             
 
-        output[i+pad[0],:] = f(lfid)
+        output[i,:] = f(lfid)
 
     # Now rectify in spatial
     vert_shift = tops-top-shift_pix
 
-    f = II.interp1d(ls[10, :], vert_shift, bounds_error=False, fill_value = fill_value)
+    f = II.interp1d(ls[10, :], vert_shift, bounds_error=False, 
+        fill_value = fill_value)
 
     for i in xrange(output.shape[1]):
         to_shift = f(fidl[i])
@@ -296,8 +299,6 @@ def r_interpol(ls, ss, lfid, tops, top, shift_pix=0, pad=[0,0], fill_value=0.0):
 
         output[:,i] = y(x + to_shift)
 
-
-            
     return output
 
 
@@ -317,7 +318,7 @@ def handle_rectification_helper(edgeno):
     lenas = (tops[1024] - bots[1024]) * 0.18
     mxshift = np.abs(np.int(np.ceil(np.max(all_shifts)/0.18)))
     mnshift = np.abs(np.int(np.floor(np.min(all_shifts)/0.18)))
-
+    
     top = min(np.floor(np.min(tops)), 2048)
     bot = max(np.ceil(np.max(bots)), 0)
 
@@ -336,6 +337,7 @@ def handle_rectification_helper(edgeno):
     ivss = []
     itss = []
     sign = -1
+    
     for shift in shifts:
         output = r_interpol(ll, eps, fidl, tops, top, shift_pix=shift/0.18,
             pad=[mnshift, mxshift])
@@ -371,5 +373,5 @@ def handle_rectification_helper(edgeno):
 
     return {"eps_img": eps_img, "sd_img": sd_img, "itime_img": it_img, 
             "lambda": fidl, "Target_Name": edge["Target_Name"], 
-            "slitno": edgeno+1}
+            "slitno": edgeno+1, "offset": np.max(tops-top)}
 
