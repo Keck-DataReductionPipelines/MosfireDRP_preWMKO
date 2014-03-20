@@ -212,7 +212,7 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
             overwrite=True, header=header, lossy_compress=False)
 
         IO.writefits(tms, maskname,
-            "{0}_{1}_{2}.fits".format(maskname, band, target_name), options,
+            "{0}_{1}_{2}_itime.fits".format(maskname, band, target_name), options,
             overwrite=True, header=header, lossy_compress=False)
 
     header = EPS[0].copy()
