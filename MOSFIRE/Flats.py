@@ -405,7 +405,7 @@ def fit_edge_poly(xposs, xposs_missing, yposs, order):
 
     # First fit low order polynomial to fill in missing data
     fun = np.poly1d(Fit.polyfit_clip(xposs, yposs, 2))
-
+    
     xposs = np.append(xposs, xposs_missing)
     yposs = np.append(yposs, fun(xposs_missing))
 
@@ -465,7 +465,7 @@ def find_and_fit_edges(data, header, bs, options):
     2. The code guesses the position of the bottom of the slit, and runs
             find_edge_pair to measure slit edge locations.
     3. A low-order polynomial is fit to the edge locations with
-            fit_edge_poly
+            fit_edge_poy
     4. The top and bottom of the current slit, is stored into the
             result list.
     5. The top of the next slit is stored temporarily for the next
@@ -564,8 +564,11 @@ def find_and_fit_edges(data, header, bs, options):
             xposs_bot = xposs_bot[ok]
             xposs_bot_missing = xposs_bot_missing[ok2]
             yposs_bot = yposs_bot[ok]
-            (botfun, bot_res, botsd, botok) =  fit_edge_poly(xposs_bot,
-                    xposs_bot_missing, yposs_bot, options["edge-order"])
+            if len(xposs_bot) == 0:
+                botfun = np.poly1d(y)
+            else:
+                (botfun, bot_res, botsd, botok) =  fit_edge_poly(xposs_bot,
+                         xposs_bot_missing, yposs_bot, options["edge-order"])
 
         bot = botfun.c.copy() 
         top = topfun.c.copy()
@@ -603,7 +606,10 @@ def find_and_fit_edges(data, header, bs, options):
         xposs_top_next_missing = xposs_top_next_missing[ok2]
         yposs_top_next = yposs_top_next[ok]
 
-        (topfun, topres, topsd, ok) = fit_edge_poly(xposs_top_next,
+        if len(xposs_top_next) == 0:
+            topfun = np.poly1d(y-DY)
+        else:
+            (topfun, topres, topsd, ok) = fit_edge_poly(xposs_top_next,
                 xposs_top_next_missing, yposs_top_next, options["edge-order"])
 
         xposs_top_this = xposs_top_next
