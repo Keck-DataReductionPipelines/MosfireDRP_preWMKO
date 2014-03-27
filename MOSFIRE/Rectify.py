@@ -207,12 +207,16 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
             "{0}_{1}_{2}_eps.fits".format(maskname, band, target_name), options,
             overwrite=True, header=header, lossy_compress=False)
 
-        IO.writefits(std, maskname,
+        IO.writefits(std/tms, maskname,
             "{0}_{1}_{2}_sig.fits".format(maskname, band, target_name), options,
             overwrite=True, header=header, lossy_compress=False)
 
         IO.writefits(tms, maskname,
             "{0}_{1}_{2}_itime.fits".format(maskname, band, target_name), options,
+            overwrite=True, header=header, lossy_compress=False)
+
+        IO.writefits(img/(std/tms), maskname,
+            "{0}_{1}_{2}_snrs.fits".format(maskname, band, target_name), options,
             overwrite=True, header=header, lossy_compress=False)
 
     header = EPS[0].copy()
@@ -246,7 +250,7 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
         band), options, overwrite=True, header=header,
         lossy_compress=False)
 
-    IO.writefits(sdout, maskname, "{0}_{1}_sig.fits".format(maskname,
+    IO.writefits(sdout/itout, maskname, "{0}_{1}_sig.fits".format(maskname,
         band), options, overwrite=True, header=header,
         lossy_compress=False)
 
@@ -357,7 +361,7 @@ def handle_rectification_helper(edgeno):
 
         sign *= -1
 
-    eps_img = np.sum(epss, axis=0)
+    eps_img = np.mean(epss, axis=0)
     it_img = np.mean(np.array(itss), axis=0)
 
 
@@ -368,7 +372,7 @@ def handle_rectification_helper(edgeno):
         ivar[bad] = 0.0
 
         ivar_img.append(ivar)
-    ivar_img = np.sum(np.array(ivar_img), axis=0)
+    ivar_img = np.mean(np.array(ivar_img), axis=0)
     sd_img = 1/np.sqrt(ivar_img)
 
     return {"eps_img": eps_img, "sd_img": sd_img, "itime_img": it_img, 
