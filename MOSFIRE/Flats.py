@@ -565,7 +565,7 @@ def find_and_fit_edges(data, header, bs, options):
             xposs_bot_missing = xposs_bot_missing[ok2]
             yposs_bot = yposs_bot[ok]
             if len(xposs_bot) == 0:
-                botfun = np.poly1d(y)
+                botfun = np.poly1d(y-DY)
             else:
                 (botfun, bot_res, botsd, botok) =  fit_edge_poly(xposs_bot,
                          xposs_bot_missing, yposs_bot, options["edge-order"])
@@ -607,7 +607,7 @@ def find_and_fit_edges(data, header, bs, options):
         yposs_top_next = yposs_top_next[ok]
 
         if len(xposs_top_next) == 0:
-            topfun = np.poly1d(y-DY)
+            topfun = np.poly1d(y)
         else:
             (topfun, topres, topsd, ok) = fit_edge_poly(xposs_top_next,
                 xposs_top_next_missing, yposs_top_next, options["edge-order"])
