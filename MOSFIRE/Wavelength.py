@@ -748,13 +748,15 @@ def apply_lambda_sky_and_arc(maskname, bandname, skynames, arcnames, LROIs,
             
 
         print "Shifted arc by an average of %1.2f pixels" % (np.mean(dpixels))
-        if smooth == True:
-            xr = np.arange(len(slp))
 
-            for i in xrange(lams.shape[1]):
-                ff = np.poly1d(Fit.polyfit_clip(xr, lams[slp, i], 3))
-                d = lams[slp,i] - ff(xr)
-                lams[slp, i] = ff(xr)
+        if np.isfinite(np.mean(dpixels)):
+            if smooth == True:
+                xr = np.arange(len(slp))
+
+                for i in xrange(lams.shape[1]):
+                    ff = np.poly1d(Fit.polyfit_clip(xr, lams[slp, i], 3))
+                    d = lams[slp,i] - ff(xr)
+                    lams[slp, i] = ff(xr)
 
     print("{0}: writing lambda".format(maskname))
 
