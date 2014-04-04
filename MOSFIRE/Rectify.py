@@ -25,7 +25,7 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
     Args:
         maskname: The mask name string
         in_files: List of stacked spectra in electron per second. Will look
-            like ['eps_Offset_1.5.txt.fits', 'eps_Offset_-1.5.txt.fits']
+            like ['electrons_Offset_1.5.txt.fits', 'electrons_Offset_-1.5.txt.fits']
         wavename: path (relative or full) to the wavelength stack file, string
         band_pass: Band pass name, string
         barset_file: Path to a mosfire fits file containing the full set of
@@ -35,15 +35,17 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
         None
 
     Writes files:
-        eps_[band_pass]_[posname1]-[posname2]_S##.fits --
+        [maskname]_[band]_[object name]_eps.fits --
             The rectified, background subtracted, stacked eps spectrum
-        sd_[band_pass]_[posname1]-[posname2]_S##.fits --
-            Rectified, background subtracted, stacked STD spectrum
-        itime_[band_pass]_[posname1]-[posname2]_S##.fits --
-            Rectified, background subtracted, staced integration time spectrum
+        [maskname]_[band]_[object name]_sig.fits --
+            Rectified, background subtracted, stacked weight spectrum (STD/itime)
+        [maskname]_[band]_[object_name]_itime.fits
+            Rectified, CRR stacked integration time spectrum
+        [maskname]_[band]_[object_name]_snrs.fits
+            Rectified signal to noise spectrum
     '''
 
-    global edges, dats, stds, itimes, shifts, lambdas, band, fidl, all_shifts
+    global edges, dats, vars, itimes, shifts, lambdas, band, fidl, all_shifts
     band = band_pass
 
     
@@ -102,24 +104,23 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
         suffix = "%s-%s" % (p0,p1)
         print "Handling plan %s" % suffix
         fname = "bsub_{0}_{1}_{2}.fits".format(maskname,band,suffix)
+        ELECTRON = IO.read_drpfits(maskname, fname, options)
+        ELECTRON[1] = np.ma.masked_array(ELECTRON[1], theBPM, fill_value=0)
 
-        EPS = IO.read_drpfits(maskname, fname, options)
-        EPS[1] = np.ma.masked_array(EPS[1], theBPM, fill_value=0)
-
-        fname = "sig_{0}_{1}_{2}.fits".format(maskname, band, suffix)
-        STD = IO.read_drpfits(maskname, fname, options)
-        STD[1] = np.ma.masked_array(STD[1], theBPM, fill_value=np.inf)
+        fname = "var_{0}_{1}_{2}.fits".format(maskname, band, suffix)
+        VAR = IO.read_drpfits(maskname, fname, options)
+        VAR[1] = np.ma.masked_array(VAR[1], theBPM, fill_value=np.inf)
 
         fname = "itime_{0}_{1}_{2}.fits".format(maskname, band, suffix)
         ITIME = IO.read_drpfits(maskname, fname, options)
         ITIME[1] = np.ma.masked_array(ITIME[1], theBPM, fill_value=0)
 
 
-        dats = EPS
-        stds = STD
+        dats = ELECTRON
+        vars = VAR
         itimes = ITIME
 
-        EPS[0].update("ORIGFILE", fname)
+        ELECTRON[0].update("ORIGFILE", fname)
 
         tock = time.time()
         sols = range(len(edges)-1,-1,-1)
@@ -148,7 +149,7 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
 
     for i_slit in xrange(len(solutions)):
         solution = all_solutions[0][i_slit]
-        header = EPS[0].copy()
+        header = ELECTRON[0].copy()
 
         target_name = bs.ssl[-(i_slit+1)]['Target_Name']
         pixel_dist = np.float(bs.ssl[-(i_slit+1)]['Target_to_center_of_slit_distance'])/0.18
@@ -203,23 +204,31 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
         itout = np.append(itout, tms, 0)
         itout = np.append(itout, np.nan*np.zeros((3,S[1])), 0)
 
+        header.update("object", "{0}/{1}: e-/s".format(maskname,band))
+        header.update("bunit", "ELECTRONS/SECOND")
         IO.writefits(img, maskname,
             "{0}_{1}_{2}_eps.fits".format(maskname, band, target_name), options,
             overwrite=True, header=header, lossy_compress=False)
 
+        header.update("object", "{0}/{1}: std/itime [e-/s]".format(maskname,band))
+        header.update("bunit", "ELECTRONS/SECOND")
         IO.writefits(std/tms, maskname,
             "{0}_{1}_{2}_sig.fits".format(maskname, band, target_name), options,
             overwrite=True, header=header, lossy_compress=False)
 
+        header.update("object", "{0}/{1}: itime [s]".format(maskname,band))
+        header.update("bunit", "SECOND")
         IO.writefits(tms, maskname,
             "{0}_{1}_{2}_itime.fits".format(maskname, band, target_name), options,
             overwrite=True, header=header, lossy_compress=False)
 
-        IO.writefits(img/(std/tms), maskname,
+        header.update("object", "{0}/{1}: SNR".format(maskname,band))
+        header.update("bunit", "")
+        IO.writefits(snrs, maskname,
             "{0}_{1}_{2}_snrs.fits".format(maskname, band, target_name), options,
             overwrite=True, header=header, lossy_compress=False)
 
-    header = EPS[0].copy()
+    header = ELECTRON[0].copy()
     header.update("OBJECT", "{0}/{1}".format(maskname, band))
     header.update("wat0_001", "system=world")
     header.update("wat1_001", "wtype=linear")
@@ -242,18 +251,23 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
     header.update("cd2_1", 0)
     header.update("cd2_2", 1)
 
+
+    header.update("bunit", "ELECTRONS/SECOND")
     IO.writefits(output, maskname, "{0}_{1}_eps.fits".format(maskname,
         band), options, overwrite=True, header=header,
         lossy_compress=False)
 
+    header.update("bunit", "")
     IO.writefits(snrs, maskname, "{0}_{1}_snrs.fits".format(maskname,
         band), options, overwrite=True, header=header,
         lossy_compress=False)
 
+    header.update("bunit", "ELECTRONS/SECOND")
     IO.writefits(sdout/itout, maskname, "{0}_{1}_sig.fits".format(maskname,
         band), options, overwrite=True, header=header,
         lossy_compress=False)
 
+    header.update("bunit", "SECOND")
     IO.writefits(itout, maskname, "{0}_{1}_itime.fits".format(maskname,
         band), options, overwrite=True, header=header,
         lossy_compress=False)
@@ -307,7 +321,10 @@ def r_interpol(ls, ss, lfid, tops, top, shift_pix=0, pad=[0,0], fill_value=0.0):
 
 
 def handle_rectification_helper(edgeno):
-    global edges, dats, stds, itimes, shifts, lambdas, band, fidl,all_shifts
+    ''' All the rectification happens in this helper function. This helper function
+    is spawned as a separate process in the multiprocessing pool'''
+
+    global edges, dats, vars, itimes, shifts, lambdas, band, fidl,all_shifts
 
     pix = np.arange(2048)
     
@@ -327,8 +344,8 @@ def handle_rectification_helper(edgeno):
     bot = max(np.ceil(np.max(bots)), 0)
 
     ll = lambdas[1].data[bot:top, :]
-    eps = dats[1][bot:top, :].filled(0.0)
-    sds = stds[1][bot:top, :].filled(np.inf)
+    electrons = dats[1][bot:top, :].filled(0.0)
+    vv = vars[1][bot:top, :].filled(np.inf)
     it  = itimes[1][bot:top, :].filled(0.0)
 
     lmid = ll[ll.shape[0]/2,:]
@@ -337,18 +354,17 @@ def handle_rectification_helper(edgeno):
     minl = lmid[0] if lmid[0]>hpp[0] else hpp[0]
     maxl = lmid[-1] if lmid[-1]<hpp[1] else hpp[1]
 
-    epss = []
+    electronss= []
     ivss = []
     itss = []
     sign = -1
     
     for shift in shifts:
-        output = r_interpol(ll, eps, fidl, tops, top, shift_pix=shift/0.18,
+        output = r_interpol(ll, electrons, fidl, tops, top, shift_pix=shift/0.18,
             pad=[mnshift, mxshift])
-        epss.append(sign * output)
+        electronss.append(sign * output)
 
-        var = (sds)**2
-        ivar = 1/var
+        ivar = 1/vv
         bad = np.where(np.isfinite(ivar) ==0)
         ivar[bad] = 0.0
         output = r_interpol(ll, ivar, fidl, tops, top, shift_pix=shift/0.18,
@@ -361,9 +377,9 @@ def handle_rectification_helper(edgeno):
 
         sign *= -1
 
-    eps_img = np.mean(epss, axis=0)
-    it_img = np.mean(np.array(itss), axis=0)
-
+    it_img = np.sum(np.array(itss), axis=0)
+    eps_img = np.sum(electronss, axis=0)/it_img
+    elec_img = np.sum(electronss, axis=0)
 
     # Remove any NaNs or infs from the variance array
     ivar_img = []
@@ -372,10 +388,11 @@ def handle_rectification_helper(edgeno):
         ivar[bad] = 0.0
 
         ivar_img.append(ivar)
-    ivar_img = np.mean(np.array(ivar_img), axis=0)
-    sd_img = 1/np.sqrt(ivar_img)
+    var_img = np.sum(1/np.array(ivar_img), axis=0)
+    sd_img = np.sqrt(var_img)
 
     return {"eps_img": eps_img, "sd_img": sd_img, "itime_img": it_img, 
             "lambda": fidl, "Target_Name": edge["Target_Name"], 
-            "slitno": edgeno+1, "offset": np.max(tops-top)}
+            "slitno": edgeno+1, "offset": np.max(tops-top),
+            "electrons_img": elec_img}
 
