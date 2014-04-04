@@ -104,8 +104,8 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
         suffix = "%s-%s" % (p0,p1)
         print "Handling plan %s" % suffix
         fname = "bsub_{0}_{1}_{2}.fits".format(maskname,band,suffix)
-        ELECTRON = IO.read_drpfits(maskname, fname, options)
-        ELECTRON[1] = np.ma.masked_array(ELECTRON[1], theBPM, fill_value=0)
+        EPS = IO.read_drpfits(maskname, fname, options)
+        EPS[1] = np.ma.masked_array(EPS[1], theBPM, fill_value=0)
 
         fname = "var_{0}_{1}_{2}.fits".format(maskname, band, suffix)
         VAR = IO.read_drpfits(maskname, fname, options)
@@ -116,11 +116,11 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
         ITIME[1] = np.ma.masked_array(ITIME[1], theBPM, fill_value=0)
 
 
-        dats = ELECTRON
+        dats = EPS
         vars = VAR
         itimes = ITIME
 
-        ELECTRON[0].update("ORIGFILE", fname)
+        EPS[0].update("ORIGFILE", fname)
 
         tock = time.time()
         sols = range(len(edges)-1,-1,-1)
@@ -149,9 +149,10 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
 
     for i_slit in xrange(len(solutions)):
         solution = all_solutions[0][i_slit]
-        header = ELECTRON[0].copy()
+        header = EPS[0].copy()
 
         target_name = bs.ssl[-(i_slit+1)]['Target_Name']
+
         pixel_dist = np.float(bs.ssl[-(i_slit+1)]['Target_to_center_of_slit_distance'])/0.18
 
         pixel_dist -= solution['offset']
@@ -224,11 +225,11 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
 
         header.update("object", "{0}/{1}: SNR".format(maskname,band))
         header.update("bunit", "")
-        IO.writefits(snrs, maskname,
+        IO.writefits(img*tms/std, maskname,
             "{0}_{1}_{2}_snrs.fits".format(maskname, band, target_name), options,
             overwrite=True, header=header, lossy_compress=False)
 
-    header = ELECTRON[0].copy()
+    header = EPS[0].copy()
     header.update("OBJECT", "{0}/{1}".format(maskname, band))
     header.update("wat0_001", "system=world")
     header.update("wat1_001", "wtype=linear")
@@ -344,7 +345,7 @@ def handle_rectification_helper(edgeno):
     bot = max(np.ceil(np.max(bots)), 0)
 
     ll = lambdas[1].data[bot:top, :]
-    electrons = dats[1][bot:top, :].filled(0.0)
+    eps = dats[1][bot:top, :].filled(0.0)
     vv = vars[1][bot:top, :].filled(np.inf)
     it  = itimes[1][bot:top, :].filled(0.0)
 
@@ -354,15 +355,15 @@ def handle_rectification_helper(edgeno):
     minl = lmid[0] if lmid[0]>hpp[0] else hpp[0]
     maxl = lmid[-1] if lmid[-1]<hpp[1] else hpp[1]
 
-    electronss= []
+    epss = []
     ivss = []
     itss = []
     sign = -1
     
     for shift in shifts:
-        output = r_interpol(ll, electrons, fidl, tops, top, shift_pix=shift/0.18,
+        output = r_interpol(ll, eps, fidl, tops, top, shift_pix=shift/0.18,
             pad=[mnshift, mxshift])
-        electronss.append(sign * output)
+        epss.append(sign * output)
 
         ivar = 1/vv
         bad = np.where(np.isfinite(ivar) ==0)
@@ -378,8 +379,7 @@ def handle_rectification_helper(edgeno):
         sign *= -1
 
     it_img = np.sum(np.array(itss), axis=0)
-    eps_img = np.sum(electronss, axis=0)/it_img
-    elec_img = np.sum(electronss, axis=0)
+    eps_img = np.mean(epss, axis=0)
 
     # Remove any NaNs or infs from the variance array
     ivar_img = []
@@ -388,11 +388,14 @@ def handle_rectification_helper(edgeno):
         ivar[bad] = 0.0
 
         ivar_img.append(ivar)
-    var_img = np.sum(1/np.array(ivar_img), axis=0)
+
+    IV = np.array(ivar_img)
+    bad = np.isclose(IV,0)
+    IV[bad] = np.inf
+    var_img = np.mean(1/np.array(IV), axis=0)
     sd_img = np.sqrt(var_img)
 
     return {"eps_img": eps_img, "sd_img": sd_img, "itime_img": it_img, 
             "lambda": fidl, "Target_Name": edge["Target_Name"], 
-            "slitno": edgeno+1, "offset": np.max(tops-top),
-            "electrons_img": elec_img}
+            "slitno": edgeno+1, "offset": np.max(tops-top)}
 
