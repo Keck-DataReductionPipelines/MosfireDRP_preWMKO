@@ -35,7 +35,7 @@ def guess_plan_from_positions(posnames):
     elif posnames == set(["A'", "B'", "A", "B"]): 
         return [["A", "B"], ["A'", "B'"]]
     else:
-        raise Exception("Could not get observing plan. You must use the plan keyword")
+        raise Exception("Could not get observing plan from positions %s. You must use the plan keyword" % posnames)
 
 
 def imcombine(files, maskname, options, flat, outname=None, shifts=None):
@@ -268,24 +268,21 @@ def imcombine(files, maskname, options, flat, outname=None, shifts=None):
     header.update("NUMFRM", Nframe)
 
     if outname is not None:
-        header.update("object", "{0}: [e-]".format(maskname))
-        header.update("bunit", "ADU")
-
-        IO.writefits(np.float32(electrons), maskname, "electrons_%s" % (outname),
+        header.update("object", "{0}: [e-/s]".format(maskname))
+        header.update("bunit", "ELECTRONS/SECOND")
+        IO.writefits(np.float32(electrons/itimes), maskname, "eps_%s" % (outname),
                 options, header=header, overwrite=True)
 
         # Update itimes after division in order to not introduce nans
         itimes[data.mask] = 0.0
 
         header.update("object", "{0}: Variance [(e-)^2]".format(maskname))
-        header.update("bunit", "EPS^2")
-
+        header.update("bunit", "ELECTRONS^2")
         IO.writefits(var, maskname, "var_%s" % (outname),
                 options, header=header, overwrite=True, lossy_compress=True)
 
         header.update("object", "{0}: itime [s]".format(maskname))
         header.update("bunit", "SECOND")
-
         IO.writefits(np.float32(itimes), maskname, "itimes_%s" % (outname),
                 options, header=header, overwrite=True, lossy_compress=True)
 
@@ -330,7 +327,7 @@ def handle_background(filelist, wavename, maskname, band_name, options, shifts=N
     the background subtraction code will make and handle two files, "A-B" and "A'-B'".
     '''
     
-    global header, bs, edges, data, Var, lam, sky_sub_out, sky_model_out, band
+    global header, bs, edges, data, Var, itime, lam, sky_sub_out, sky_model_out, band
 
     band = band_name
 
@@ -347,7 +344,7 @@ def handle_background(filelist, wavename, maskname, band_name, options, shifts=N
     '''
 
     hdrs = []
-    electrons = {}
+    epss = {}
     vars = {}
     bss = []
     times = {}
@@ -367,7 +364,7 @@ def handle_background(filelist, wavename, maskname, band_name, options, shifts=N
 
         hdrs.append(hdr) 
         header = merge_headers(header, hdr)
-        electrons[hdr['FRAMEID']] = electron
+        epss[hdr['FRAMEID']] = electron/time
         vars[hdr['FRAMEID']] = var
         times[hdr['FRAMEID']] = time
         bss.append(bs)
@@ -396,7 +393,7 @@ def handle_background(filelist, wavename, maskname, band_name, options, shifts=N
         posname0 = plan[i][0]
         posname1 = plan[i][1]
         print "Handling %s - %s" % (posname0, posname1)
-        data = electrons[posname0] - electrons[posname1]
+        data = epss[posname0] - epss[posname1]
         Var = vars[posname0] + vars[posname1]
         itime = np.mean([times[posname0], times[posname1]], axis=0)
 
@@ -430,13 +427,13 @@ def write_outputs(solutions, itime, header, maskname, band_name, plan, options):
         suffix), options, header=header, overwrite=True, lossy_compress=True)
 
 
-    header.update("object", "{0}: electron".format(maskname))
-    header.update("bunit", "ELECTRONS")
+    header.update("object", "{0}: electron/s".format(maskname))
+    header.update("bunit", "ELECTRONS/SECOND")
     IO.writefits(data, maskname, "sub_%s_%s_%s.fits" % (maskname, band,
         suffix), options, header=header, overwrite=True, lossy_compress=True)
 
-    header.update("object", "{0}: electron".format(maskname))
-    header.update("bunit", "ELECTRONS")
+    header.update("object", "{0}: electron/s".format(maskname))
+    header.update("bunit", "ELECTRONS/SECOND")
     IO.writefits(sky_sub_out, maskname, "bsub_%s_%s_%s.fits" % (maskname, band,
         suffix), options, header=header, overwrite=True)
 
@@ -445,8 +442,8 @@ def write_outputs(solutions, itime, header, maskname, band_name, plan, options):
     IO.writefits(Var, maskname, "var_%s_%s_%s.fits" % (maskname, band,
         suffix), options, header=header, overwrite=True, lossy_compress=True)
 
-    header.update("object", "{0}: electron".format(maskname))
-    header.update("bunit", "ELECTRONS")
+    header.update("object", "{0}: electron/s".format(maskname))
+    header.update("bunit", "ELECTRONS/SECOND")
     IO.writefits(sky_model_out, maskname, "bmod_%s_%s_%s.fits" % (maskname,
         band, suffix), options, header=header, overwrite=True,
         lossy_compress=True)
@@ -503,24 +500,25 @@ def write_outputs(solutions, itime, header, maskname, band_name, plan, options):
     header.update("cd2_2", 1)
 
     header.update("object", "rectified [second]")
-    IO.writefits(rectified_itime, maskname, "%s_rectified_pair_itime_%s_%s.fits" %
+    IO.writefits(rectified_itime, maskname,
+        "%s_rectified_itime_%s_%s.fits" % (maskname, band_name,
+        suffix), options, header=header, overwrite=True, lossy_compress=True)
+
+    header.update("object", "rectified [electron/s]")
+
+    IO.writefits(rectified, maskname, "%s_rectified_%s_%s.fits" % (maskname,
+        band_name, suffix), options, header=header, overwrite=True,
+        lossy_compress=True)
+
+    header.update("object", "rectified variance [electron^2]")
+    IO.writefits(rectified_var, maskname, "%s_rectified_var_%s_%s.fits" %
         (maskname, band_name, suffix), options, header=header, overwrite=True,
         lossy_compress=True)
 
-    header.update("object", "rectified [electron]")
-    IO.writefits(rectified, maskname, "%s_rectified_pair_%s_%s.fits" % (maskname, band_name,
-        suffix), options, header=header, overwrite=True, lossy_compress=True)
-
-    header.update("object", "rectified variance [electron^2]")
-    IO.writefits(rectified_var, maskname, "%s_rectified_pair_var_%s_%s.fits" %
-            (maskname, band_name, suffix), options, header=header, overwrite=True,
-            lossy_compress=True)
-
     header.update("object", "rectified snr")
-
-    IO.writefits(rectified/np.sqrt(rectified_var), maskname,
-            "%s_rectified_pair_sn_%s_%s.fits" % (maskname, band_name, suffix), options,
-            header=header, overwrite=True, lossy_compress=True)
+    IO.writefits(rectified*rectified_itime/np.sqrt(rectified_var), maskname,
+        "%s_rectified_sn_%s_%s.fits" % (maskname, band_name,
+        suffix), options, header=header, overwrite=True, lossy_compress=True)
 
 
 def background_subtract_helper(slitno):
@@ -544,7 +542,7 @@ def background_subtract_helper(slitno):
 
     '''
 
-    global header, bs, edges, data, Var, lam, sky_sub_out, sky_model_out, band
+    global header, bs, edges, data, Var, itime, lam, sky_sub_out, sky_model_out, band
     tick = time.time()
 
     # 1
@@ -556,7 +554,8 @@ def background_subtract_helper(slitno):
     xroi = slice(0,2048)
     yroi = slice(bottom, top)
 
-    slit = data[yroi, xroi]
+    stime = itime[yroi, xroi]
+    slit  = data[yroi, xroi] 
     Var[np.logical_not(np.isfinite(Var))] = np.inf
 
     lslit = lam[1][yroi,xroi]
@@ -580,7 +579,7 @@ def background_subtract_helper(slitno):
     ls = ls[sort]
     ys = ys[sort]
 
-    hpps = np.array(Filters.hpp[band] ) 
+    hpps = np.array(Filters.hpp[band]) 
 
     diff = np.append(np.diff(ls), False)
 
