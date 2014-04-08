@@ -2,6 +2,7 @@
 import os
 import sys
 import time
+import warnings
 
 import numpy as np
 import pylab as pl
@@ -102,6 +103,7 @@ def imcombine(files, maskname, options, flat, outname=None, shifts=None):
     if shifts is None:
         shifts = np.zeros(len(files))
 
+    warnings.filterwarnings('once')
     for i in xrange(len(files)):
         fname = files[i]
         thishdr, data, bs = IO.readmosfits(fname, options)
@@ -115,21 +117,22 @@ def imcombine(files, maskname, options, flat, outname=None, shifts=None):
         ''' Construct Header'''
         if header is None:
             header = thishdr
-        header.update("imfno%2.2i" % (i), fname, "-------------------")
+
+        header.append("imfno%2.2i" % (i), fname, "-------------------")
 
         map(lambda x: rem_header_key(header, x), ["CTYPE1", "CTYPE2", "WCSDIM",
             "CD1_1", "CD1_2", "CD2_1", "CD2_2", "LTM1_1", "LTM2_2", "WAT0_001",
             "WAT1_001", "WAT2_001", "CRVAL1", "CRVAL2", "CRPIX1", "CRPIX2",
             "RADECSYS"])
 
-        for key in header.keys():
-            if key == '': continue
-            val = header[key]
+        for card in header.cards:
+            if card == '': continue
+            key,val,comment = card
 
             if thishdr.has_key(key):
                 if val != thishdr[key]:
                     newkey = "hierarch " + key + ("_img%2.2i" % i)
-                    try: header.update(newkey.rstrip(), thishdr[key])
+                    try: header[newkey.rstrip()] = (thishdr[key], comment)
                     except: pass
 
         ''' Now handle error checking'''
@@ -264,25 +267,22 @@ def imcombine(files, maskname, options, flat, outname=None, shifts=None):
     var[data.mask] = np.inf
 
     if header.has_key("RN"): raise Exception("RN already populated in header")
-    header.update("RN", "%1.3f e-" % RN)
-    header.update("NUMFRM", Nframe)
+    header['RN'] = ("%1.3f" , "Read noise in e-")
+    header['NUMFRM'] = (Nframe, 'Typical number of frames in stack')
 
     if outname is not None:
-        header.update("object", "{0}: [e-/s]".format(maskname))
-        header.update("bunit", "ELECTRONS/SECOND")
+        header.set("bunit", "ELECTRONS/SECOND")
         IO.writefits(np.float32(electrons/itimes), maskname, "eps_%s" % (outname),
                 options, header=header, overwrite=True)
 
         # Update itimes after division in order to not introduce nans
         itimes[data.mask] = 0.0
 
-        header.update("object", "{0}: Variance [(e-)^2]".format(maskname))
-        header.update("bunit", "ELECTRONS^2")
+        header.set("bunit", "ELECTRONS^2")
         IO.writefits(var, maskname, "var_%s" % (outname),
                 options, header=header, overwrite=True, lossy_compress=True)
 
-        header.update("object", "{0}: itime [s]".format(maskname))
-        header.update("bunit", "SECOND")
+        header.set("bunit", "SECOND")
         IO.writefits(np.float32(itimes), maskname, "itimes_%s" % (outname),
                 options, header=header, overwrite=True, lossy_compress=True)
 
@@ -296,20 +296,19 @@ def merge_headers(h1, h2):
 
     patternid = h2["frameid"]
 
-    for key in h2.keys():
+    for key, val, comment in h2.cards:
         if "NAXIS" in key: continue
         if "SIMPLE" in key: continue
         if "BITPIX" in key: continue
         if "EXTEND" in key: continue
-        val = h2[key]
 
         if h.has_key(key):
             if val != h[key]:
-                newkey = "hierarch " + key + ("_pos_%s" % patternid)
-                try: h.update(newkey.rstrip(), val)
+                newkey = key + ("_pos_%s" % patternid)
+                try: h[newkey.rstrip()] = (val, comment)
                 except: pass
         else:
-            try: h.update("hierarch " + key + ("_pos%s" % patternid), val)
+            try: h[key + ("_pos%s" % patternid)] = (val, comment)
             except: pass
 
 
@@ -421,29 +420,24 @@ def write_outputs(solutions, itime, header, maskname, band_name, plan, options):
         sky_sub_out[yroi, xroi] = sol["output"]
         sky_model_out[yroi, xroi] = sol["model"]
     
-    header.update("object", "{0}: second".format(maskname))
-    header.update("bunit", "SECOND")
+    header.set("bunit", "SECOND")
     IO.writefits(itime, maskname, "itime_%s_%s_%s.fits" % (maskname, band,
         suffix), options, header=header, overwrite=True, lossy_compress=True)
 
 
-    header.update("object", "{0}: electron/s".format(maskname))
-    header.update("bunit", "ELECTRONS/SECOND")
+    header.set("bunit", "ELECTRONS/SECOND")
     IO.writefits(data, maskname, "sub_%s_%s_%s.fits" % (maskname, band,
         suffix), options, header=header, overwrite=True, lossy_compress=True)
 
-    header.update("object", "{0}: electron/s".format(maskname))
-    header.update("bunit", "ELECTRONS/SECOND")
+    header.set("bunit", "ELECTRONS/SECOND")
     IO.writefits(sky_sub_out, maskname, "bsub_%s_%s_%s.fits" % (maskname, band,
         suffix), options, header=header, overwrite=True)
 
-    header.update("object", "{0}: electron".format(maskname))
-    header.update("bunit", "ELECTRONS")
+    header.set("bunit", "ELECTRONS")
     IO.writefits(Var, maskname, "var_%s_%s_%s.fits" % (maskname, band,
         suffix), options, header=header, overwrite=True, lossy_compress=True)
 
-    header.update("object", "{0}: electron/s".format(maskname))
-    header.update("bunit", "ELECTRONS/SECOND")
+    header.set("bunit", "ELECTRONS/SECOND")
     IO.writefits(sky_model_out, maskname, "bmod_%s_%s_%s.fits" % (maskname,
         band, suffix), options, header=header, overwrite=True,
         lossy_compress=True)
@@ -478,44 +472,39 @@ def write_outputs(solutions, itime, header, maskname, band_name, plan, options):
         f = interp1d(ll, itime[i,:], bounds_error=False)
         rectified_itime[i,:] = f(ll_fid)
 
-    header.update("wat0_001", "system=world")
-    header.update("wat1_001", "wtype=linear")
-    header.update("wat2_001", "wtype=linear")
-    header.update("dispaxis", 1)
-    header.update("dclog1", "Transform")
-    header.update("dc-flag", 0)
-    header.update("ctype1", "AWAV")
-    header.update("cunit1", "Angstrom")
-    header.update("crval1", ll_fid[0])
-    header.update("crval2", 0)
-    header.update("crpix1", 1)
-    header.update("crpix2", 1)
-    header.update("cdelt1", 1)
-    header.update("cdelt2", 1)
-    header.update("cname1", "angstrom")
-    header.update("cname2", "pixel")
-    header.update("cd1_1", dlam)
-    header.update("cd1_2", 0)
-    header.update("cd2_1", 0)
-    header.update("cd2_2", 1)
+    header.set("wat0_001", "system=world")
+    header.set("wat1_001", "wtype=linear")
+    header.set("wat2_001", "wtype=linear")
+    header.set("dispaxis", 1)
+    header.set("dclog1", "Transform")
+    header.set("dc-flag", 0)
+    header.set("ctype1", "AWAV")
+    header.set("cunit1", "Angstrom")
+    header.set("crval1", ll_fid[0])
+    header.set("crval2", 0)
+    header.set("crpix1", 1)
+    header.set("crpix2", 1)
+    header.set("cdelt1", 1)
+    header.set("cdelt2", 1)
+    header.set("cname1", "angstrom")
+    header.set("cname2", "pixel")
+    header.set("cd1_1", dlam)
+    header.set("cd1_2", 0)
+    header.set("cd2_1", 0)
+    header.set("cd2_2", 1)
 
-    header.update("object", "rectified [second]")
     IO.writefits(rectified_itime, maskname,
         "%s_rectified_itime_%s_%s.fits" % (maskname, band_name,
         suffix), options, header=header, overwrite=True, lossy_compress=True)
-
-    header.update("object", "rectified [electron/s]")
 
     IO.writefits(rectified, maskname, "%s_rectified_%s_%s.fits" % (maskname,
         band_name, suffix), options, header=header, overwrite=True,
         lossy_compress=True)
 
-    header.update("object", "rectified variance [electron^2]")
     IO.writefits(rectified_var, maskname, "%s_rectified_var_%s_%s.fits" %
         (maskname, band_name, suffix), options, header=header, overwrite=True,
         lossy_compress=True)
 
-    header.update("object", "rectified snr")
     IO.writefits(rectified*rectified_itime/np.sqrt(rectified_var), maskname,
         "%s_rectified_sn_%s_%s.fits" % (maskname, band_name,
         suffix), options, header=header, overwrite=True, lossy_compress=True)
