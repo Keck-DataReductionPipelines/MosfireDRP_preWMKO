@@ -150,6 +150,7 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
     for i_slit in xrange(len(solutions)):
         solution = all_solutions[0][i_slit]
         header = EPS[0].copy()
+        obj = header['OBJECT']
 
         target_name = bs.ssl[-(i_slit+1)]['Target_Name']
 
@@ -205,32 +206,28 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
         itout = np.append(itout, tms, 0)
         itout = np.append(itout, np.nan*np.zeros((3,S[1])), 0)
 
-        header.update("object", "{0}/{1}: e-/s".format(maskname,band))
+        header.update("object", "{0}/{1}".format(obj, target_name))
         header.update("bunit", "ELECTRONS/SECOND")
         IO.writefits(img, maskname,
             "{0}_{1}_{2}_eps.fits".format(maskname, band, target_name), options,
             overwrite=True, header=header, lossy_compress=False)
 
-        header.update("object", "{0}/{1}: std/itime [e-/s]".format(maskname,band))
         header.update("bunit", "ELECTRONS/SECOND")
         IO.writefits(std/tms, maskname,
             "{0}_{1}_{2}_sig.fits".format(maskname, band, target_name), options,
             overwrite=True, header=header, lossy_compress=False)
 
-        header.update("object", "{0}/{1}: itime [s]".format(maskname,band))
         header.update("bunit", "SECOND")
         IO.writefits(tms, maskname,
             "{0}_{1}_{2}_itime.fits".format(maskname, band, target_name), options,
             overwrite=True, header=header, lossy_compress=False)
 
-        header.update("object", "{0}/{1}: SNR".format(maskname,band))
         header.update("bunit", "")
         IO.writefits(img*tms/std, maskname,
             "{0}_{1}_{2}_snrs.fits".format(maskname, band, target_name), options,
             overwrite=True, header=header, lossy_compress=False)
 
     header = EPS[0].copy()
-    header.update("OBJECT", "{0}/{1}".format(maskname, band))
     header.update("wat0_001", "system=world")
     header.update("wat1_001", "wtype=linear")
     header.update("wat2_001", "wtype=linear")
