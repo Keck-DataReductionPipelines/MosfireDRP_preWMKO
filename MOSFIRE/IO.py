@@ -8,6 +8,7 @@ Provides tools to read fits files and parse their headers.
 import pyfits as pf
 import numpy as np
 import unittest
+import warnings
 
 
 
@@ -160,8 +161,9 @@ def writefits(img, maskname, fname, options, header=None, bs=None,
     fn = fname
 
     if header is None: header = {"DRPVER": MOSFIRE.__version__}
-    else: header.update("DRPVER", MOSFIRE.__version__)
+    else: header["DRPVER"] = MOSFIRE.__version__
 
+    warnings.filterwarnings('ignore')
     if header is not None:
         for k,value, comment in header.cards:
             if hdu.header.has_key(k): continue
@@ -172,6 +174,7 @@ def writefits(img, maskname, fname, options, header=None, bs=None,
             k = k.rstrip()
             hdu.header[k] = (value,comment)
 
+    warnings.filterwarnings('always')
     if overwrite:
         try: 
             os.remove(fn)

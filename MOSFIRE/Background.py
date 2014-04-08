@@ -103,12 +103,15 @@ def imcombine(files, maskname, options, flat, outname=None, shifts=None):
     if shifts is None:
         shifts = np.zeros(len(files))
 
-    warnings.filterwarnings('once')
+    warnings.filterwarnings('ignore')
     for i in xrange(len(files)):
         fname = files[i]
         thishdr, data, bs = IO.readmosfits(fname, options)
         itimes[i,:,:] = thishdr["truitime"]
 
+        base = os.path.basename(fname).rstrip(".fits")
+        fnum = int(base.split("_")[1])
+        
         if shifts[i] == 0:
             ADUs[i,:,:] = data.filled(0.0) / flat
         else:
@@ -118,7 +121,7 @@ def imcombine(files, maskname, options, flat, outname=None, shifts=None):
         if header is None:
             header = thishdr
 
-        header.append("imfno%2.2i" % (i), fname, "-------------------")
+        header["imfno%4.4i" % (fnum)] =  (fname, "img%4.4i file name" % fnum)
 
         map(lambda x: rem_header_key(header, x), ["CTYPE1", "CTYPE2", "WCSDIM",
             "CD1_1", "CD1_2", "CD2_1", "CD2_2", "LTM1_1", "LTM2_2", "WAT0_001",
@@ -128,10 +131,10 @@ def imcombine(files, maskname, options, flat, outname=None, shifts=None):
         for card in header.cards:
             if card == '': continue
             key,val,comment = card
-
-            if thishdr.has_key(key):
+            
+            if key in thishdr:
                 if val != thishdr[key]:
-                    newkey = "hierarch " + key + ("_img%2.2i" % i)
+                    newkey = key + ("_img%2.2i" % fnum)
                     try: header[newkey.rstrip()] = (thishdr[key], comment)
                     except: pass
 
@@ -181,6 +184,8 @@ def imcombine(files, maskname, options, flat, outname=None, shifts=None):
         ''' Error checking is complete'''
         print "%s %s[%s]/%s: %5.1f s,  Shift: %i px" % (fname, maskname, patternid,
             header['filter'], np.mean(itimes[i]), shifts[i])
+
+    warnings.filterwarnings('always')
 
     # the electrons and el_per_sec arrays are:
     #   [2048, 2048, len(files)] and contain values for
@@ -266,23 +271,23 @@ def imcombine(files, maskname, options, flat, outname=None, shifts=None):
     electrons[data.mask] = np.nan
     var[data.mask] = np.inf
 
-    if header.has_key("RN"): raise Exception("RN already populated in header")
+    if "RN" in header: raise Exception("RN Already populated in header")
     header['RN'] = ("%1.3f" , "Read noise in e-")
     header['NUMFRM'] = (Nframe, 'Typical number of frames in stack')
 
     if outname is not None:
-        header.set("bunit", "ELECTRONS/SECOND")
+        header['BUNIT'] = 'ELECTRONS/SECOND'
         IO.writefits(np.float32(electrons/itimes), maskname, "eps_%s" % (outname),
                 options, header=header, overwrite=True)
 
         # Update itimes after division in order to not introduce nans
         itimes[data.mask] = 0.0
 
-        header.set("bunit", "ELECTRONS^2")
+        header['BUNIT'] = 'ELECTRONS^2'
         IO.writefits(var, maskname, "var_%s" % (outname),
                 options, header=header, overwrite=True, lossy_compress=True)
 
-        header.set("bunit", "SECOND")
+        header['BUNIT'] = 'SECOND'
         IO.writefits(np.float32(itimes), maskname, "itimes_%s" % (outname),
                 options, header=header, overwrite=True, lossy_compress=True)
 
@@ -302,13 +307,10 @@ def merge_headers(h1, h2):
         if "BITPIX" in key: continue
         if "EXTEND" in key: continue
 
-        if h.has_key(key):
-            if val != h[key]:
-                newkey = key + ("_pos_%s" % patternid)
-                try: h[newkey.rstrip()] = (val, comment)
-                except: pass
+        if key in h:
+            print("WARNING: A position header should not include B position file") 
         else:
-            try: h[key + ("_pos%s" % patternid)] = (val, comment)
+            try: h[key] = (val, comment)
             except: pass
 
 
@@ -420,24 +422,24 @@ def write_outputs(solutions, itime, header, maskname, band_name, plan, options):
         sky_sub_out[yroi, xroi] = sol["output"]
         sky_model_out[yroi, xroi] = sol["model"]
     
-    header.set("bunit", "SECOND")
+    header['BUNIT'] = 'SECOND'
     IO.writefits(itime, maskname, "itime_%s_%s_%s.fits" % (maskname, band,
         suffix), options, header=header, overwrite=True, lossy_compress=True)
 
 
-    header.set("bunit", "ELECTRONS/SECOND")
+    header['BUNIT'] = 'ELECTRONS/SECOND'
     IO.writefits(data, maskname, "sub_%s_%s_%s.fits" % (maskname, band,
         suffix), options, header=header, overwrite=True, lossy_compress=True)
 
-    header.set("bunit", "ELECTRONS/SECOND")
+    header['BUNIT'] = 'ELECTRONS/SECOND'
     IO.writefits(sky_sub_out, maskname, "bsub_%s_%s_%s.fits" % (maskname, band,
         suffix), options, header=header, overwrite=True)
 
-    header.set("bunit", "ELECTRONS")
+    header['BUNIT'] = 'ELECTRONS'
     IO.writefits(Var, maskname, "var_%s_%s_%s.fits" % (maskname, band,
         suffix), options, header=header, overwrite=True, lossy_compress=True)
 
-    header.set("bunit", "ELECTRONS/SECOND")
+    header['BUNIT'] = 'ELECTRONS/SECOND'
     IO.writefits(sky_model_out, maskname, "bmod_%s_%s_%s.fits" % (maskname,
         band, suffix), options, header=header, overwrite=True,
         lossy_compress=True)
@@ -472,26 +474,26 @@ def write_outputs(solutions, itime, header, maskname, band_name, plan, options):
         f = interp1d(ll, itime[i,:], bounds_error=False)
         rectified_itime[i,:] = f(ll_fid)
 
-    header.set("wat0_001", "system=world")
-    header.set("wat1_001", "wtype=linear")
-    header.set("wat2_001", "wtype=linear")
-    header.set("dispaxis", 1)
-    header.set("dclog1", "Transform")
-    header.set("dc-flag", 0)
-    header.set("ctype1", "AWAV")
-    header.set("cunit1", "Angstrom")
-    header.set("crval1", ll_fid[0])
-    header.set("crval2", 0)
-    header.set("crpix1", 1)
-    header.set("crpix2", 1)
-    header.set("cdelt1", 1)
-    header.set("cdelt2", 1)
-    header.set("cname1", "angstrom")
-    header.set("cname2", "pixel")
-    header.set("cd1_1", dlam)
-    header.set("cd1_2", 0)
-    header.set("cd2_1", 0)
-    header.set("cd2_2", 1)
+    header["wat0_001"] = "system=world"
+    header["wat1_001"] = "type=linear"
+    header["wat2_001"] = "type=linear"
+    header["dispaxis"] = 1
+    header["dclog1"] = "Transform"
+    header["dc-flag"] = 0
+    header["type1"] = "AWAV"
+    header["cunit1"] = "Angstrom"
+    header["crval1"] = (ll_fid[0], "Starting wavelength Angstrom")
+    header["crval2"] = 0
+    header["crpix1"] = 1
+    header["crpix2"] = 1
+    header["cdelt1"] = 1
+    header["cdelt2"] = 1
+    header["cname1"] = "angstrom"
+    header["cname2"] = "pixel"
+    header["cd1_1"] = (dlam, "Angstrom/pixel")
+    header["cd1_2"] = 0
+    header["cd2_1"] = 0
+    header["cd2_2"] = (1, "pixel/pixel")
 
     IO.writefits(rectified_itime, maskname,
         "%s_rectified_itime_%s_%s.fits" % (maskname, band_name,

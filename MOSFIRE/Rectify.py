@@ -120,7 +120,7 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
         vars = VAR
         itimes = ITIME
 
-        EPS[0].update("ORIGFILE", fname)
+        EPS[0]["ORIGFILE"] = fname
 
         tock = time.time()
         sols = range(len(edges)-1,-1,-1)
@@ -157,30 +157,29 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
         pixel_dist = np.float(bs.ssl[-(i_slit+1)]['Target_to_center_of_slit_distance'])/0.18
 
         pixel_dist -= solution['offset']
-        header.update("OBJECT", "{0}".format(solution["Target_Name"]))
 
         ll = solution["lambda"]
 
-        header.update("wat0_001", "system=world")
-        header.update("wat1_001", "wtype=linear")
-        header.update("wat2_001", "wtype=linear")
-        header.update("dispaxis", 1)
-        header.update("dclog1", "Transform")
-        header.update("dc-flag", 0)
-        header.update("ctype1", "AWAV")
-        header.update("cunit1", "Angstrom")
-        header.update("crval1", ll[0])
-        header.update("crval2", -solution["eps_img"].shape[0]/2 - pixel_dist)
-        header.update("crpix1", 1)
-        header.update("crpix2", 1)
-        header.update("cdelt1", 1)
-        header.update("cdelt2", 1)
-        header.update("cname1", "angstrom")
-        header.update("cname2", "pixel")
-        header.update("cd1_1", ll[1]-ll[0])
-        header.update("cd1_2", 0)
-        header.update("cd2_1", 0)
-        header.update("cd2_2", 1)
+        header["wat0_001"] = "system=world"
+        header["wat1_001"] = "wtype=linear"
+        header["wat2_001"] = "wtype=linear"
+        header["dispaxis"] = 1
+        header["dclog1"] = "Transform"
+        header["dc-flag"] = 0
+        header["ctype1"] = "AWAV"
+        header["cunit1"] = "Angstrom"
+        header["crval1"] = ll[0]
+        header["crval2"] = -solution["eps_img"].shape[0]/2 - pixel_dist
+        header["crpix1"] = 1
+        header["crpix2"] = 1
+        header["cdelt1"] = 1
+        header["cdelt2"] = 1
+        header["cname1"] = "angstrom"
+        header["cname2"] = "pixel"
+        header["cd1_1"] = ll[1]-ll[0]
+        header["cd1_2"] = 0
+        header["cd2_1"] = 0
+        header["cd2_2"] = 1
 
 
         S = output.shape
@@ -206,66 +205,65 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
         itout = np.append(itout, tms, 0)
         itout = np.append(itout, np.nan*np.zeros((3,S[1])), 0)
 
-        header.update("object", "{0}/{1}".format(obj, target_name))
-        header.update("bunit", "ELECTRONS/SECOND")
+        header['bunit'] = ('electron/second', 'electron power')
         IO.writefits(img, maskname,
             "{0}_{1}_{2}_eps.fits".format(maskname, band, target_name), options,
             overwrite=True, header=header, lossy_compress=False)
 
-        header.update("bunit", "ELECTRONS/SECOND")
+        header['bunit'] = ('electron/second', 'sigma/itime')
         IO.writefits(std/tms, maskname,
             "{0}_{1}_{2}_sig.fits".format(maskname, band, target_name), options,
             overwrite=True, header=header, lossy_compress=False)
 
-        header.update("bunit", "SECOND")
+        header['bunit'] = ('second', 'exposure time')
         IO.writefits(tms, maskname,
             "{0}_{1}_{2}_itime.fits".format(maskname, band, target_name), options,
             overwrite=True, header=header, lossy_compress=False)
 
-        header.update("bunit", "")
+        header['bunit'] = ('', 'SNR')
         IO.writefits(img*tms/std, maskname,
             "{0}_{1}_{2}_snrs.fits".format(maskname, band, target_name), options,
             overwrite=True, header=header, lossy_compress=False)
 
     header = EPS[0].copy()
-    header.update("wat0_001", "system=world")
-    header.update("wat1_001", "wtype=linear")
-    header.update("wat2_001", "wtype=linear")
-    header.update("dispaxis", 1)
-    header.update("dclog1", "Transform")
-    header.update("dc-flag", 0)
-    header.update("ctype1", "AWAV")
-    header.update("cunit1", "Angstrom")
-    header.update("crval1", ll[0])
-    header.update("crval2", 1)
-    header.update("crpix1", 1)
-    header.update("crpix2", 1)
-    header.update("cdelt1", 1)
-    header.update("cdelt2", 1)
-    header.update("cname1", "angstrom")
-    header.update("cname2", "pixel")
-    header.update("cd1_1", ll[1]-ll[0])
-    header.update("cd1_2", 0)
-    header.update("cd2_1", 0)
-    header.update("cd2_2", 1)
+    header["wat0_001"] = "system=world"
+    header["wat1_001"] = "wtype=linear"
+    header["wat2_001"] = "wtype=linear"
+    header["dispaxis"] = 1
+    header["dclog1"] = "Transform"
+    header["dc-flag"] = 0
+    header["ctype1"] = "AWAV"
+    header["cunit1"] = ("Angstrom", 'Start wavelength')
+    header["crval1"] = ll[0]
+    header["crval2"] = 1
+    header["crpix1"] = 1
+    header["crpix2"] = 1
+    header["cdelt1"] = 1
+    header["cdelt2"] = 1
+    header["cname1"] = "angstrom"
+    header["cname2"] = "pixel"
+    header["cd1_1"] = (ll[1]-ll[0], 'Angstrom/pixel')
+    header["cd1_2"] = 0
+    header["cd2_1"] = 0
+    header["cd2_2"] = 1
 
 
-    header.update("bunit", "ELECTRONS/SECOND")
+    header["bunit"] = "ELECTRONS/SECOND"
     IO.writefits(output, maskname, "{0}_{1}_eps.fits".format(maskname,
         band), options, overwrite=True, header=header,
         lossy_compress=False)
 
-    header.update("bunit", "")
+    header["bunit"] = ""
     IO.writefits(snrs, maskname, "{0}_{1}_snrs.fits".format(maskname,
         band), options, overwrite=True, header=header,
         lossy_compress=False)
 
-    header.update("bunit", "ELECTRONS/SECOND")
+    header["bunit"] = "ELECTRONS/SECOND"
     IO.writefits(sdout/itout, maskname, "{0}_{1}_sig.fits".format(maskname,
         band), options, overwrite=True, header=header,
         lossy_compress=False)
 
-    header.update("bunit", "SECOND")
+    header["bunit"] = "SECOND"
     IO.writefits(itout, maskname, "{0}_{1}_itime.fits".format(maskname,
         band), options, overwrite=True, header=header,
         lossy_compress=False)
