@@ -163,17 +163,14 @@ def writefits(img, maskname, fname, options, header=None, bs=None,
     else: header.update("DRPVER", MOSFIRE.__version__)
 
     if header is not None:
-        for k in header.keys():
+        for k,value, comment in header.cards:
             if hdu.header.has_key(k): continue
 
             if k == 'COMMENT': continue
             if k == '': continue
 
             k = k.rstrip()
-            if len(k) <= 8:
-                hdu.header.update(k, header[k])
-            else:
-                hdu.header.update("hierarch " + k, header[k])
+            hdu.header[k] = (value,comment)
 
     if overwrite:
         try: 
