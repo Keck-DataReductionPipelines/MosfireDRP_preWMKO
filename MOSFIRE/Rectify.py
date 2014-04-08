@@ -153,6 +153,7 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
         obj = header['OBJECT']
 
         target_name = bs.ssl[-(i_slit+1)]['Target_Name']
+        header['OBJECT'] = target_name
 
         pixel_dist = np.float(bs.ssl[-(i_slit+1)]['Target_to_center_of_slit_distance'])/0.18
 
