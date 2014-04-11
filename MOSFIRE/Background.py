@@ -121,7 +121,7 @@ def imcombine(files, maskname, options, flat, outname=None, shifts=None):
         if header is None:
             header = thishdr
 
-        header["imfno%4.4i" % (fnum)] =  (fname, "img%4.4i file name" % fnum)
+        header["imfno%3.3i" % (fnum)] =  (fname, "img%3.3i file name" % fnum)
 
         map(lambda x: rem_header_key(header, x), ["CTYPE1", "CTYPE2", "WCSDIM",
             "CD1_1", "CD1_2", "CD2_1", "CD2_2", "LTM1_1", "LTM2_2", "WAT0_001",
@@ -308,7 +308,7 @@ def merge_headers(h1, h2):
         if "EXTEND" in key: continue
 
         if key in h:
-            print("WARNING: A position header should not include B position file") 
+            continue
         else:
             try: h[key] = (val, comment)
             except: pass
