@@ -1543,6 +1543,10 @@ class InteractiveSolution:
 
         self.setup()
 
+        # follow line prevents window from going full screen when the
+        # 'f'it button is pressed.
+        pl.rcParams['keymap.fullscreen'] = ''
+
     
     def setup(self):
         csuslits = self.bs.scislit_to_csuslit(self.slitno)
@@ -1582,7 +1586,9 @@ class InteractiveSolution:
             ll = wavelength_model(parguess, tx)
 
             self.cfit = CV.chebfit(tx, ll, self.options["chebyshev-degree"])
-            self.cfit[0] -= 16.0
+            
+            if self.band != 'J':
+                self.cfit[0] -= 16.0
 
         self.spec = \
             np.ma.mean(self.data[self.extract_pos-1:self.extract_pos+1, :],
