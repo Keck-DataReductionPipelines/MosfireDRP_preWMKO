@@ -160,8 +160,8 @@ def writefits(img, maskname, fname, options, header=None, bs=None,
 
     fn = fname
 
-    if header is None: header = {"DRPVER": MOSFIRE.__version__}
-    else: header["DRPVER"] = MOSFIRE.__version__
+    if header is None: header = {"DRPVER": (MOSFIRE.__version__, "DRP Version Date")}
+    else: header["DRPVER"] = (MOSFIRE.__version__, 'DRP Version Date')
 
     warnings.filterwarnings('ignore')
     if header is not None:
