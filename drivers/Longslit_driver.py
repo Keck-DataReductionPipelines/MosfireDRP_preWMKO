@@ -43,7 +43,7 @@ obsfiles = ['Offset_0.txt', 'Offset_13.33333.txt', 'Offset_6.666667.txt', 'Offse
 
 # Update the following line after the apply_lambda_simple step
 #Longslit.go(maskname, band, obsfiles ,
-#    'lambda_solution_wave_stack_....',
+#    'lambda_solution_wave_stack_....fits',
 #    waveops, longslit)
 
 
@@ -55,8 +55,8 @@ obsfiles = ['Offset_0.txt', 'Offset_13.33333.txt', 'Offset_6.666667.txt', 'Offse
 #Wavelength.apply_lambda_simple(maskname, band, 'Ne.txt', waveops, longslit=longslit, smooth=True)
 
 # Update the following line after the apply_lambda_simple step
-#Longslit.go(maskname, band, 'Ne.txt',
-#    'lambda_solution_wave_stack_....',
+#Longslit.go(maskname, band, obsfiles,
+#    'lambda_solution_wave_stack_....fits',
 #    waveops, longslit)
 
 
