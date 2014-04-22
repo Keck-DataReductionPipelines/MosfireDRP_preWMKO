@@ -235,20 +235,17 @@ def read_drpfits(maskname, fname, options):
     for hdu in hdulist:
         output.append(hdu.header)
 
-        if hdu.header.has_key("DRPVER"):
-            hasdrpver = hdu.header.has_key("DRPVER") 
+        if "DRPVER" in hdu.header:
+            itsver = hdu.header["DRPVER"]
+            if itsver != MOSFIRE.__version__:
+                raise Exception("The file requested '%s' uses DRP version %f "
+                    "but the current DRP version is %f. There might be an "
+                    "incompatibility" % (path, itsver, MOSFIRE.__version__))
 
-            if hasdrpver:
-                itsver = hdu.header["DRPVER"]
-                if itsver != MOSFIRE.__version__:
-                    raise Exception("The file requested '%s' uses DRP version %f "
-                        "but the current DRP version is %f. There might be an "
-                        "incompatibility" % (path, itsver, MOSFIRE.__version__))
-
-            else:
-                raise Exception("The file requested '%s' does not seem to be "
-                        "the result of this DRP. This should never be the "
-                        " case.")
+        else:
+            raise Exception("The file requested '%s' does not seem to be "
+                    "the result of this DRP. This should never be the "
+                    " case.")
 
         output.append(hdu.data)
 
