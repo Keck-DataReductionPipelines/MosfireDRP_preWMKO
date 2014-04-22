@@ -129,6 +129,7 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
         cntr += 1
         p = Pool()
         solutions = p.map(handle_rectification_helper, sols)
+        #solutions = map(handle_rectification_helper, [15])
         p.close()
 
         all_solutions.append(solutions)
@@ -284,6 +285,7 @@ def r_interpol(ls, ss, lfid, tops, top, shift_pix=0, pad=[0,0], fill_value=0.0):
     S = ss.shape
 
     output = np.zeros((np.int(S[0]+pad[0]+pad[1]), len(lfid)))
+    output[:] = np.nan
 
     L = np.double(len(lfid))
     
@@ -310,7 +312,8 @@ def r_interpol(ls, ss, lfid, tops, top, shift_pix=0, pad=[0,0], fill_value=0.0):
     for i in xrange(output.shape[1]):
         to_shift = f(fidl[i])
         x = np.arange(output.shape[0])
-        y = II.interp1d(x, output[:, i], bounds_error=False, fill_value=0.0)
+        y = II.interp1d(x, output[:, i], bounds_error=False,
+            fill_value=fill_value)
 
         output[:,i] = y(x + to_shift)
 
@@ -358,24 +361,24 @@ def handle_rectification_helper(edgeno):
     
     for shift in shifts:
         output = r_interpol(ll, eps, fidl, tops, top, shift_pix=shift/0.18,
-            pad=[mnshift, mxshift])
+            pad=[mnshift, mxshift], fill_value = np.nan)
         epss.append(sign * output)
 
         ivar = 1/vv
         bad = np.where(np.isfinite(ivar) ==0)
         ivar[bad] = 0.0
         output = r_interpol(ll, ivar, fidl, tops, top, shift_pix=shift/0.18,
-            pad=[mnshift, mxshift], fill_value=0.0) 
+            pad=[mnshift, mxshift], fill_value=np.nan) 
         ivss.append(output)
 
         output = r_interpol(ll, it, fidl, tops, top, shift_pix=shift/0.18,
-            pad=[mnshift, mxshift], fill_value=0.0) 
+            pad=[mnshift, mxshift], fill_value=np.nan) 
         itss.append(output)
 
         sign *= -1
 
-    it_img = np.sum(np.array(itss), axis=0)
-    eps_img = np.mean(epss, axis=0)
+    it_img = np.nansum(np.array(itss), axis=0)
+    eps_img = np.nanmean(epss, axis=0)
 
     # Remove any NaNs or infs from the variance array
     ivar_img = []
@@ -388,7 +391,7 @@ def handle_rectification_helper(edgeno):
     IV = np.array(ivar_img)
     bad = np.isclose(IV,0)
     IV[bad] = np.inf
-    var_img = np.mean(1/np.array(IV), axis=0)
+    var_img = np.nanmean(1/np.array(IV), axis=0)
     sd_img = np.sqrt(var_img)
 
     return {"eps_img": eps_img, "sd_img": sd_img, "itime_img": it_img, 
