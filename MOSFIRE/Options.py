@@ -7,7 +7,7 @@ MOSFIRE Options
 
 import getpass
 import os
-__version__ = 2.0
+__version__ = '2014.04.09'
 
 npix = 2048
 path_bpm = os.path.join(os.environ["MOSPATH"], "badpixels", "badpix_10sep2012.fits")

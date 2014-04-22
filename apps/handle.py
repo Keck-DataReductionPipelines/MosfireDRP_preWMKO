@@ -71,11 +71,10 @@ for fname in files:
     object = header['object']
 
     itime = header['truitime']
+    grating_turret = header['mgtname']
 
-    if object.find("MIRA") == -1:
-        mira = False
-    else:
-        mira = True
+    if object.find("MIRA") == -1: mira = False
+    else: mira = True
 
     if maskname.find(" (align)") == -1:
         align = False
@@ -85,6 +84,10 @@ for fname in files:
 
     if maskname.find('LONGSLIT') != -1:
         align = False
+
+    if maskname.find('long2pos') != -1:
+        if grating_turret != 'mirror':
+            align = False
 
     empty_files = {'Align': [], 'Ne': [], 'Ar': [], 'Flat': [],
             'Dark': [], 'Aborted': [], 'Image': [], 'MIRA': [], 'Unknown': []}

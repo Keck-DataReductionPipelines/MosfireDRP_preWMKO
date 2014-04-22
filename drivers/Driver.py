@@ -31,7 +31,7 @@ obsfiles = ['Offset_1.5.txt', 'Offset_-1.5.txt']
     #'lambda_solution_wave_stack_H_m130429_0224-0249.fits',
     #maskname, band, waveops)
 
-redfiles = ["eps_" + files + ".fits" for file in obsfiles]
+redfiles = ["eps_" + file + ".fits" for file in obsfiles]
 #Rectify.handle_rectification(maskname, redfiles,
 #    "lambda_solution_wave_stack_H_m130429_0224-0249.fits",
 #    band, 
