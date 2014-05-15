@@ -507,7 +507,8 @@ def find_and_fit_edges(data, header, bs, options):
     numslits = np.array(numslits)
 
 
-    if (np.sum(numslits) != CSU.numslits) and (not bs.long_slit):
+    if (np.sum(numslits) != CSU.numslits) and (not bs.long_slit) and \
+            (not bs.long2pos_slit):
         raise Exception("The number of allocated CSU slits (%i) does not match "
                 " the number of possible slits (%i)." % (np.sum(numslits),
                     CSU.numslits))
