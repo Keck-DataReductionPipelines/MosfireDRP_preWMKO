@@ -39,7 +39,8 @@ def guess_plan_from_positions(posnames):
         raise Exception("Could not get observing plan from positions %s. You must use the plan keyword" % posnames)
 
 
-def imcombine(files, maskname, options, flat, outname=None, shifts=None):
+def imcombine(files, maskname, options, flat, outname=None, shifts=None,
+    extension=None):
     '''
     From a list of files it imcombine returns the imcombine of several values.
     The imcombine code also estimates the readnoise ad RN/sqrt(numreads) so
@@ -106,7 +107,7 @@ def imcombine(files, maskname, options, flat, outname=None, shifts=None):
     warnings.filterwarnings('ignore')
     for i in xrange(len(files)):
         fname = files[i]
-        thishdr, data, bs = IO.readmosfits(fname, options)
+        thishdr, data, bs = IO.readmosfits(fname, options, extension=extension)
         itimes[i,:,:] = thishdr["truitime"]
 
         base = os.path.basename(fname).rstrip(".fits")
@@ -317,7 +318,7 @@ def merge_headers(h1, h2):
     return h
 
 
-def handle_background(filelist, wavename, maskname, band_name, options, shifts=None, plan=None): 
+def handle_background(filelist, wavename, maskname, band_name, options, shifts=None, plan=None, extension=None): 
     '''
     Perform difference imaging and subtract residual background.
 
@@ -361,7 +362,7 @@ def handle_background(filelist, wavename, maskname, band_name, options, shifts=N
         else: shift = shifts[i]
         hdr, electron, var, bs, time, Nframe = imcombine(files, maskname,
             options, flat, outname="%s.fits" % (fl),
-            shifts=shift)
+            shifts=shift, extension=extension)
 
         hdrs.append(hdr) 
         header = merge_headers(header, hdr)
