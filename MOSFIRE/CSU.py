@@ -190,6 +190,7 @@ class Barset:
     targs = None
 
     long_slit = False
+    long2pos_slit = False
 
     scislit_to_slit = []
     alignment_slits = []
@@ -212,7 +213,10 @@ class Barset:
             return (np.float(slit["Target_Priority"]) < 0)
 
         # If len(ssl) == 0 then the header is for a long slit
-        if len(ssl) == 0:
+        if (header['MASKNAME'] == 'long2pos'):
+            self.long2pos_slit = True
+
+        if (len(ssl) == 0):
         
             self.long_slit = True
 
