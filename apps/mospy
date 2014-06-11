@@ -1,12 +1,18 @@
 #!/bin/csh -f
 
+# INSTRCUCTIONS. Edit the 
+
+# 1. Update the full path to the Ureka install for the two aliases
+# below
 alias ur_setup 'eval `/home/npk/.ureka/ur_setup -csh \!*`'
 alias ur_forget 'eval `/home/npk/.ureka/ur_forget -csh \!*`'
 
 
+# 2. Set MOSPATH to the full path to the MOSFIRE DRP code repository
+# example:
+# Change /scr2/mosfire/DRP/mosfire to /Users/myname/MOSFIRE/DRP
 setenv MOSPATH /scr2/mosfire/DRP/mosfire
-setenv MOSPATH /home/npk/mdrp/
-setenv PYTHONPATH ${PYTHONPATH}:${MOSPATH}
+if (! $?PYTHONPATH ) setenv PYTHONPATH ${PYTHONPATH}:${MOSPATH}
 
 if (! -d $MOSPATH) then
     echo "Path '$MOSPATH' does not exist. Modify $0"
