@@ -66,6 +66,7 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
     shifts = []
 
     posnames = []
+    postoshift = {}
     
     for file in in_files:
 
@@ -87,16 +88,27 @@ def handle_rectification(maskname, in_files, wavename, band_pass, barset_file, o
 
         shifts.append(shift)
         posnames.append(II[0]["frameid"])
+        postoshift[II[0]['frameid']] = shift
     
         print "Position {0} shift: {1:2.2f} as".format(off, shift)
     
 
     plans = Background.guess_plan_from_positions(set(posnames))
 
+    all_shifts = []
+    for plan in plans:
+        to_append = []
+        for pos in plan:
+            to_append.append(postoshift[pos])
+
+        all_shifts.append(to_append)
+
+    # Reverse the elements in all_shifts to deal with an inversion
+    all_shifts.reverse()
+
     theBPM = IO.badpixelmask()
 
     all_solutions = []
-    all_shifts = [shifts]
     cntr = 0
     for plan in plans:
         p0 = plan[0].replace("'", "p")
